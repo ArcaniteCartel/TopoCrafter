@@ -1,0 +1,53 @@
+{
+  "name": "topocrafter",
+  "version": "0.1.0",
+  "description": "Terrain topographical overlay generator",
+  "main": "out/main/index.js",
+  "scripts": {
+    "dev": "electron-vite dev",
+    "build": "electron-vite build",
+    "preview": "electron-vite preview",
+    "build:win": "npm run build && electron-builder --win",
+    "typecheck:node": "tsc --noEmit -p tsconfig.node.json",
+    "typecheck:web": "tsc --noEmit -p tsconfig.web.json"
+  },
+  "dependencies": {
+    "@electron-toolkit/utils": "^3.0.0",
+    "@mantine/core": "^7.11.0",
+    "@mantine/hooks": "^7.11.0",
+    "d3-array": "^3.2.4",
+    "d3-contour": "^4.0.2",
+    "d3-scale": "^4.0.2",
+    "fast-png": "^8.0.0",
+    "geotiff": "^3.0.5",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "zustand": "^4.5.2"
+  },
+  "devDependencies": {
+    "@types/react": "^18.3.3",
+    "@types/react-dom": "^18.3.0",
+    "@vitejs/plugin-react": "^4.3.1",
+    "electron": "^31.0.0",
+    "electron-builder": "^24.13.3",
+    "electron-vite": "^2.3.0",
+    "postcss": "^8.4.38",
+    "postcss-preset-mantine": "^1.17.0",
+    "postcss-simple-vars": "^7.0.1",
+    "typescript": "^5.5.2",
+    "vite": "^5.3.1"
+  },
+  "build": {
+    "appId": "com.topocrafter.app",
+    "productName": "TopoCrafter",
+    "directories": {
+      "output": "dist"
+    },
+    "files": [
+      "out/**/*"
+    ],
+    "win": {
+      "target": "nsis"
+    }
+  }
+}

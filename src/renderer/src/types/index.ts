@@ -1,0 +1,85 @@
+export interface ContourParameters {
+  interval: number
+  minElevation: number
+  maxElevation: number
+  majorEvery: number
+  smoothing: number
+}
+
+export interface ContourStyle {
+  minorColor: string
+  majorColor: string
+  minorWidth: number
+  majorWidth: number
+  opacity: number
+  showLabels: boolean
+  labelFontSize: number
+}
+
+export interface HeightmapInfo {
+  width: number
+  height: number
+  minValue: number
+  maxValue: number
+  data: Float32Array
+}
+
+export interface HillshadeParameters {
+  azimuth: number     // degrees 0–360, clockwise from north (315 = northwest)
+  altitude: number    // degrees 0–90 above horizon
+  zFactor: number     // vertical exaggeration
+  intensity: number   // shadow depth multiplier; 1.0 = subtle, higher = more contrast
+  brightness: number  // base brightness offset; 0.5 = mid-grey, higher = brighter
+}
+
+export interface ProjectState {
+  terrainImagePath: string | null
+  heightmapPath: string | null
+  terrainImageUrl: string | null
+  terrainIsHillshade: boolean
+  hillshadeGenerating: boolean
+  fileLoadingMessage: string | null
+  heightmap: HeightmapInfo | null
+  parameters: ContourParameters
+  style: ContourStyle
+  hillshadeParams: HillshadeParameters
+  isDirty: boolean
+}
+
+export const defaultParameters: ContourParameters = {
+  interval: 0.05,
+  minElevation: 0,
+  maxElevation: 1,
+  majorEvery: 5,
+  smoothing: 0,
+}
+
+export const defaultStyle: ContourStyle = {
+  minorColor: '#8B7355',
+  majorColor: '#5C4A2A',
+  minorWidth: 1,
+  majorWidth: 2,
+  opacity: 0.8,
+  showLabels: true,
+  labelFontSize: 10,
+}
+
+export const defaultHillshadeParameters: HillshadeParameters = {
+  azimuth: 315,
+  altitude: 45,
+  zFactor: 150,
+  intensity: 3.0,
+  brightness: 0.65,
+}
+
+// Augment window with the IPC bridge exposed by the preload script
+declare global {
+  interface Window {
+    electronAPI: {
+      openFile: (filters?: Array<{ name: string; extensions: string[] }>) => Promise<string | null>
+      readFile: (filePath: string) => Promise<Uint8Array>
+      saveFile: (filters?: Array<{ name: string; extensions: string[] }>) => Promise<string | null>
+      writeFile: (filePath: string, data: Uint8Array) => Promise<void>
+    }
+  }
+}
