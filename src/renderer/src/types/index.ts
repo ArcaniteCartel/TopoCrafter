@@ -72,6 +72,7 @@ export interface ProjectState {
   contoursDirty: boolean
   hillshadeVersion: number
   contoursVersion: number
+  contoursGenerating: boolean
 }
 
 export const defaultParameters: ContourParameters = {

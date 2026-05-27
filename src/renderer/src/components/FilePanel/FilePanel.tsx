@@ -6,7 +6,7 @@ import { loadHeightmapFromPath, loadTerrainImageUrl } from '../../utils/heightma
 export function FilePanel(): JSX.Element {
   const {
     terrainImagePath, heightmapPath, terrainIsHillshade, heightmap,
-    hillshadeGenerating, hillshadeDirty, contoursDirty,
+    hillshadeGenerating, hillshadeDirty, contoursDirty, contoursGenerating,
     setTerrainImage, setHeightmap, setTerrainIsHillshade, updateParameters,
     setFileLoading, setHillshadeDirty, setContoursDirty,
     triggerHillshade, triggerContours,
@@ -142,7 +142,8 @@ export function FilePanel(): JSX.Element {
           <Button
             size="xs"
             variant="light"
-            disabled={!contoursDirty || !heightmap}
+            disabled={!contoursDirty || !heightmap || contoursGenerating}
+            loading={contoursGenerating}
             onClick={triggerContours}
           >
             Recalculate Contours

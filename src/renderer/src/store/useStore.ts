@@ -45,6 +45,7 @@ interface AppActions {
   setElevationUnits: (newType: 'feet' | 'meters' | 'custom', customData?: Partial<ElevationCalibration>) => void
   setHillshadeDirty: (val: boolean) => void
   setContoursDirty: (val: boolean) => void
+  setContoursGenerating: (val: boolean) => void
   triggerHillshade: () => void
   triggerContours: () => void
   markClean: () => void
@@ -68,6 +69,7 @@ const initialState: ProjectState = {
   contoursDirty: false,
   hillshadeVersion: 0,
   contoursVersion: 0,
+  contoursGenerating: false,
 }
 
 export const useStore = create<ProjectState & AppActions>((set, get) => ({
@@ -133,7 +135,15 @@ export const useStore = create<ProjectState & AppActions>((set, get) => ({
     let newRealMin = old.realMin
     let newRealMax = old.realMax
     let newRealInterval = old.realInterval
-    if (old.unitType && old.unitType !== newType) {
+
+    if (newType === 'custom') {
+      // Custom unit definition isn't known yet at selection time — clear values
+      // so the user enters them fresh in their custom unit.
+      newRealMin = null
+      newRealMax = null
+      newRealInterval = null
+    } else if (old.unitType && old.unitType !== newType) {
+      // Known-to-known conversion (feet ↔ meters, or custom → feet/meters)
       if (old.realMin !== null && old.realMax !== null) {
         const minM = calToMeters(old.realMin, old)
         const maxM = calToMeters(old.realMax, old)
@@ -157,6 +167,8 @@ export const useStore = create<ProjectState & AppActions>((set, get) => ({
 
   setContoursDirty: (val) => set({ contoursDirty: val }),
 
+  setContoursGenerating: (val) => set({ contoursGenerating: val }),
+
   triggerHillshade: () =>
     set((state) => ({
       hillshadeVersion: state.hillshadeVersion + 1,
@@ -167,6 +179,7 @@ export const useStore = create<ProjectState & AppActions>((set, get) => ({
     set((state) => ({
       contoursVersion: state.contoursVersion + 1,
       contoursDirty: false,
+      contoursGenerating: true,
     })),
 
   markClean: () => set({ isDirty: false }),

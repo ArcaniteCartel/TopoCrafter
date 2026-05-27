@@ -16,6 +16,17 @@ function getLabelPoint(poly: ContourMultiPolygon): [number, number] | null {
   return best[Math.floor(best.length / 2)]
 }
 
+// Snapshot of calibration values captured at recalculate time so labels stay
+// in sync with the contour lines they annotate, not live parameter edits.
+interface ContourState {
+  contourSet: ContourSet
+  realMin: number | null
+  realMax: number | null
+  realInterval: number | null
+  minElevation: number
+  maxElevation: number
+}
+
 export function MapCanvas(): JSX.Element {
   const terrainImageUrl = useStore((s) => s.terrainImageUrl)
   const heightmap = useStore((s) => s.heightmap)
@@ -25,23 +36,46 @@ export function MapCanvas(): JSX.Element {
   const fileLoadingMessage = useStore((s) => s.fileLoadingMessage)
   const elevationCalibration = useStore((s) => s.elevationCalibration)
   const contoursVersion = useStore((s) => s.contoursVersion)
+  const setContoursGenerating = useStore((s) => s.setContoursGenerating)
 
-  // Ref so the effect always reads the latest parameters without being in deps
+  // Refs so effects always read the latest values without being reactive deps
   const parametersRef = useRef(parameters)
   parametersRef.current = parameters
+  const elevationCalibrationRef = useRef(elevationCalibration)
+  elevationCalibrationRef.current = elevationCalibration
 
-  const [contourSet, setContourSet] = useState<ContourSet | null>(null)
+  const [contourState, setContourState] = useState<ContourState | null>(null)
 
-  // Only recompute contours when a new heightmap is loaded or Recalculate is clicked
+  // Only recompute contours when a new heightmap is loaded or Recalculate is clicked.
+  // 300ms delay gives the browser time to paint the spinner before the synchronous
+  // computation runs. Calibration values are snapshotted here so labels match the
+  // contour lines they annotate, not whatever is currently in the parameter fields.
   useEffect(() => {
-    if (!heightmap) { setContourSet(null); return }
-    setContourSet(generateContours(heightmap, parametersRef.current))
+    if (!heightmap) { setContourState(null); setContoursGenerating(false); return }
+    let cancelled = false
+    const timer = setTimeout(() => {
+      if (cancelled) return
+      const params = parametersRef.current
+      const cal = elevationCalibrationRef.current
+      setContourState({
+        contourSet: generateContours(heightmap, params),
+        realMin: cal.realMin,
+        realMax: cal.realMax,
+        realInterval: cal.realInterval,
+        minElevation: params.minElevation,
+        maxElevation: params.maxElevation,
+      })
+      setContoursGenerating(false)
+    }, 300)
+    return () => { cancelled = true; clearTimeout(timer) }
   }, [heightmap, contoursVersion])
 
   const showPlaceholder = !terrainImageUrl && !heightmap && !hillshadeGenerating && !fileLoadingMessage
 
-  const { realMin, realMax } = elevationCalibration
-  const showLabels = style.showLabels && realMin !== null && realMax !== null
+  const showLabels = style.showLabels
+    && contourState !== null
+    && contourState.realMin !== null
+    && contourState.realMax !== null
 
   const labelFontSize = heightmap ? heightmap.width * style.labelFontSize / 500 : 10
 
@@ -61,7 +95,7 @@ export function MapCanvas(): JSX.Element {
         />
       )}
 
-      {contourSet && heightmap && !hillshadeGenerating && (
+      {contourState && heightmap && !hillshadeGenerating && (
         <svg
           viewBox={`0 0 ${heightmap.width} ${heightmap.height}`}
           style={{
@@ -74,8 +108,8 @@ export function MapCanvas(): JSX.Element {
             pointerEvents: 'none',
           }}
         >
-          {contourSet.paths.map((polygon, i) => {
-            const isMajor = contourSet.majorIndices.has(i)
+          {contourState.contourSet.paths.map((polygon, i) => {
+            const isMajor = contourState.contourSet.majorIndices.has(i)
             return (
               <path
                 key={i}
@@ -88,17 +122,16 @@ export function MapCanvas(): JSX.Element {
             )
           })}
 
-          {showLabels && contourSet.paths.map((polygon, i) => {
-            if (!contourSet.majorIndices.has(i)) return null
+          {showLabels && contourState.contourSet.paths.map((polygon, i) => {
+            if (!contourState.contourSet.majorIndices.has(i)) return null
             const pt = getLabelPoint(polygon)
             if (!pt) return null
-            const { realInterval } = elevationCalibration
-            const normMin = parameters.minElevation
-            const normSpan = parameters.maxElevation - normMin
+            const { realMin, realMax, realInterval, minElevation, maxElevation } = contourState
+            const normSpan = maxElevation - minElevation
             const elev = (realInterval !== null)
               ? realMin! + i * realInterval
               : normSpan > 0
-                ? Math.round(realMin! + (contourSet.thresholds[i] - normMin) / normSpan * (realMax! - realMin!))
+                ? Math.round(realMin! + (contourState.contourSet.thresholds[i] - minElevation) / normSpan * (realMax! - realMin!))
                 : realMin!
             return (
               <text
