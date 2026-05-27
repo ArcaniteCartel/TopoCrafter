@@ -132,15 +132,22 @@ export const useStore = create<ProjectState & AppActions>((set, get) => ({
 
     let newRealMin = old.realMin
     let newRealMax = old.realMax
-    if (old.unitType && old.unitType !== newType && old.realMin !== null && old.realMax !== null) {
-      const minM = calToMeters(old.realMin, old)
-      const maxM = calToMeters(old.realMax, old)
-      newRealMin = round1(calFromMeters(minM, merged))
-      newRealMax = round1(calFromMeters(maxM, merged))
+    let newRealInterval = old.realInterval
+    if (old.unitType && old.unitType !== newType) {
+      if (old.realMin !== null && old.realMax !== null) {
+        const minM = calToMeters(old.realMin, old)
+        const maxM = calToMeters(old.realMax, old)
+        newRealMin = round1(calFromMeters(minM, merged))
+        newRealMax = round1(calFromMeters(maxM, merged))
+      }
+      if (old.realInterval !== null) {
+        const intervalM = calToMeters(old.realInterval, old)
+        newRealInterval = Math.max(1, Math.round(calFromMeters(intervalM, merged)))
+      }
     }
 
     set({
-      elevationCalibration: { ...merged, realMin: newRealMin, realMax: newRealMax },
+      elevationCalibration: { ...merged, realMin: newRealMin, realMax: newRealMax, realInterval: newRealInterval },
       isDirty: true,
       contoursDirty: true,
     })

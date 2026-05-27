@@ -199,7 +199,7 @@ export function ParameterPanel(): JSX.Element {
         value={unitType}
         onChange={(v) => v && setElevationUnits(v as 'feet' | 'meters' | 'custom')}
         clearable
-        onClear={() => updateElevationCalibration({ unitType: null })}
+        onClear={() => updateElevationCalibration({ unitType: null, realMin: null, realMax: null, realInterval: null })}
       />
 
       {unitType === 'custom' && (
