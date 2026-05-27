@@ -84,6 +84,23 @@ export function FilePanel(): JSX.Element {
       <Paper p="xs" withBorder>
         <Stack gap={6}>
           <Group justify="space-between">
+            <Text size="xs" fw={500}>Heightmap ★</Text>
+            {heightmapPath && <Badge size="xs" color="teal">Loaded</Badge>}
+          </Group>
+          {heightmapPath && (
+            <Text size="xs" c="dimmed" lineClamp={1} title={heightmapPath}>
+              {heightmapPath}
+            </Text>
+          )}
+          <Button size="xs" variant="light" onClick={handleLoadHeightmap} loading={loadingHeightmap}>
+            {heightmapPath ? 'Replace Heightmap' : 'Load Heightmap'}
+          </Button>
+        </Stack>
+      </Paper>
+
+      <Paper p="xs" withBorder>
+        <Stack gap={6}>
+          <Group justify="space-between">
             <Text size="xs" fw={500}>Terrain Image</Text>
             {terrainIsHillshade && <Badge size="xs" color="violet">Hillshade</Badge>}
             {terrainImagePath && !terrainIsHillshade && <Badge size="xs" color="teal">Loaded</Badge>}
@@ -98,23 +115,6 @@ export function FilePanel(): JSX.Element {
           )}
           <Button size="xs" variant="light" onClick={handleLoadTerrain} loading={loadingTerrain}>
             {terrainLoaded ? 'Load Custom Terrain Image' : 'Load Terrain Image'}
-          </Button>
-        </Stack>
-      </Paper>
-
-      <Paper p="xs" withBorder>
-        <Stack gap={6}>
-          <Group justify="space-between">
-            <Text size="xs" fw={500}>Heightmap</Text>
-            {heightmapPath && <Badge size="xs" color="teal">Loaded</Badge>}
-          </Group>
-          {heightmapPath && (
-            <Text size="xs" c="dimmed" lineClamp={1} title={heightmapPath}>
-              {heightmapPath}
-            </Text>
-          )}
-          <Button size="xs" variant="light" onClick={handleLoadHeightmap} loading={loadingHeightmap}>
-            {heightmapPath ? 'Replace Heightmap' : 'Load Heightmap'}
           </Button>
         </Stack>
       </Paper>

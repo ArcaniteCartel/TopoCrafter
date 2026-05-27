@@ -17,6 +17,13 @@ const roStyle = {
   },
 }
 
+// Highlighted border for editable fields so they're visually distinct at rest
+const activeStyle = {
+  input: {
+    borderColor: 'var(--mantine-color-blue-5)',
+  },
+}
+
 export function ParameterPanel(): JSX.Element {
   const {
     parameters, style, hillshadeParams, terrainIsHillshade, elevationCalibration,
@@ -184,28 +191,6 @@ export function ParameterPanel(): JSX.Element {
         Contour Parameters
       </Text>
 
-      <Group grow>
-        <NumberInput
-          label="Contour Interval"
-          description="Normalized"
-          size="xs"
-          decimalScale={4}
-          value={parameters.interval}
-          disabled
-          styles={roStyle}
-        />
-        <TextInput
-          label={`Interval${abbr ? ` (${abbr})` : ''}`}
-          description="Real-world"
-          size="xs"
-          value={intervalStr}
-          onChange={handleIntervalInput}
-          placeholder={calReady ? 'e.g. 100' : 'Set min/max first'}
-          inputMode="numeric"
-          styles={!calReady ? roStyle : undefined}
-        />
-      </Group>
-
       <Select
         label="Elevation Units"
         size="xs"
@@ -261,6 +246,35 @@ export function ParameterPanel(): JSX.Element {
 
       <Group grow>
         <NumberInput
+          label={`Min${abbr ? ` (${abbr})` : ''}`}
+          description="Real-world"
+          size="xs"
+          decimalScale={1}
+          step={1}
+          disabled={!unitType}
+          value={realMin ?? ''}
+          onChange={handleRealMinChange}
+          onBlur={handleMinMaxBlur}
+          placeholder={unitType ? '0' : '—'}
+          styles={!unitType ? roStyle : activeStyle}
+        />
+        <NumberInput
+          label={`Max${abbr ? ` (${abbr})` : ''}`}
+          description="Real-world"
+          size="xs"
+          decimalScale={1}
+          step={1}
+          disabled={!unitType}
+          value={realMax ?? ''}
+          onChange={handleRealMaxChange}
+          onBlur={handleMinMaxBlur}
+          placeholder={unitType ? '0' : '—'}
+          styles={!unitType ? roStyle : activeStyle}
+        />
+      </Group>
+
+      <Group grow>
+        <NumberInput
           label="Min Elevation"
           description="Normalized"
           size="xs"
@@ -282,30 +296,23 @@ export function ParameterPanel(): JSX.Element {
 
       <Group grow>
         <NumberInput
-          label={`Min${abbr ? ` (${abbr})` : ''}`}
-          description="Real-world"
+          label="Contour Interval"
+          description="Normalized"
           size="xs"
-          decimalScale={1}
-          step={1}
-          disabled={!unitType}
-          value={realMin ?? ''}
-          onChange={handleRealMinChange}
-          onBlur={handleMinMaxBlur}
-          placeholder={unitType ? '0' : '—'}
-          styles={!unitType ? roStyle : undefined}
+          decimalScale={4}
+          value={parameters.interval}
+          disabled
+          styles={roStyle}
         />
-        <NumberInput
-          label={`Max${abbr ? ` (${abbr})` : ''}`}
+        <TextInput
+          label={`Interval${abbr ? ` (${abbr})` : ''}`}
           description="Real-world"
           size="xs"
-          decimalScale={1}
-          step={1}
-          disabled={!unitType}
-          value={realMax ?? ''}
-          onChange={handleRealMaxChange}
-          onBlur={handleMinMaxBlur}
-          placeholder={unitType ? '0' : '—'}
-          styles={!unitType ? roStyle : undefined}
+          value={intervalStr}
+          onChange={handleIntervalInput}
+          placeholder={calReady ? 'e.g. 100' : 'Set min/max first'}
+          inputMode="numeric"
+          styles={!calReady ? roStyle : activeStyle}
         />
       </Group>
 
@@ -316,6 +323,7 @@ export function ParameterPanel(): JSX.Element {
         max={20}
         value={parameters.majorEvery}
         onChange={(v) => typeof v === 'number' && updateParameters({ majorEvery: v })}
+        styles={activeStyle}
       />
 
       <Stack gap={4}>
@@ -348,6 +356,13 @@ export function ParameterPanel(): JSX.Element {
         size="xs"
         value={style.majorColor}
         onChange={(v) => updateStyle({ majorColor: v })}
+      />
+
+      <ColorInput
+        label="Label Color"
+        size="xs"
+        value={style.labelColor}
+        onChange={(v) => updateStyle({ labelColor: v })}
       />
 
       <Group grow>

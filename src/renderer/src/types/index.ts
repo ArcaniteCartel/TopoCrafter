@@ -9,6 +9,7 @@ export interface ContourParameters {
 export interface ContourStyle {
   minorColor: string
   majorColor: string
+  labelColor: string
   minorWidth: number
   majorWidth: number
   opacity: number
@@ -84,6 +85,7 @@ export const defaultParameters: ContourParameters = {
 export const defaultStyle: ContourStyle = {
   minorColor: '#8B7355',
   majorColor: '#5C4A2A',
+  labelColor: '#2E2412',
   minorWidth: 1,
   majorWidth: 2,
   opacity: 0.8,

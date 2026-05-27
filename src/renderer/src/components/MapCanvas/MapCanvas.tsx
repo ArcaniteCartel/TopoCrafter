@@ -106,7 +106,7 @@ export function MapCanvas(): JSX.Element {
                 x={pt[0]}
                 y={pt[1]}
                 fontSize={labelFontSize}
-                fill={style.majorColor}
+                fill={style.labelColor}
                 textAnchor="middle"
                 dominantBaseline="middle"
               >
