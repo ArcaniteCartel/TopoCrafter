@@ -32,6 +32,28 @@ export interface HillshadeParameters {
   brightness: number  // base brightness offset; 0.5 = mid-grey, higher = brighter
 }
 
+export interface ElevationCalibration {
+  unitType: 'feet' | 'meters' | 'custom' | null
+  customName: string
+  customAbbr: string
+  customBase: 'feet' | 'meters'
+  customRatio: number    // 1 custom unit = N base units
+  realMin: number | null      // real-world elevation at normalized 0
+  realMax: number | null      // real-world elevation at normalized 1
+  realInterval: number | null // contour spacing in real-world units (integer)
+}
+
+export const defaultElevationCalibration: ElevationCalibration = {
+  unitType: null,
+  customName: '',
+  customAbbr: '',
+  customBase: 'feet',
+  customRatio: 1,
+  realMin: null,
+  realMax: null,
+  realInterval: null,
+}
+
 export interface ProjectState {
   terrainImagePath: string | null
   heightmapPath: string | null
@@ -43,7 +65,12 @@ export interface ProjectState {
   parameters: ContourParameters
   style: ContourStyle
   hillshadeParams: HillshadeParameters
+  elevationCalibration: ElevationCalibration
   isDirty: boolean
+  hillshadeDirty: boolean
+  contoursDirty: boolean
+  hillshadeVersion: number
+  contoursVersion: number
 }
 
 export const defaultParameters: ContourParameters = {

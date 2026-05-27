@@ -5,8 +5,11 @@ import { loadHeightmapFromPath, loadTerrainImageUrl } from '../../utils/heightma
 
 export function FilePanel(): JSX.Element {
   const {
-    terrainImagePath, heightmapPath, terrainIsHillshade,
-    setTerrainImage, setHeightmap, setTerrainIsHillshade, updateParameters, setFileLoading,
+    terrainImagePath, heightmapPath, terrainIsHillshade, heightmap,
+    hillshadeGenerating, hillshadeDirty, contoursDirty,
+    setTerrainImage, setHeightmap, setTerrainIsHillshade, updateParameters,
+    setFileLoading, setHillshadeDirty, setContoursDirty,
+    triggerHillshade, triggerContours,
   } = useStore()
 
   const [loadingTerrain, setLoadingTerrain] = useState(false)
@@ -43,7 +46,6 @@ export function FilePanel(): JSX.Element {
     try {
       const info = await loadHeightmapFromPath(path)
       setHeightmap(path, info)
-      // Auto-fit contour range and interval to the heightmap's actual elevation span
       const range = info.maxValue - info.minValue
       const interval = parseFloat(Math.max(0.001, range / 20).toFixed(4))
       updateParameters({
@@ -54,6 +56,9 @@ export function FilePanel(): JSX.Element {
       if (!terrainImagePath || terrainIsHillshade) {
         setTerrainIsHillshade(true)
       }
+      // Clear dirty flags — both operations were just auto-triggered by the load
+      setHillshadeDirty(false)
+      setContoursDirty(false)
     } catch (err) {
       setError(`Could not load heightmap: ${err instanceof Error ? err.message : String(err)}`)
     } finally {
@@ -110,6 +115,37 @@ export function FilePanel(): JSX.Element {
           )}
           <Button size="xs" variant="light" onClick={handleLoadHeightmap} loading={loadingHeightmap}>
             {heightmapPath ? 'Replace Heightmap' : 'Load Heightmap'}
+          </Button>
+        </Stack>
+      </Paper>
+
+      {terrainIsHillshade && (
+        <Paper p="xs" withBorder>
+          <Stack gap={6}>
+            <Text size="xs" fw={500}>Hillshading</Text>
+            <Button
+              size="xs"
+              variant="light"
+              disabled={!hillshadeDirty || hillshadeGenerating}
+              loading={hillshadeGenerating}
+              onClick={triggerHillshade}
+            >
+              Rerun Hillshading
+            </Button>
+          </Stack>
+        </Paper>
+      )}
+
+      <Paper p="xs" withBorder>
+        <Stack gap={6}>
+          <Text size="xs" fw={500}>Contours</Text>
+          <Button
+            size="xs"
+            variant="light"
+            disabled={!contoursDirty || !heightmap}
+            onClick={triggerContours}
+          >
+            Recalculate Contours
           </Button>
         </Stack>
       </Paper>
