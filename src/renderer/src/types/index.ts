@@ -10,6 +10,9 @@ export interface ContourStyle {
   minorColor: string
   majorColor: string
   labelColor: string
+  labelFont: string
+  labelBold: boolean
+  labelItalic: boolean
   minorWidth: number
   majorWidth: number
   opacity: number
@@ -87,6 +90,9 @@ export const defaultStyle: ContourStyle = {
   minorColor: '#8B7355',
   majorColor: '#5C4A2A',
   labelColor: '#2E2412',
+  labelFont: 'serif',
+  labelBold: false,
+  labelItalic: false,
   minorWidth: 1,
   majorWidth: 2,
   opacity: 0.8,

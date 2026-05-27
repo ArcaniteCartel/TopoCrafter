@@ -1,6 +1,15 @@
 import { useEffect, useRef, useState } from 'react'
-import { Stack, Text, Slider, NumberInput, ColorInput, Switch, Divider, Group, Select, TextInput } from '@mantine/core'
+import { Stack, Text, Slider, NumberInput, ColorInput, Switch, Divider, Group, Select, TextInput, Collapse, Checkbox } from '@mantine/core'
 import { useStore } from '../../store/useStore'
+
+const FONT_OPTIONS = [
+  { value: 'serif', label: 'Serif' },
+  { value: 'sans-serif', label: 'Sans-serif' },
+  { value: 'Georgia, serif', label: 'Georgia' },
+  { value: 'Times New Roman, serif', label: 'Times New Roman' },
+  { value: 'Arial, sans-serif', label: 'Arial' },
+  { value: 'monospace', label: 'Monospace' },
+]
 
 const UNIT_OPTIONS = [
   { value: 'feet', label: 'Feet (ft)' },
@@ -46,6 +55,7 @@ export function ParameterPanel(): JSX.Element {
   const [intervalStr, setIntervalStr] = useState<string>(
     realInterval !== null ? String(realInterval) : ''
   )
+  const [labelStylingOpen, setLabelStylingOpen] = useState(true)
 
   // Refs for latest values — safe to read inside event handlers and effects
   const normIntervalRef = useRef(parameters.interval)
@@ -358,13 +368,6 @@ export function ParameterPanel(): JSX.Element {
         onChange={(v) => updateStyle({ majorColor: v })}
       />
 
-      <ColorInput
-        label="Label Color"
-        size="xs"
-        value={style.labelColor}
-        onChange={(v) => updateStyle({ labelColor: v })}
-      />
-
       <Group grow>
         <NumberInput
           label="Minor Line Width"
@@ -400,14 +403,73 @@ export function ParameterPanel(): JSX.Element {
         />
       </Stack>
 
-      <Switch
-        label="Show Elevation Labels"
-        description={!calReady ? 'Set units and real-world min/max to enable' : undefined}
-        size="sm"
-        checked={style.showLabels}
-        disabled={!calReady}
-        onChange={(e) => updateStyle({ showLabels: e.currentTarget.checked })}
-      />
+      <Divider />
+
+      <Group
+        justify="space-between"
+        style={{ cursor: 'pointer', userSelect: 'none' }}
+        onClick={() => setLabelStylingOpen((o) => !o)}
+      >
+        <Text fw={600} size="xs" tt="uppercase" style={{ letterSpacing: 1 }}>
+          Label Styling
+        </Text>
+        <Text size="lg" c="dimmed">{labelStylingOpen ? '▾' : '▸'}</Text>
+      </Group>
+
+      <Collapse in={labelStylingOpen}>
+        <Stack gap="md">
+          <Switch
+            label="Show Elevation Labels"
+            description={!calReady ? 'Set units and real-world min/max to enable' : undefined}
+            size="sm"
+            checked={style.showLabels}
+            disabled={!calReady}
+            onChange={(e) => updateStyle({ showLabels: e.currentTarget.checked })}
+          />
+
+          <ColorInput
+            label="Label Color"
+            size="xs"
+            value={style.labelColor}
+            onChange={(v) => updateStyle({ labelColor: v })}
+          />
+
+          <Select
+            label="Label Font"
+            size="xs"
+            data={FONT_OPTIONS}
+            value={style.labelFont}
+            onChange={(v) => v && updateStyle({ labelFont: v })}
+          />
+
+          <Group gap="xl">
+            <Checkbox
+              label="Bold"
+              size="xs"
+              checked={style.labelBold}
+              onChange={(e) => updateStyle({ labelBold: e.currentTarget.checked })}
+            />
+            <Checkbox
+              label="Italic"
+              size="xs"
+              checked={style.labelItalic}
+              onChange={(e) => updateStyle({ labelItalic: e.currentTarget.checked })}
+            />
+          </Group>
+
+          <Stack gap={4}>
+            <Text size="xs" fw={500}>Label Font Size</Text>
+            <Slider
+              min={1}
+              max={30}
+              step={1}
+              value={style.labelFontSize}
+              onChange={(v) => updateStyle({ labelFontSize: v })}
+              label={(v) => `${v}`}
+            />
+          </Stack>
+        </Stack>
+      </Collapse>
     </Stack>
   )
 }
