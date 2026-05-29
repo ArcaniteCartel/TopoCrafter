@@ -2,6 +2,7 @@ import { create } from 'zustand'
 import type {
   ProjectState, ContourParameters, ContourStyle,
   HeightmapInfo, HillshadeParameters, ElevationCalibration,
+  ElevationFlag, MapTool,
 } from '../types'
 import { defaultParameters, defaultStyle, defaultHillshadeParameters, defaultElevationCalibration } from '../types'
 
@@ -49,6 +50,10 @@ interface AppActions {
   triggerHillshade: () => void
   triggerContours: () => void
   finalizeCustomConversion: () => void
+  addElevationFlag: (flag: ElevationFlag) => void
+  updateElevationFlag: (id: string, updates: Partial<Omit<ElevationFlag, 'id'>>) => void
+  removeElevationFlag: (id: string) => void
+  setMapTool: (tool: MapTool) => void
   markClean: () => void
   reset: () => void
 }
@@ -71,6 +76,8 @@ const initialState: ProjectState = {
   hillshadeVersion: 0,
   contoursVersion: 0,
   contoursGenerating: false,
+  elevationFlags: [],
+  mapTool: 'none',
 }
 
 export const useStore = create<ProjectState & AppActions>((set, get) => ({
@@ -220,6 +227,23 @@ export const useStore = create<ProjectState & AppActions>((set, get) => ({
       ...(terrainIsHillshade ? { hillshadeDirty: true } : {}),
     })
   },
+
+  addElevationFlag: (flag) =>
+    set((state) => ({ elevationFlags: [...state.elevationFlags, flag], isDirty: true })),
+
+  updateElevationFlag: (id, updates) =>
+    set((state) => ({
+      elevationFlags: state.elevationFlags.map((f) => f.id === id ? { ...f, ...updates } : f),
+      isDirty: true,
+    })),
+
+  removeElevationFlag: (id) =>
+    set((state) => ({
+      elevationFlags: state.elevationFlags.filter((f) => f.id !== id),
+      isDirty: true,
+    })),
+
+  setMapTool: (tool) => set({ mapTool: tool }),
 
   markClean: () => set({ isDirty: false }),
 

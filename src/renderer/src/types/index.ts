@@ -70,6 +70,15 @@ export const defaultElevationCalibration: ElevationCalibration = {
   preCustomUnit: null,
 }
 
+export interface ElevationFlag {
+  id: string
+  x: number         // SVG / heightmap pixel coordinate
+  y: number
+  elevation: number // real-world elevation at placement point
+}
+
+export type MapTool = 'none' | 'elevation-flag'
+
 export interface ProjectState {
   terrainImagePath: string | null
   heightmapPath: string | null
@@ -88,6 +97,8 @@ export interface ProjectState {
   hillshadeVersion: number
   contoursVersion: number
   contoursGenerating: boolean
+  elevationFlags: ElevationFlag[]
+  mapTool: MapTool
 }
 
 export const defaultParameters: ContourParameters = {
