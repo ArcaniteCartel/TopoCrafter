@@ -18,6 +18,13 @@ export interface ContourStyle {
   opacity: number
   showLabels: boolean
   labelFontSize: number
+  showSeaLevel: boolean
+  seaLevelColor: string
+  seaLevelWidth: number
+  seaLevelDash: 'solid' | 'dashed' | 'dotted'
+  showSeaLevelLabel: boolean
+  seaLevelLabelColor: string
+  seaLevelLabelFontSize: number
 }
 
 export interface HeightmapInfo {
@@ -103,6 +110,13 @@ export const defaultStyle: ContourStyle = {
   opacity: 0.8,
   showLabels: true,
   labelFontSize: 10,
+  showSeaLevel: false,
+  seaLevelColor: '#FFFFFF',
+  seaLevelWidth: 2,
+  seaLevelDash: 'solid',
+  showSeaLevelLabel: true,
+  seaLevelLabelColor: '#FFFFFF',
+  seaLevelLabelFontSize: 10,
 }
 
 export const defaultHillshadeParameters: HillshadeParameters = {

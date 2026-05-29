@@ -57,8 +57,19 @@ export function MapCanvas(): JSX.Element {
       if (cancelled) return
       const params = parametersRef.current
       const cal = elevationCalibrationRef.current
+
+      // Compute the normalised threshold that corresponds to real-world elevation 0 (sea level)
+      let seaLevelThreshold: number | undefined
+      if (cal.realMin !== null && cal.realMax !== null && cal.realMin < 0 && cal.realMax > 0) {
+        const normSpan = params.maxElevation - params.minElevation
+        const realSpan = cal.realMax - cal.realMin
+        if (normSpan > 0 && realSpan > 0) {
+          seaLevelThreshold = params.minElevation + (-cal.realMin / realSpan) * normSpan
+        }
+      }
+
       setContourState({
-        contourSet: generateContours(heightmap, params),
+        contourSet: generateContours(heightmap, params, seaLevelThreshold),
         realMin: cal.realMin,
         realMax: cal.realMax,
         realInterval: cal.realInterval,
@@ -78,6 +89,10 @@ export function MapCanvas(): JSX.Element {
     && contourState.realMax !== null
 
   const labelFontSize = heightmap ? heightmap.width * style.labelFontSize / 500 : 10
+  const seaLevelLabelFontSize = heightmap ? heightmap.width * style.seaLevelLabelFontSize / 500 : 10
+  const seaLevelLabelPt = (style.showSeaLevel && style.showSeaLevelLabel && contourState?.contourSet.seaLevelPath)
+    ? getLabelPoint(contourState.contourSet.seaLevelPath)
+    : null
 
   return (
     <div style={{ position: 'relative', width: '100%', flex: 1, overflow: 'auto' }}>
@@ -150,6 +165,45 @@ export function MapCanvas(): JSX.Element {
               </text>
             )
           })}
+
+          {style.showSeaLevel && contourState.contourSet.seaLevelPath && (
+            <path
+              d={contourToSvgPath(contourState.contourSet.seaLevelPath)}
+              fill="none"
+              stroke={style.seaLevelColor}
+              strokeWidth={style.seaLevelWidth}
+              strokeDasharray={
+                style.seaLevelDash === 'dashed' ? '8 4' :
+                style.seaLevelDash === 'dotted' ? '2 4' :
+                undefined
+              }
+              vectorEffect="non-scaling-stroke"
+            />
+          )}
+
+          {seaLevelLabelPt && (
+            <g transform={`translate(${seaLevelLabelPt[0]}, ${seaLevelLabelPt[1]}) scale(${seaLevelLabelFontSize})`}>
+              {/* Arrow pointing up */}
+              <path
+                d="M 0 -0.50 L -0.18 -0.22 L -0.06 -0.22 L -0.06 0.05 L 0.06 0.05 L 0.06 -0.22 L 0.18 -0.22 Z"
+                fill={style.seaLevelLabelColor}
+              />
+              {/* Wave 1 */}
+              <path
+                d="M -0.40 0.18 C -0.27 0.06, -0.13 0.30, 0 0.18 C 0.13 0.06, 0.27 0.30, 0.40 0.18"
+                fill="none"
+                stroke={style.seaLevelLabelColor}
+                strokeWidth={0.08}
+              />
+              {/* Wave 2 */}
+              <path
+                d="M -0.40 0.38 C -0.27 0.26, -0.13 0.50, 0 0.38 C 0.13 0.26, 0.27 0.50, 0.40 0.38"
+                fill="none"
+                stroke={style.seaLevelLabelColor}
+                strokeWidth={0.08}
+              />
+            </g>
+          )}
         </svg>
       )}
 

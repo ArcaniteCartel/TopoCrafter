@@ -2,6 +2,12 @@ import { useEffect, useRef, useState } from 'react'
 import { Stack, Text, Slider, NumberInput, ColorInput, Switch, Divider, Group, Select, TextInput, Collapse, Checkbox } from '@mantine/core'
 import { useStore } from '../../store/useStore'
 
+const DASH_OPTIONS = [
+  { value: 'solid', label: 'Solid' },
+  { value: 'dashed', label: 'Dashed' },
+  { value: 'dotted', label: 'Dotted' },
+]
+
 const FONT_OPTIONS = [
   { value: 'serif', label: 'Serif' },
   { value: 'sans-serif', label: 'Sans-serif' },
@@ -76,11 +82,16 @@ export function ParameterPanel(): JSX.Element {
     : null
   const hasGroundResolution = correctZFactor !== null
 
+  // Sea level is only applicable when calibration spans real-world 0 (min < 0 < max)
+  const seaLevelApplicable = calReady && realMin !== null && realMax !== null
+    && realMin < 0 && realMax > 0
+
   // TextInput local state — avoids Mantine NumberInput controlled-mode quirks
   const [intervalStr, setIntervalStr] = useState<string>(
     realInterval !== null ? String(realInterval) : ''
   )
   const [labelStylingOpen, setLabelStylingOpen] = useState(true)
+  const [seaLevelOpen, setSeaLevelOpen] = useState(true)
 
   // Refs for latest values — safe to read inside event handlers and effects
   const normIntervalRef = useRef(parameters.interval)
@@ -528,6 +539,85 @@ export function ParameterPanel(): JSX.Element {
               step={1}
               value={style.labelFontSize}
               onChange={(v) => updateStyle({ labelFontSize: v })}
+              label={(v) => `${v}`}
+            />
+          </Stack>
+        </Stack>
+      </Collapse>
+
+      <Divider />
+
+      <Group
+        justify="space-between"
+        style={{ cursor: 'pointer', userSelect: 'none' }}
+        onClick={() => setSeaLevelOpen((o) => !o)}
+      >
+        <Text fw={600} size="xs" tt="uppercase" style={{ letterSpacing: 1 }}>
+          Sea Level
+        </Text>
+        <Text size="lg" c="dimmed">{seaLevelOpen ? '▾' : '▸'}</Text>
+      </Group>
+
+      <Collapse in={seaLevelOpen}>
+        <Stack gap="md">
+          <Switch
+            label="Show Sea Level Contour"
+            description={!seaLevelApplicable ? 'Set real-world min < 0 and max > 0 to enable' : undefined}
+            size="sm"
+            checked={style.showSeaLevel}
+            disabled={!seaLevelApplicable}
+            onChange={(e) => updateStyle({ showSeaLevel: e.currentTarget.checked })}
+          />
+
+          <ColorInput
+            label="Sea Level Color"
+            size="xs"
+            value={style.seaLevelColor}
+            onChange={(v) => updateStyle({ seaLevelColor: v })}
+          />
+
+          <Group grow>
+            <NumberInput
+              label="Line Width"
+              size="xs"
+              min={0.5}
+              max={10}
+              step={0.5}
+              decimalScale={1}
+              value={style.seaLevelWidth}
+              onChange={(v) => typeof v === 'number' && updateStyle({ seaLevelWidth: v })}
+            />
+            <Select
+              label="Line Style"
+              size="xs"
+              data={DASH_OPTIONS}
+              value={style.seaLevelDash}
+              onChange={(v) => v && updateStyle({ seaLevelDash: v as 'solid' | 'dashed' | 'dotted' })}
+            />
+          </Group>
+
+          <Switch
+            label="Show Sea Level Icon"
+            size="sm"
+            checked={style.showSeaLevelLabel}
+            onChange={(e) => updateStyle({ showSeaLevelLabel: e.currentTarget.checked })}
+          />
+
+          <ColorInput
+            label="Icon Color"
+            size="xs"
+            value={style.seaLevelLabelColor}
+            onChange={(v) => updateStyle({ seaLevelLabelColor: v })}
+          />
+
+          <Stack gap={4}>
+            <Text size="xs" fw={500}>Icon Size</Text>
+            <Slider
+              min={1}
+              max={30}
+              step={1}
+              value={style.seaLevelLabelFontSize}
+              onChange={(v) => updateStyle({ seaLevelLabelFontSize: v })}
               label={(v) => `${v}`}
             />
           </Stack>

@@ -6,6 +6,7 @@ export interface ContourSet {
   paths: ContourMultiPolygon[]
   thresholds: number[]
   majorIndices: Set<number>
+  seaLevelPath: ContourMultiPolygon | null
 }
 
 // Separable box blur — two passes (horizontal then vertical) over the elevation data.
@@ -38,7 +39,11 @@ function boxBlur(src: Float32Array, width: number, height: number, radius: numbe
   return dst
 }
 
-export function generateContours(heightmap: HeightmapInfo, params: ContourParameters): ContourSet {
+export function generateContours(
+  heightmap: HeightmapInfo,
+  params: ContourParameters,
+  seaLevelThreshold?: number
+): ContourSet {
   const { data, width, height, minValue, maxValue } = heightmap
   const { interval, minElevation, maxElevation, majorEvery, smoothing } = params
 
@@ -54,15 +59,23 @@ export function generateContours(heightmap: HeightmapInfo, params: ContourParame
   const radius = Math.round(smoothing * 8)
   const effectiveData = radius > 0 ? boxBlur(data, width, height, radius) : data
 
+  const dataArr = Array.from(effectiveData)
   const generator = contours().size([width, height]).thresholds(thresholds)
-  const paths = generator(Array.from(effectiveData))
+  const paths = generator(dataArr)
 
   const majorIndices = new Set<number>()
   thresholds.forEach((_, i) => {
     if (i % majorEvery === 0) majorIndices.add(i)
   })
 
-  return { paths, thresholds, majorIndices }
+  // Sea level contour — separate pass at the exact normalised threshold for real-world 0
+  let seaLevelPath: ContourMultiPolygon | null = null
+  if (seaLevelThreshold !== undefined && seaLevelThreshold > low && seaLevelThreshold < high) {
+    const slPaths = contours().size([width, height]).thresholds([seaLevelThreshold])(dataArr)
+    seaLevelPath = slPaths[0] ?? null
+  }
+
+  return { paths, thresholds, majorIndices, seaLevelPath }
 }
 
 export function contourToSvgPath(polygon: ContourMultiPolygon): string {
