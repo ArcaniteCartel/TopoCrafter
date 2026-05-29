@@ -30,6 +30,15 @@ function FlagIcon(): JSX.Element {
   )
 }
 
+function ArrowIcon(): JSX.Element {
+  return (
+    <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor">
+      <line x1="2" y1="8" x2="10" y2="8" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+      <polygon points="14,8 9.5,5.5 9.5,10.5" />
+    </svg>
+  )
+}
+
 export function Toolbar(): JSX.Element {
   const isDirty = useStore((s) => s.isDirty)
   const reset = useStore((s) => s.reset)
@@ -40,10 +49,11 @@ export function Toolbar(): JSX.Element {
   const [themeModalOpen, setThemeModalOpen] = useState(false)
   const [toolPanelOpen, setToolPanelOpen] = useState(false)
 
-  const { unitType, customAbbr, customRatio, realMin, realMax } = elevationCalibration
+  const { unitType, customAbbr, customRatio, realMin, realMax, mapWidth } = elevationCalibration
   const calReady = (unitType === 'feet' || unitType === 'meters'
     || (unitType === 'custom' && !!customAbbr && customRatio > 0))
     && realMin !== null && realMax !== null && realMax !== realMin
+  const hasGroundResolution = calReady && mapWidth !== null && mapWidth > 0
 
   const handleExport = async () => {
     // TODO: implement canvas composite export
@@ -81,6 +91,17 @@ export function Toolbar(): JSX.Element {
                     aria-label="Elevation flag tool"
                   >
                     <FlagIcon />
+                  </ActionIcon>
+                </Tooltip>
+                <Tooltip label="Add angle of steepest ascent to the map" position="bottom" withArrow>
+                  <ActionIcon
+                    variant={mapTool === 'slope-arrow' ? 'filled' : 'subtle'}
+                    size="md"
+                    disabled={!hasGroundResolution}
+                    onClick={() => setMapTool(mapTool === 'slope-arrow' ? 'none' : 'slope-arrow')}
+                    aria-label="Slope arrow tool"
+                  >
+                    <ArrowIcon />
                   </ActionIcon>
                 </Tooltip>
               </Group>

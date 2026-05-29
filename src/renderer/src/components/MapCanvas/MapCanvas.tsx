@@ -4,7 +4,7 @@ import type { ContourMultiPolygon } from 'd3-contour'
 import { useStore } from '../../store/useStore'
 import { generateContours, contourToSvgPath } from '../../utils/contour'
 import type { ContourSet } from '../../utils/contour'
-import type { ElevationFlag } from '../../types'
+import type { ElevationFlag, SlopeArrow } from '../../types'
 
 function getLabelPoint(poly: ContourMultiPolygon): [number, number] | null {
   let best: [number, number][] | null = null
@@ -28,6 +28,10 @@ interface ContourState {
   maxElevation: number
 }
 
+type SelectedItem = { type: 'flag' | 'slope-arrow'; id: string }
+type DragRef = { type: 'flag' | 'slope-arrow'; itemId: string; startX: number; startY: number; moved: boolean }
+type DragPos = { x: number; y: number; elevation?: number; angleDeg?: number; slopeDeg?: number }
+
 export function MapCanvas(): JSX.Element {
   const terrainImageUrl = useStore((s) => s.terrainImageUrl)
   const heightmap = useStore((s) => s.heightmap)
@@ -43,6 +47,10 @@ export function MapCanvas(): JSX.Element {
   const addElevationFlag = useStore((s) => s.addElevationFlag)
   const updateElevationFlag = useStore((s) => s.updateElevationFlag)
   const removeElevationFlag = useStore((s) => s.removeElevationFlag)
+  const slopeArrows = useStore((s) => s.slopeArrows)
+  const addSlopeArrow = useStore((s) => s.addSlopeArrow)
+  const updateSlopeArrow = useStore((s) => s.updateSlopeArrow)
+  const removeSlopeArrow = useStore((s) => s.removeSlopeArrow)
   const setMapTool = useStore((s) => s.setMapTool)
 
   // Refs so effects and stable callbacks always read the latest values
@@ -55,13 +63,13 @@ export function MapCanvas(): JSX.Element {
 
   const [contourState, setContourState] = useState<ContourState | null>(null)
 
-  // Flag interaction state
-  const [selectedFlagId, setSelectedFlagId] = useState<string | null>(null)
-  const [dragPos, setDragPos] = useState<{ x: number; y: number; elevation: number } | null>(null)
-  const dragRef = useRef<{ flagId: string; startX: number; startY: number; moved: boolean } | null>(null)
+  // Unified selection and drag state for all annotation tools
+  const [selectedItem, setSelectedItem] = useState<SelectedItem | null>(null)
+  const [dragPos, setDragPos] = useState<DragPos | null>(null)
+  const dragRef = useRef<DragRef | null>(null)
   const flagSvgRef = useRef<SVGSVGElement>(null)
-  const selectedFlagIdRef = useRef<string | null>(null)
-  selectedFlagIdRef.current = selectedFlagId
+  const selectedItemRef = useRef<SelectedItem | null>(null)
+  selectedItemRef.current = selectedItem
 
   // Only recompute contours when a new heightmap is loaded or Recalculate is clicked.
   // 300ms delay gives the browser time to paint the spinner before the synchronous
@@ -122,23 +130,45 @@ export function MapCanvas(): JSX.Element {
     return Math.round(cal.realMin + (normVal - params.minElevation) / normSpan * (cal.realMax - cal.realMin))
   }, [])
 
-  // Escape cancels the active tool; Delete removes the selected flag
+  // Compute slope angle and ascent direction at any SVG coordinate (uses refs — always current)
+  const computeSlopeAt = useCallback((svgX: number, svgY: number): { angleDeg: number; slopeDeg: number } | null => {
+    const hm = heightmapRef.current
+    const cal = elevationCalibrationRef.current
+    if (!hm || cal.realMin === null || cal.realMax === null || !cal.mapWidth || cal.mapWidth <= 0) return null
+    const px = Math.min(Math.max(Math.round(svgX), 0), hm.width - 1)
+    const py = Math.min(Math.max(Math.round(svgY), 0), hm.height - 1)
+    // Central differences with boundary clamping
+    const x0 = Math.max(px - 1, 0), x1 = Math.min(px + 1, hm.width - 1)
+    const y0 = Math.max(py - 1, 0), y1 = Math.min(py + 1, hm.height - 1)
+    const gx = (hm.data[py * hm.width + x1] - hm.data[py * hm.width + x0]) / (x1 - x0)
+    const gy = (hm.data[y1 * hm.width + px] - hm.data[y0 * hm.width + px]) / (y1 - y0)
+    const gradMag = Math.sqrt(gx * gx + gy * gy)
+    const elevRange = Math.abs(cal.realMax - cal.realMin)
+    const groundRes = cal.mapWidth / hm.width
+    const slopeDeg = Math.round(Math.atan((gradMag * elevRange) / groundRes) * 180 / Math.PI)
+    const angleDeg = Math.atan2(gy, gx) * 180 / Math.PI
+    return { angleDeg, slopeDeg }
+  }, [])
+
+  // Escape cancels the active tool; Delete removes the selected annotation
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
         setMapTool('none')
-        setSelectedFlagId(null)
+        setSelectedItem(null)
         dragRef.current = null
         setDragPos(null)
       }
-      if (e.key === 'Delete' && selectedFlagIdRef.current) {
-        removeElevationFlag(selectedFlagIdRef.current)
-        setSelectedFlagId(null)
+      if (e.key === 'Delete' && selectedItemRef.current) {
+        const { type, id } = selectedItemRef.current
+        if (type === 'flag') removeElevationFlag(id)
+        else removeSlopeArrow(id)
+        setSelectedItem(null)
       }
     }
     document.addEventListener('keydown', handleKeyDown)
     return () => document.removeEventListener('keydown', handleKeyDown)
-  }, [setMapTool, removeElevationFlag])
+  }, [setMapTool, removeElevationFlag, removeSlopeArrow])
 
   // Document-level drag handlers so drag works even when cursor leaves the SVG
   useEffect(() => {
@@ -151,22 +181,31 @@ export function MapCanvas(): JSX.Element {
       if (!dragRef.current.moved && (Math.abs(dx) > 4 || Math.abs(dy) > 4)) {
         dragRef.current.moved = true
       }
-      if (dragRef.current.moved) {
-        const elev = computeElevationAt(pt.x, pt.y)
-        setDragPos({ x: pt.x, y: pt.y, elevation: elev ?? 0 })
+      if (!dragRef.current.moved) return
+      if (dragRef.current.type === 'flag') {
+        const elevation = computeElevationAt(pt.x, pt.y)
+        setDragPos({ x: pt.x, y: pt.y, elevation: elevation ?? 0 })
+      } else {
+        const slope = computeSlopeAt(pt.x, pt.y)
+        setDragPos({ x: pt.x, y: pt.y, angleDeg: slope?.angleDeg ?? 0, slopeDeg: slope?.slopeDeg ?? 0 })
       }
     }
     const onUp = (e: MouseEvent) => {
       if (!dragRef.current) return
-      const { flagId, moved } = dragRef.current
+      const { type, itemId, moved } = dragRef.current
       if (moved) {
         const pt = getSvgPoint(e.clientX, e.clientY)
         if (pt) {
-          const elev = computeElevationAt(pt.x, pt.y) ?? 0
-          updateElevationFlag(flagId, { x: pt.x, y: pt.y, elevation: elev })
+          if (type === 'flag') {
+            const elev = computeElevationAt(pt.x, pt.y) ?? 0
+            updateElevationFlag(itemId, { x: pt.x, y: pt.y, elevation: elev })
+          } else {
+            const slope = computeSlopeAt(pt.x, pt.y)
+            if (slope) updateSlopeArrow(itemId, { x: pt.x, y: pt.y, ...slope })
+          }
         }
       } else {
-        setSelectedFlagId(flagId)
+        setSelectedItem({ type, id: itemId })
       }
       dragRef.current = null
       setDragPos(null)
@@ -177,30 +216,34 @@ export function MapCanvas(): JSX.Element {
       document.removeEventListener('mousemove', onMove)
       document.removeEventListener('mouseup', onUp)
     }
-  }, [getSvgPoint, computeElevationAt, updateElevationFlag])
+  }, [getSvgPoint, computeElevationAt, computeSlopeAt, updateElevationFlag, updateSlopeArrow])
 
-  function handleFlagMouseDown(e: React.MouseEvent, flagId: string) {
+  function handleItemMouseDown(e: React.MouseEvent, type: 'flag' | 'slope-arrow', itemId: string) {
     e.stopPropagation()
     const pt = getSvgPoint(e.clientX, e.clientY)
     if (!pt) return
-    dragRef.current = { flagId, startX: pt.x, startY: pt.y, moved: false }
+    dragRef.current = { type, itemId, startX: pt.x, startY: pt.y, moved: false }
   }
 
-  // Fires only for background clicks — flags call stopPropagation on mousedown
+  // Fires only for background clicks — annotation elements call stopPropagation
   function handleSvgMouseDown(_e: React.MouseEvent<SVGSVGElement>) {
-    setSelectedFlagId(null)
+    setSelectedItem(null)
   }
 
-  // Fires for background mouseup — flag drag/select is handled by the document listener
+  // Fires for background mouseup — drag/select is handled by the document listener
   function handleSvgMouseUp(e: React.MouseEvent<SVGSVGElement>) {
     if (dragRef.current) return
+    const pt = getSvgPoint(e.clientX, e.clientY)
+    if (!pt) return
     if (mapTool === 'elevation-flag') {
-      const pt = getSvgPoint(e.clientX, e.clientY)
-      if (pt) {
-        const elev = computeElevationAt(pt.x, pt.y)
-        if (elev !== null) {
-          addElevationFlag({ id: crypto.randomUUID(), x: pt.x, y: pt.y, elevation: elev } as ElevationFlag)
-        }
+      const elev = computeElevationAt(pt.x, pt.y)
+      if (elev !== null) {
+        addElevationFlag({ id: crypto.randomUUID(), x: pt.x, y: pt.y, elevation: elev } as ElevationFlag)
+      }
+    } else if (mapTool === 'slope-arrow') {
+      const slope = computeSlopeAt(pt.x, pt.y)
+      if (slope) {
+        addSlopeArrow({ id: crypto.randomUUID(), x: pt.x, y: pt.y, ...slope } as SlopeArrow)
       }
     }
   }
@@ -218,7 +261,8 @@ export function MapCanvas(): JSX.Element {
     ? getLabelPoint(contourState.contourSet.seaLevelPath)
     : null
 
-  const flagSvgInteractive = mapTool === 'elevation-flag' || elevationFlags.length > 0
+  const toolActive = mapTool === 'elevation-flag' || mapTool === 'slope-arrow'
+  const flagSvgInteractive = toolActive || elevationFlags.length > 0 || slopeArrows.length > 0
 
   return (
     <div style={{ position: 'relative', width: '100%', flex: 1, overflow: 'auto' }}>
@@ -330,7 +374,7 @@ export function MapCanvas(): JSX.Element {
         </svg>
       )}
 
-      {/* Flag overlay — separate SVG so flags render at full opacity independent of style.opacity */}
+      {/* Annotation overlay — separate SVG at full opacity, handles all tool interaction */}
       {heightmap && (
         <svg
           ref={flagSvgRef}
@@ -342,13 +386,13 @@ export function MapCanvas(): JSX.Element {
             width: '100%',
             height: '100%',
             pointerEvents: flagSvgInteractive ? 'auto' : 'none',
-            cursor: mapTool === 'elevation-flag' ? 'crosshair' : 'default',
+            cursor: toolActive ? 'crosshair' : 'default',
           }}
           onMouseDown={handleSvgMouseDown}
           onMouseUp={handleSvgMouseUp}
         >
-          {/* Transparent background rect captures clicks for new-flag placement */}
-          {mapTool === 'elevation-flag' && (
+          {/* Transparent background rect captures clicks for placement */}
+          {toolActive && (
             <rect
               x={0} y={0}
               width={heightmap.width} height={heightmap.height}
@@ -356,22 +400,22 @@ export function MapCanvas(): JSX.Element {
             />
           )}
 
+          {/* Elevation flags */}
           {elevationFlags.map((flag) => {
-            const isDragging = dragPos !== null && dragRef.current?.flagId === flag.id
+            const isDragging = dragPos !== null && dragRef.current?.itemId === flag.id && dragRef.current.type === 'flag'
             const fx = isDragging ? dragPos!.x : flag.x
             const fy = isDragging ? dragPos!.y : flag.y
-            const displayElev = isDragging ? dragPos!.elevation : flag.elevation
-            const isSelected = selectedFlagId === flag.id
+            const displayElev = isDragging ? (dragPos!.elevation ?? flag.elevation) : flag.elevation
+            const isSelected = selectedItem?.type === 'flag' && selectedItem.id === flag.id
             const s = labelFontSize
             const flagColor = isSelected ? style.majorColor : style.labelColor
 
             return (
               <g
                 key={flag.id}
-                onMouseDown={(e) => handleFlagMouseDown(e, flag.id)}
+                onMouseDown={(e) => handleItemMouseDown(e, 'flag', flag.id)}
                 style={{ cursor: isSelected ? 'grab' : 'pointer' }}
               >
-                {/* Pole */}
                 <line
                   x1={fx} y1={fy}
                   x2={fx} y2={fy - s}
@@ -379,12 +423,10 @@ export function MapCanvas(): JSX.Element {
                   strokeWidth={isSelected ? 2 : 1.5}
                   vectorEffect="non-scaling-stroke"
                 />
-                {/* Pennant */}
                 <polygon
                   points={`${fx},${fy - s} ${fx + s * 0.5},${fy - s * 0.78} ${fx},${fy - s * 0.57}`}
                   fill={flagColor}
                 />
-                {/* Elevation label */}
                 <text
                   x={fx + s * 0.55}
                   y={fy - s * 0.65}
@@ -395,7 +437,82 @@ export function MapCanvas(): JSX.Element {
                   fill={style.labelColor}
                   dominantBaseline="middle"
                 >{displayElev}</text>
-                {/* Selection ring at pole base */}
+                {isSelected && (
+                  <circle
+                    cx={fx} cy={fy}
+                    r={s * 0.12}
+                    fill="none"
+                    stroke={style.majorColor}
+                    strokeWidth={2}
+                    vectorEffect="non-scaling-stroke"
+                  />
+                )}
+              </g>
+            )
+          })}
+
+          {/* Slope arrows */}
+          {slopeArrows.map((arrow) => {
+            const isDragging = dragPos !== null && dragRef.current?.itemId === arrow.id && dragRef.current.type === 'slope-arrow'
+            const fx = isDragging ? dragPos!.x : arrow.x
+            const fy = isDragging ? dragPos!.y : arrow.y
+            const displayAngle = isDragging ? (dragPos!.angleDeg ?? arrow.angleDeg) : arrow.angleDeg
+            const displaySlope = isDragging ? (dragPos!.slopeDeg ?? arrow.slopeDeg) : arrow.slopeDeg
+            const isSelected = selectedItem?.type === 'slope-arrow' && selectedItem.id === arrow.id
+            const s = labelFontSize
+            const arrowColor = isSelected ? style.majorColor : style.labelColor
+
+            // Compute arrow geometry in SVG coordinates
+            const angleRad = (displayAngle * Math.PI) / 180
+            const cos = Math.cos(angleRad)
+            const sin = Math.sin(angleRad)
+            const halfLen = s * 0.5
+            const headLen = s * 0.28
+            const headWid = s * 0.18
+            const tipX = fx + cos * halfLen
+            const tipY = fy + sin * halfLen
+            const tailX = fx - cos * halfLen
+            const tailY = fy - sin * halfLen
+            const headBaseX = tipX - cos * headLen
+            const headBaseY = tipY - sin * headLen
+            // Perpendicular direction for arrowhead width
+            const perpX = -sin
+            const perpY = cos
+            const arrowPoints = [
+              `${tipX},${tipY}`,
+              `${headBaseX + perpX * headWid},${headBaseY + perpY * headWid}`,
+              `${headBaseX - perpX * headWid},${headBaseY - perpY * headWid}`,
+            ].join(' ')
+
+            return (
+              <g
+                key={arrow.id}
+                onMouseDown={(e) => handleItemMouseDown(e, 'slope-arrow', arrow.id)}
+                style={{ cursor: isSelected ? 'grab' : 'pointer' }}
+              >
+                {/* Shaft */}
+                <line
+                  x1={tailX} y1={tailY}
+                  x2={headBaseX} y2={headBaseY}
+                  stroke={arrowColor}
+                  strokeWidth={isSelected ? 2 : 1.5}
+                  vectorEffect="non-scaling-stroke"
+                />
+                {/* Arrowhead */}
+                <polygon points={arrowPoints} fill={arrowColor} />
+                {/* Degree label — always horizontal, below the arrow center */}
+                <text
+                  x={fx}
+                  y={fy + s * 0.85}
+                  fontSize={labelFontSize}
+                  fontFamily={style.labelFont}
+                  fontWeight={style.labelBold ? 'bold' : 'normal'}
+                  fontStyle={style.labelItalic ? 'italic' : 'normal'}
+                  fill={style.labelColor}
+                  textAnchor="middle"
+                  dominantBaseline="middle"
+                >{displaySlope}°</text>
+                {/* Selection ring at center */}
                 {isSelected && (
                   <circle
                     cx={fx} cy={fy}

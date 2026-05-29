@@ -77,7 +77,15 @@ export interface ElevationFlag {
   elevation: number // real-world elevation at placement point
 }
 
-export type MapTool = 'none' | 'elevation-flag'
+export interface SlopeArrow {
+  id: string
+  x: number
+  y: number
+  angleDeg: number  // direction of steepest ascent in SVG coordinate space
+  slopeDeg: number  // slope angle from horizontal in degrees (label value)
+}
+
+export type MapTool = 'none' | 'elevation-flag' | 'slope-arrow'
 
 export interface ProjectState {
   terrainImagePath: string | null
@@ -98,6 +106,7 @@ export interface ProjectState {
   contoursVersion: number
   contoursGenerating: boolean
   elevationFlags: ElevationFlag[]
+  slopeArrows: SlopeArrow[]
   mapTool: MapTool
 }
 

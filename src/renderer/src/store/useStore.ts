@@ -2,7 +2,7 @@ import { create } from 'zustand'
 import type {
   ProjectState, ContourParameters, ContourStyle,
   HeightmapInfo, HillshadeParameters, ElevationCalibration,
-  ElevationFlag, MapTool,
+  ElevationFlag, SlopeArrow, MapTool,
 } from '../types'
 import { defaultParameters, defaultStyle, defaultHillshadeParameters, defaultElevationCalibration } from '../types'
 
@@ -53,6 +53,9 @@ interface AppActions {
   addElevationFlag: (flag: ElevationFlag) => void
   updateElevationFlag: (id: string, updates: Partial<Omit<ElevationFlag, 'id'>>) => void
   removeElevationFlag: (id: string) => void
+  addSlopeArrow: (arrow: SlopeArrow) => void
+  updateSlopeArrow: (id: string, updates: Partial<Omit<SlopeArrow, 'id'>>) => void
+  removeSlopeArrow: (id: string) => void
   setMapTool: (tool: MapTool) => void
   markClean: () => void
   reset: () => void
@@ -77,6 +80,7 @@ const initialState: ProjectState = {
   contoursVersion: 0,
   contoursGenerating: false,
   elevationFlags: [],
+  slopeArrows: [],
   mapTool: 'none',
 }
 
@@ -240,6 +244,21 @@ export const useStore = create<ProjectState & AppActions>((set, get) => ({
   removeElevationFlag: (id) =>
     set((state) => ({
       elevationFlags: state.elevationFlags.filter((f) => f.id !== id),
+      isDirty: true,
+    })),
+
+  addSlopeArrow: (arrow) =>
+    set((state) => ({ slopeArrows: [...state.slopeArrows, arrow], isDirty: true })),
+
+  updateSlopeArrow: (id, updates) =>
+    set((state) => ({
+      slopeArrows: state.slopeArrows.map((a) => a.id === id ? { ...a, ...updates } : a),
+      isDirty: true,
+    })),
+
+  removeSlopeArrow: (id) =>
+    set((state) => ({
+      slopeArrows: state.slopeArrows.filter((a) => a.id !== id),
       isDirty: true,
     })),
 
