@@ -29,11 +29,12 @@ export interface HeightmapInfo {
 }
 
 export interface HillshadeParameters {
-  azimuth: number     // degrees 0–360, clockwise from north (315 = northwest)
-  altitude: number    // degrees 0–90 above horizon
-  zFactor: number     // vertical exaggeration
-  intensity: number   // shadow depth multiplier; 1.0 = subtle, higher = more contrast
-  brightness: number  // base brightness offset; 0.5 = mid-grey, higher = brighter
+  azimuth: number              // degrees 0–360, clockwise from north (315 = northwest)
+  altitude: number             // degrees 0–90 above horizon
+  zFactor: number              // raw Z factor used when no ground resolution is set
+  verticalExaggeration: number // multiplier on top of computed correct Z Factor (1.0 = accurate)
+  intensity: number            // shadow depth multiplier; 1.0 = subtle, higher = more contrast
+  brightness: number           // base brightness offset; 0.5 = mid-grey, higher = brighter
 }
 
 export interface ElevationCalibration {
@@ -41,10 +42,12 @@ export interface ElevationCalibration {
   customName: string
   customAbbr: string
   customBase: 'feet' | 'meters'
-  customRatio: number    // 1 custom unit = N base units
-  realMin: number | null      // real-world elevation at normalized 0
-  realMax: number | null      // real-world elevation at normalized 1
-  realInterval: number | null // contour spacing in real-world units (integer)
+  customRatio: number              // 1 custom unit = N base units
+  realMin: number | null           // real-world elevation at normalized 0
+  realMax: number | null           // real-world elevation at normalized 1
+  realInterval: number | null      // contour spacing in real-world units (integer)
+  mapWidth: number | null          // total real-world width of the map in calibration units
+  preCustomUnit: 'feet' | 'meters' | null  // source unit before switching to custom; null once converted
 }
 
 export const defaultElevationCalibration: ElevationCalibration = {
@@ -56,6 +59,8 @@ export const defaultElevationCalibration: ElevationCalibration = {
   realMin: null,
   realMax: null,
   realInterval: null,
+  mapWidth: null,
+  preCustomUnit: null,
 }
 
 export interface ProjectState {
@@ -104,6 +109,7 @@ export const defaultHillshadeParameters: HillshadeParameters = {
   azimuth: 315,
   altitude: 45,
   zFactor: 150,
+  verticalExaggeration: 1.0,
   intensity: 3.0,
   brightness: 0.65,
 }

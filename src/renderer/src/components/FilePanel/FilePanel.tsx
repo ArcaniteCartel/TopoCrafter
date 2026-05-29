@@ -12,6 +12,14 @@ export function FilePanel(): JSX.Element {
     triggerHillshade, triggerContours,
   } = useStore()
 
+  const isRecalculating = hillshadeGenerating || contoursGenerating
+  const canRecalculate = (hillshadeDirty || contoursDirty) && !!heightmap
+
+  const handleRecalculate = () => {
+    if (hillshadeDirty) triggerHillshade()
+    if (contoursDirty) triggerContours()
+  }
+
   const [loadingTerrain, setLoadingTerrain] = useState(false)
   const [loadingHeightmap, setLoadingHeightmap] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -119,34 +127,16 @@ export function FilePanel(): JSX.Element {
         </Stack>
       </Paper>
 
-      {terrainIsHillshade && (
-        <Paper p="xs" withBorder>
-          <Stack gap={6}>
-            <Text size="xs" fw={500}>Hillshading</Text>
-            <Button
-              size="xs"
-              variant="light"
-              disabled={!hillshadeDirty || hillshadeGenerating}
-              loading={hillshadeGenerating}
-              onClick={triggerHillshade}
-            >
-              Rerun Hillshading
-            </Button>
-          </Stack>
-        </Paper>
-      )}
-
       <Paper p="xs" withBorder>
         <Stack gap={6}>
-          <Text size="xs" fw={500}>Contours</Text>
           <Button
             size="xs"
             variant="light"
-            disabled={!contoursDirty || !heightmap || contoursGenerating}
-            loading={contoursGenerating}
-            onClick={triggerContours}
+            disabled={!canRecalculate}
+            loading={isRecalculating}
+            onClick={handleRecalculate}
           >
-            Recalculate Contours
+            Recalculate Map
           </Button>
         </Stack>
       </Paper>

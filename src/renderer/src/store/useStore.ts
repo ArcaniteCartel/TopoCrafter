@@ -48,6 +48,7 @@ interface AppActions {
   setContoursGenerating: (val: boolean) => void
   triggerHillshade: () => void
   triggerContours: () => void
+  finalizeCustomConversion: () => void
   markClean: () => void
   reset: () => void
 }
@@ -118,30 +119,35 @@ export const useStore = create<ProjectState & AppActions>((set, get) => ({
   updateHillshadeParams: (params) =>
     set((state) => ({
       hillshadeParams: { ...state.hillshadeParams, ...params },
-      hillshadeDirty: true,
+      ...(state.terrainIsHillshade ? { hillshadeDirty: true } : {}),
     })),
 
   updateElevationCalibration: (cal) =>
-    set((state) => ({
-      elevationCalibration: { ...state.elevationCalibration, ...cal },
-      isDirty: true,
-      contoursDirty: true,
-    })),
+    set((state) => {
+      const affectsHillshade = 'realMin' in cal || 'realMax' in cal || 'mapWidth' in cal
+      return {
+        elevationCalibration: { ...state.elevationCalibration, ...cal },
+        isDirty: true,
+        contoursDirty: true,
+        ...(state.terrainIsHillshade && affectsHillshade ? { hillshadeDirty: true } : {}),
+      }
+    }),
 
   setElevationUnits: (newType, customData) => {
-    const { elevationCalibration: old } = get()
+    const { elevationCalibration: old, terrainIsHillshade } = get()
     const merged: ElevationCalibration = { ...old, ...customData, unitType: newType }
 
     let newRealMin = old.realMin
     let newRealMax = old.realMax
     let newRealInterval = old.realInterval
+    let newMapWidth = old.mapWidth
 
     if (newType === 'custom') {
-      // Custom unit definition isn't known yet at selection time — clear values
-      // so the user enters them fresh in their custom unit.
-      newRealMin = null
-      newRealMax = null
-      newRealInterval = null
+      // Keep existing values — they'll be converted once the user enters the ratio (onBlur).
+      // Record the source unit so finalizeCustomConversion knows how to convert.
+      merged.preCustomUnit = (old.unitType === 'feet' || old.unitType === 'meters')
+        ? old.unitType
+        : null
     } else if (old.unitType && old.unitType !== newType) {
       // Known-to-known conversion (feet ↔ meters, or custom → feet/meters)
       if (old.realMin !== null && old.realMax !== null) {
@@ -154,12 +160,20 @@ export const useStore = create<ProjectState & AppActions>((set, get) => ({
         const intervalM = calToMeters(old.realInterval, old)
         newRealInterval = Math.max(1, Math.round(calFromMeters(intervalM, merged)))
       }
+      if (old.mapWidth !== null) {
+        const widthM = calToMeters(old.mapWidth, old)
+        newMapWidth = round1(calFromMeters(widthM, merged))
+      }
     }
 
+    // When switching away from custom, clear the pending-conversion flag
+    const preCustomUnit = newType === 'custom' ? merged.preCustomUnit : null
+
     set({
-      elevationCalibration: { ...merged, realMin: newRealMin, realMax: newRealMax, realInterval: newRealInterval },
+      elevationCalibration: { ...merged, realMin: newRealMin, realMax: newRealMax, realInterval: newRealInterval, mapWidth: newMapWidth, preCustomUnit },
       isDirty: true,
       contoursDirty: true,
+      ...(terrainIsHillshade ? { hillshadeDirty: true } : {}),
     })
   },
 
@@ -181,6 +195,31 @@ export const useStore = create<ProjectState & AppActions>((set, get) => ({
       contoursDirty: false,
       contoursGenerating: true,
     })),
+
+  finalizeCustomConversion: () => {
+    const { elevationCalibration: cal, terrainIsHillshade } = get()
+    if (cal.unitType !== 'custom' || cal.preCustomUnit === null || cal.customRatio <= 0) return
+
+    const src: ElevationCalibration = { ...cal, unitType: cal.preCustomUnit }
+    const conv = (v: number | null): number | null =>
+      v !== null ? round1(calFromMeters(calToMeters(v, src), cal)) : null
+    const convInterval = (v: number | null): number | null =>
+      v !== null ? Math.max(1, Math.round(calFromMeters(calToMeters(v, src), cal))) : null
+
+    set({
+      elevationCalibration: {
+        ...cal,
+        realMin: conv(cal.realMin),
+        realMax: conv(cal.realMax),
+        mapWidth: conv(cal.mapWidth),
+        realInterval: convInterval(cal.realInterval),
+        preCustomUnit: null,
+      },
+      isDirty: true,
+      contoursDirty: true,
+      ...(terrainIsHillshade ? { hillshadeDirty: true } : {}),
+    })
+  },
 
   markClean: () => set({ isDirty: false }),
 

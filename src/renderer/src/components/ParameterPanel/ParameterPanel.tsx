@@ -35,12 +35,12 @@ const activeStyle = {
 
 export function ParameterPanel(): JSX.Element {
   const {
-    parameters, style, hillshadeParams, terrainIsHillshade, elevationCalibration,
+    parameters, style, hillshadeParams, terrainIsHillshade, elevationCalibration, heightmap,
     updateParameters, updateStyle, updateHillshadeParams,
-    updateElevationCalibration, setElevationUnits,
+    updateElevationCalibration, setElevationUnits, finalizeCustomConversion,
   } = useStore()
 
-  const { unitType, customName, customAbbr, customBase, customRatio, realMin, realMax, realInterval } = elevationCalibration
+  const { unitType, customName, customAbbr, customBase, customRatio, realMin, realMax, realInterval, mapWidth } = elevationCalibration
 
   const abbr = unitType === 'feet' ? 'ft'
     : unitType === 'meters' ? 'm'
@@ -50,6 +50,11 @@ export function ParameterPanel(): JSX.Element {
   const calReady = (unitType === 'feet' || unitType === 'meters'
     || (unitType === 'custom' && !!customAbbr && customRatio > 0))
     && realMin !== null && realMax !== null && realMax !== realMin
+
+  const correctZFactor = calReady && mapWidth && mapWidth > 0 && heightmap
+    ? Math.abs(realMax! - realMin!) / (mapWidth / heightmap.width)
+    : null
+  const hasGroundResolution = correctZFactor !== null
 
   // TextInput local state — avoids Mantine NumberInput controlled-mode quirks
   const [intervalStr, setIntervalStr] = useState<string>(
@@ -157,17 +162,41 @@ export function ParameterPanel(): JSX.Element {
             />
           </Stack>
 
-          <Stack gap={4}>
-            <Text size="xs" fw={500}>Vertical Exaggeration</Text>
-            <Slider
-              min={1}
-              max={2000}
-              step={1}
-              value={hillshadeParams.zFactor}
-              onChange={(v) => updateHillshadeParams({ zFactor: v })}
-              label={(v) => `${v}×`}
-            />
-          </Stack>
+          {hasGroundResolution ? (
+            <>
+              <Stack gap={4}>
+                <Text size="xs" fw={500}>Vertical Exaggeration</Text>
+                <Slider
+                  min={0.1}
+                  max={10}
+                  step={0.1}
+                  value={hillshadeParams.verticalExaggeration}
+                  onChange={(v) => updateHillshadeParams({ verticalExaggeration: v })}
+                  label={(v) => `${v.toFixed(1)}×`}
+                />
+              </Stack>
+              <NumberInput
+                label="Actual Z Factor"
+                description="Correct Z × Exaggeration"
+                size="xs"
+                value={Math.round(correctZFactor! * hillshadeParams.verticalExaggeration)}
+                disabled
+                styles={roStyle}
+              />
+            </>
+          ) : (
+            <Stack gap={4}>
+              <Text size="xs" fw={500}>Vertical Exaggeration</Text>
+              <Slider
+                min={1}
+                max={2000}
+                step={1}
+                value={hillshadeParams.zFactor}
+                onChange={(v) => updateHillshadeParams({ zFactor: v })}
+                label={(v) => `${v}×`}
+              />
+            </Stack>
+          )}
 
           <Stack gap={4}>
             <Text size="xs" fw={500}>Shadow Depth</Text>
@@ -209,7 +238,7 @@ export function ParameterPanel(): JSX.Element {
         value={unitType}
         onChange={(v) => v && setElevationUnits(v as 'feet' | 'meters' | 'custom')}
         clearable
-        onClear={() => updateElevationCalibration({ unitType: null, realMin: null, realMax: null, realInterval: null })}
+        onClear={() => updateElevationCalibration({ unitType: null, realMin: null, realMax: null, realInterval: null, mapWidth: null })}
       />
 
       {unitType === 'custom' && (
@@ -249,10 +278,24 @@ export function ParameterPanel(): JSX.Element {
               decimalScale={6}
               value={customRatio}
               onChange={(v) => typeof v === 'number' && updateElevationCalibration({ customRatio: v })}
+              onBlur={finalizeCustomConversion}
             />
           </Group>
         </Stack>
       )}
+
+      <NumberInput
+        label={`Width in ${abbr || '?'} of Map`}
+        size="xs"
+        decimalScale={1}
+        step={1}
+        min={0.000001}
+        disabled={!unitType}
+        value={mapWidth ?? ''}
+        onChange={(v) => updateElevationCalibration({ mapWidth: typeof v === 'number' ? v : null })}
+        placeholder={unitType ? 'e.g. 50' : '—'}
+        styles={!unitType ? roStyle : activeStyle}
+      />
 
       <Group grow>
         <NumberInput
