@@ -1,8 +1,8 @@
 # Elevation, Z Factor, and Ground Resolution in TopoCrafter
 
 This document explains how TopoCrafter represents terrain data internally, how the hillshade
-is computed, what the current controls actually mean geometrically, and how adding a ground
-resolution field would change the relationship between those controls.
+is computed, what the controls mean geometrically, and how the ground resolution field
+connects them into a unified, calibrated system.
 
 ---
 
@@ -37,16 +37,26 @@ is supplied by the calibration you enter manually.
 The calibration panel maps the normalized 0–1 range to real-world elevations:
 
 ```
-Real-world elevation = realMin + normalized_value × (realMax − realMin) / (maxValue − minValue)
+real_elevation = realMin + normalized_value × (realMax − realMin) / (maxValue − minValue)
 ```
 
-Or in plain language: you tell the app "the darkest pixel in the image represents sea level
+In plain language: you tell the app "the darkest pixel in the image represents sea level
 (0 ft) and the brightest pixel represents 4,921 ft." Everything in between is linearly
 interpolated.
 
-The contour interval is also stored in both normalized units and real-world units. The
-normalized interval is what d3-contour actually uses to draw lines; the real-world interval
-is what gets printed on the labels.
+The contour interval is stored in both normalized units and real-world units. The normalized
+interval is what d3-contour uses to draw lines; the real-world interval is what gets printed
+on the labels. They stay in sync via the formula:
+
+```
+normalized_interval = real_interval × normalized_span / real_span
+```
+
+The panel supports feet, meters, or any custom unit. Custom units are defined by a name,
+abbreviation, a base unit (feet or meters), and a ratio (how many base units equal one
+custom unit). When you switch between unit systems all calibration values — including the
+map width field described below — are converted automatically through meters as a universal
+intermediate.
 
 ---
 
@@ -77,7 +87,7 @@ nz = 1
 
 `nz` is always left at 1. Multiplying the horizontal gradient by `zFactor` is equivalent
 to asking: "if the terrain were `zFactor` times taller (while keeping the same horizontal
-extent), what angle would this slope have?" A larger zFactor makes shallow slopes appear
+extent), what angle would this slope have?" A larger Z Factor makes shallow slopes appear
 steeper. The normal vector `(nx, ny, nz)` is then length-normalised.
 
 ### Step 3 — Dot product with the light direction
@@ -106,138 +116,135 @@ down. `intensity` scales how much light and shadow contrast is applied.
 
 ---
 
-## 4. What Z Factor Actually Means Right Now
+## 4. The Geometrically Correct Z Factor
 
-Currently, **Z Factor has no connection to real-world units.** It is a raw multiplier on a
-number that is already dimensionless (normalized elevation units per pixel). The slider
-goes 1–2000 and the default is 150.
-
-To understand what 150 actually means, consider the chain:
+The Sobel gradient `dzdx` is in normalized elevation units per pixel — a dimensionless
+ratio with no connection to real-world units. For the shading to reflect the **true
+geometric angle** of the terrain, the Z Factor must make the units consistent:
 
 ```
-dzdx_normalized × zFactor → effective slope used for shading
+correct_zFactor = elevation_range_in_real_units / ground_resolution_in_same_units_per_pixel
 ```
 
-If a pixel has a real-world slope of 30° (rise = 1, run = 1.73), and your terrain covers
-10 km × 10 km at 1000 × 1000 pixels with a 1500 m elevation range, then:
+Where:
+- `elevation_range` = `realMax − realMin` (from the calibration panel)
+- `ground_resolution` = real-world distance per pixel = `map_width / image_width_in_pixels`
 
-- Ground resolution = 10 m/pixel
-- `dzdx_normalized` for a 30° slope ≈ `(1500 m / 65535) / (1 / 10 m/px)` ≈ a very small number
-- For the shading to show 45° (where nx = nz), you need `dzdx × zFactor = 1`
+**Example:** A 1000 × 1000 px image covering 10 km × 10 km with 1500 m of relief:
+- Ground resolution = 10,000 m / 1000 px = 10 m/px
+- Correct Z Factor = 1500 / 10 = **150**
 
-The "correct" Z Factor — the one that makes the shading reflect the actual geometric angle
-of the terrain — is:
-
-```
-Correct Z Factor = elevation_range_in_real_units / ground_resolution_in_same_units_per_pixel
-```
-
-For the example above: `1500 m / 10 m/px = 150`. That is where the default comes from.
-It is a reasonable guess for typical terrain data, but it is a guess.
+This is where the default of 150 comes from — it is a reasonable approximation for typical
+terrain data, but it is still a guess without knowing the actual map dimensions.
 
 If your terrain has 300 m of relief over a 5 km × 5 km area at 512 × 512 pixels:
 - Ground resolution = 9.77 m/pixel
-- Correct Z Factor = 300 / 9.77 ≈ 31
+- Correct Z Factor = 300 / 9.77 ≈ **31**
 
-Using 150 here would make the terrain look about 5× steeper than it really is.
-
----
-
-## 5. The Problem With the Current Setup
-
-There are two issues:
-
-**Issue 1: Z Factor is not intuitive.** A value of 150 is meaningless without knowing the
-terrain's real-world scale. Users have to experiment until it "looks right," without knowing
-whether they are looking at geographically accurate shading or an exaggerated one.
-
-**Issue 2: Vertical Exaggeration and Z Factor are the same slider, conflated.** In
-cartography, "vertical exaggeration" is traditionally a dimensionless ratio — 1× means
-accurate, 2× means the terrain looks twice as steep as reality, 0.5× means compressed.
-Right now the Z Factor slider conflates two things:
-- The geometric correction needed to account for the terrain's real-world scale (should be
-  computed automatically)
-- The intentional artistic exaggeration the user wants to apply on top of that (should be
-  a separate control)
+Leaving the slider at 150 here would shade the terrain at roughly 5× actual steepness.
 
 ---
 
-## 6. How Ground Resolution Would Change Things
+## 5. How Ground Resolution and Vertical Exaggeration Work in the App
 
-Adding a **Ground Resolution** field (real-world units per pixel, or equivalently the
-total real-world width of the map) would allow the app to compute the correct Z Factor
-automatically.
+When you enter a value in the **"Width in [unit] of Map"** field, the app can compute the
+correct Z Factor automatically. This unlocks a more meaningful control in the hillshade
+panel: a true **Vertical Exaggeration** multiplier.
 
-### What the user would enter
+### What you enter
 
-The most intuitive input is the **total map extent** — the real-world width (or height) of
-the area the heightmap covers, in the same unit system as the elevation calibration. The app
-would then derive:
+The **total real-world width** of the area the heightmap covers, in the same units as your
+elevation calibration (feet, meters, or custom). The app derives ground resolution
+internally:
 
 ```
-ground_resolution = map_extent / image_width_in_pixels
+ground_resolution = map_width / image_width_in_pixels
 ```
 
-Alternatively, the user could enter ground resolution directly (e.g., "10 m/pixel").
+The map width field converts automatically when you switch unit systems, exactly like the
+elevation min and max fields.
 
-### What the app would compute
+### What the app computes
 
 ```
 correct_zFactor = (realMax − realMin) / ground_resolution
+actual_zFactor  = correct_zFactor × vertical_exaggeration
 ```
 
-This is the Z Factor that makes the hillshade geometrically accurate — shading angles that
-match what you would measure on the real terrain.
+`actual_zFactor` is what gets passed to the hillshade algorithm. You never see or set it
+directly — it is derived from values you have already entered.
 
-### How the Vertical Exaggeration slider would change
+### The Vertical Exaggeration slider
 
-Instead of controlling the raw Z Factor (which has no intuitive meaning), the slider could
-control a **true vertical exaggeration multiplier** expressed as a ratio:
+Once the map width and calibration are both set, the raw Z Factor slider is replaced by a
+**Vertical Exaggeration** slider (range 0.1×–10×, default 1.0×). A read-only "Actual Z
+Factor" field shows the computed result so you can see exactly what the algorithm receives.
 
-```
-actual_zFactor = correct_zFactor × vertical_exaggeration
-```
-
-- **VE = 1.0** → geographically accurate hillshade
+- **VE = 1.0** → geographically accurate hillshade; shading angles match the real terrain
 - **VE = 2.0** → terrain looks twice as steep as reality (common in printed topo maps to
-  make relief more visible)
+  make relief more visible at small scales)
 - **VE = 0.5** → terrain appears flatter than reality
+- **VE > 1.0** → exaggerated; useful for subtle terrain where relief is hard to read
 
-The slider range 0.1×–10× covers the useful artistic range. The underlying Z Factor sent
-to the hillshade algorithm is `correct_zFactor × VE`, computed invisibly.
+### What happens without map width
 
-### What happens without ground resolution
+If you leave the map width field blank, the behaviour is identical to before: the raw Z
+Factor slider (range 1–2000) is shown and you adjust it manually. Map width is entirely
+optional.
 
-If the user has not entered ground resolution, the behaviour stays exactly as today —
-the raw Z Factor slider is shown and the user adjusts it manually. Ground resolution is
-entirely optional.
+### Summary
 
-### Summary of the proposed change
-
-| | Without Ground Resolution | With Ground Resolution |
+| | Map width not set | Map width set |
 |---|---|---|
-| Z Factor slider | Raw value, 1–2000 | Hidden; replaced by VE multiplier |
-| Vertical Exaggeration | Same as Z Factor | Separate 0.1×–10× multiplier |
-| Accuracy indicator | None | "Geometric Z Factor: 150" displayed read-only |
-| On-load default | 150 (hardcoded) | Auto-computed from calibration + resolution |
+| Z Factor slider | Raw value, 1–2000 | Hidden |
+| Vertical Exaggeration | Same as raw Z Factor | Separate 0.1×–10× multiplier |
+| Accuracy indicator | None | Read-only "Actual Z Factor: N" |
+| Correct Z computed? | No | Yes, from calibration + map width |
 
 ---
 
-## 7. Practical Example End to End
+## 6. Practical Example End to End
 
 Suppose you have a heightmap of a mountain range:
 - Image: 2048 × 2048 pixels, 16-bit PNG
-- `minValue` = 0.1200, `maxValue` = 0.9500 (the range used in the image)
-- Calibration: realMin = 1200 ft, realMax = 14,500 ft
-- Map extent: 80 miles wide
+- `minValue` = 0.1200, `maxValue` = 0.9500 (the range the image actually uses)
+- Calibration: realMin = 1,200 ft, realMax = 14,500 ft
+- Map width: 422,400 ft (80 miles)
 
 **Normalized elevation span:** `0.9500 − 0.1200 = 0.83`
-**Real elevation span:** `14,500 − 1200 = 13,300 ft`
-**Ground resolution:** `80 miles × 5280 ft/mile / 2048 px = 206 ft/px`
+**Real elevation span:** `14,500 − 1,200 = 13,300 ft`
+**Ground resolution:** `422,400 ft / 2048 px ≈ 206 ft/px`
 **Correct Z Factor:** `13,300 / 206 ≈ 65`
 
-With the current app, the default of 150 would shade this terrain at roughly 2.3× actual
-steepness, making the peaks look more dramatic than they are. With the proposed change, the
-app would compute Z Factor = 65 automatically, and the user could then slide the VE
-multiplier to 2.0 if they wanted the traditional "slightly exaggerated for readability" look
-of printed topographic maps, while knowing exactly what they are doing.
+With map width left blank and the default Z Factor of 150, this terrain would shade at
+roughly 2.3× actual steepness — peaks look more dramatic than they are. With map width
+entered, the app computes Z Factor = 65 automatically. Setting VE to 1.0 gives a
+geographically accurate hillshade; setting VE to 2.0 doubles the apparent steepness
+intentionally, giving the exaggerated-but-readable look common in printed topo maps.
+
+---
+
+## 7. Elevation Calibration and Custom Units
+
+All real-world values in the calibration panel — min elevation, max elevation, contour
+interval, and map width — are stored in the currently selected unit. When you switch
+between feet, meters, and custom, they are all converted automatically.
+
+Custom units require a name, abbreviation, base unit (feet or meters), and a ratio. The
+ratio defines how many base units equal one custom unit. For example:
+
+- 1 league = 15,840 feet → base = feet, ratio = 15,840
+- 1 kilometer = 1,000 meters → base = meters, ratio = 1,000
+
+**When you switch to custom from feet or meters**, the existing values are kept in their
+current unit rather than cleared. Once you enter a valid ratio and tab out of the field,
+all four values are converted from the source unit into the custom unit. Before you enter
+the ratio, the fields show the original values for reference.
+
+All conversions go through meters as a universal intermediate:
+```
+value_in_custom = calFromMeters(calToMeters(value_in_source, source_unit), custom_unit)
+```
+
+This means the math is correct regardless of whether you are converting feet → custom,
+meters → custom, or any other combination.
