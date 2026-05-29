@@ -17,6 +17,26 @@ const UNIT_OPTIONS = [
   { value: 'custom', label: 'Custom…' },
 ]
 
+// Non-linear shadow depth stops: fine control at low end, coarser at high end
+// 0–1: step 0.1 (10 intervals), 1–5: step 0.25 (4 per unit), 5–10: step 0.5 (2 per unit)
+const INTENSITY_STOPS: number[] = [
+  ...Array.from({ length: 11 }, (_, i) => parseFloat((i * 0.1).toFixed(1))),   // 0.0–1.0
+  ...Array.from({ length: 4  }, (_, i) => parseFloat((1.25 + i * 0.25).toFixed(2))), // 1.25–2.0
+  ...Array.from({ length: 4  }, (_, i) => parseFloat((2.25 + i * 0.25).toFixed(2))), // 2.25–3.0
+  ...Array.from({ length: 4  }, (_, i) => parseFloat((3.25 + i * 0.25).toFixed(2))), // 3.25–4.0
+  ...Array.from({ length: 4  }, (_, i) => parseFloat((4.25 + i * 0.25).toFixed(2))), // 4.25–5.0
+  ...Array.from({ length: 10 }, (_, i) => parseFloat((5.5  + i * 0.5 ).toFixed(1))), // 5.5–10.0
+]
+
+function intensityToIndex(v: number): number {
+  return INTENSITY_STOPS.reduce((best, val, i) =>
+    Math.abs(val - v) < Math.abs(INTENSITY_STOPS[best] - v) ? i : best, 0)
+}
+
+function formatIntensity(v: number): string {
+  return `${v % 1 === 0 ? v.toFixed(0) : v.toFixed(v < 1 ? 1 : 2)}×`
+}
+
 // Subtle dashed style for read-only informational fields
 const roStyle = {
   input: {
@@ -201,12 +221,12 @@ export function ParameterPanel(): JSX.Element {
           <Stack gap={4}>
             <Text size="xs" fw={500}>Shadow Depth</Text>
             <Slider
-              min={0.5}
-              max={10}
-              step={0.5}
-              value={hillshadeParams.intensity}
-              onChange={(v) => updateHillshadeParams({ intensity: v })}
-              label={(v) => `${v.toFixed(1)}×`}
+              min={0}
+              max={INTENSITY_STOPS.length - 1}
+              step={1}
+              value={intensityToIndex(hillshadeParams.intensity)}
+              onChange={(i) => updateHillshadeParams({ intensity: INTENSITY_STOPS[i] })}
+              label={(i) => formatIntensity(INTENSITY_STOPS[i])}
             />
           </Stack>
 
