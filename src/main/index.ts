@@ -1,6 +1,7 @@
 import { app, BrowserWindow, ipcMain, dialog, Menu } from 'electron'
 import { join } from 'path'
 import { readFile, writeFile } from 'fs/promises'
+import sharp from 'sharp'
 
 function createWindow(): void {
   const mainWindow = new BrowserWindow({
@@ -54,4 +55,18 @@ ipcMain.handle('dialog:saveFile', async (_event, filters: Electron.FileFilter[])
 
 ipcMain.handle('fs:writeFile', async (_event, filePath: string, data: Uint8Array) => {
   await writeFile(filePath, Buffer.from(data))
+})
+
+ipcMain.handle('heightmap:decodeExr', async (_event, filePath: string) => {
+  const meta = await sharp(filePath).metadata()
+  const { data, info } = await sharp(filePath)
+    .grayscale()
+    .raw()
+    .toBuffer({ resolveWithObject: true })
+  return {
+    width: info.width,
+    height: info.height,
+    depth: meta.depth ?? 'uchar',
+    data,
+  }
 })

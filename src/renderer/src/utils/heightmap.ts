@@ -138,9 +138,40 @@ async function parseHeightmapTiff(buffer: Uint8Array): Promise<HeightmapInfo> {
   return { width, height, data: pixels, minValue: min, maxValue: max }
 }
 
+// EXR is decoded in the main process via sharp (libvips), which handles all EXR
+// compression codecs and float/half-float pixel types. Raw bytes arrive over IPC
+// and are reinterpreted here at the correct bit depth before normalization.
+async function parseHeightmapExr(filePath: string): Promise<HeightmapInfo> {
+  const { width, height, depth, data } = await window.electronAPI.decodeExr(filePath)
+  const count = width * height
+
+  // Copy to a fresh, naturally-aligned ArrayBuffer so typed array views work correctly
+  const buf = new ArrayBuffer(data.byteLength)
+  new Uint8Array(buf).set(data)
+
+  let rawValues: ArrayLike<number>
+  if (depth === 'float')       rawValues = new Float32Array(buf)
+  else if (depth === 'double') rawValues = new Float64Array(buf)
+  else if (depth === 'ushort') rawValues = new Uint16Array(buf)
+  else                         rawValues = new Uint8Array(buf)
+
+  let min = Infinity, max = -Infinity
+  for (let i = 0; i < count; i++) {
+    if (rawValues[i] < min) min = rawValues[i]
+    if (rawValues[i] > max) max = rawValues[i]
+  }
+
+  const range = max - min || 1
+  const pixels = new Float32Array(count)
+  for (let i = 0; i < count; i++) pixels[i] = (rawValues[i] - min) / range
+
+  return { width, height, data: pixels, minValue: 0, maxValue: 1 }
+}
+
 export async function loadHeightmapFromPath(filePath: string): Promise<HeightmapInfo> {
-  const buffer = await window.electronAPI.readFile(filePath)
   const ext = extOf(filePath)
+  if (ext === 'exr') return parseHeightmapExr(filePath)
+  const buffer = await window.electronAPI.readFile(filePath)
   if (ext === 'png') return parseHeightmapPng(buffer)
   if (ext === 'tif' || ext === 'tiff') return parseHeightmapTiff(buffer)
   return parseHeightmapCanvas(buffer, filePath)

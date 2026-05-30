@@ -161,6 +161,7 @@ declare global {
       readFile: (filePath: string) => Promise<Uint8Array>
       saveFile: (filters?: Array<{ name: string; extensions: string[] }>) => Promise<string | null>
       writeFile: (filePath: string, data: Uint8Array) => Promise<void>
+      decodeExr: (filePath: string) => Promise<{ width: number; height: number; depth: string; data: Uint8Array }>
     }
   }
 }

@@ -22,6 +22,7 @@
     "geotiff": "^3.0.5",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
+    "sharp": "^0.34.5",
     "zustand": "^4.5.2"
   },
   "devDependencies": {
@@ -48,6 +49,10 @@
     ],
     "win": {
       "target": "nsis"
+    },
+    "nsis": {
+      "oneClick": true,
+      "include": "build/installer.nsh"
     }
   }
 }

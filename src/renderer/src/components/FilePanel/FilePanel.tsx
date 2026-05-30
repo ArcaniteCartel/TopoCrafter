@@ -45,7 +45,7 @@ export function FilePanel(): JSX.Element {
 
   const handleLoadHeightmap = async () => {
     const path = await window.electronAPI.openFile([
-      { name: 'Images', extensions: ['png', 'jpg', 'jpeg', 'tiff', 'tif'] },
+      { name: 'Images', extensions: ['png', 'tiff', 'tif', 'exr'] },
     ])
     if (!path) return
     setLoadingHeightmap(true)
