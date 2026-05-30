@@ -6,14 +6,12 @@ const DEBOUNCE_MS = 300
 
 export function useHillshade(): void {
   const heightmap = useStore((s) => s.heightmap)
-  const terrainIsHillshade = useStore((s) => s.terrainIsHillshade)
   const hillshadeVersion = useStore((s) => s.hillshadeVersion)
   const hillshadeParams = useStore((s) => s.hillshadeParams)
   const elevationCalibration = useStore((s) => s.elevationCalibration)
   const setTerrainHillshade = useStore((s) => s.setTerrainHillshade)
   const setHillshadeGenerating = useStore((s) => s.setHillshadeGenerating)
 
-  // Always-current refs so the async callback reads the latest values, not stale closure values
   const hillshadeParamsRef = useRef(hillshadeParams)
   hillshadeParamsRef.current = hillshadeParams
   const elevationCalibrationRef = useRef(elevationCalibration)
@@ -22,7 +20,7 @@ export function useHillshade(): void {
   const prevUrlRef = useRef<string | null>(null)
 
   useEffect(() => {
-    if (!heightmap || !terrainIsHillshade) {
+    if (!heightmap) {
       setHillshadeGenerating(false)
       return
     }
@@ -34,8 +32,6 @@ export function useHillshade(): void {
       const params = hillshadeParamsRef.current
       const cal = elevationCalibrationRef.current
 
-      // If ground resolution is available, compute the geometrically correct Z Factor
-      // and scale it by the vertical exaggeration multiplier. Otherwise use the raw zFactor.
       let effectiveZFactor = params.zFactor
       if (cal.mapWidth && cal.mapWidth > 0 && cal.realMin !== null && cal.realMax !== null) {
         const elevRange = Math.abs(cal.realMax - cal.realMin)
@@ -64,5 +60,5 @@ export function useHillshade(): void {
       cancelled = true
       clearTimeout(timer)
     }
-  }, [hillshadeVersion, terrainIsHillshade, heightmap])
+  }, [hillshadeVersion, heightmap])
 }

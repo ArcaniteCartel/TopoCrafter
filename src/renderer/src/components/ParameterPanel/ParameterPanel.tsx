@@ -61,7 +61,7 @@ const activeStyle = {
 
 export function ParameterPanel(): JSX.Element {
   const {
-    parameters, style, hillshadeParams, terrainIsHillshade, elevationCalibration, heightmap,
+    parameters, style, hillshadeParams, elevationCalibration, heightmap,
     updateParameters, updateStyle, updateHillshadeParams,
     updateElevationCalibration, setElevationUnits, finalizeCustomConversion,
   } = useStore()
@@ -163,7 +163,7 @@ export function ParameterPanel(): JSX.Element {
   return (
     <Stack gap="md">
 
-      {terrainIsHillshade && (
+      {!!heightmap && (
         <>
           <Text fw={600} size="sm" c="dimmed" tt="uppercase" style={{ letterSpacing: 1 }}>
             Hillshade

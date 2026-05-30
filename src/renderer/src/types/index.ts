@@ -91,7 +91,8 @@ export interface ProjectState {
   terrainImagePath: string | null
   heightmapPath: string | null
   terrainImageUrl: string | null
-  terrainIsHillshade: boolean
+  hillshadeImageUrl: string | null
+  activeTab: 'terrain' | 'hillshade'
   hillshadeGenerating: boolean
   fileLoadingMessage: string | null
   heightmap: HeightmapInfo | null
@@ -108,6 +109,10 @@ export interface ProjectState {
   elevationFlags: ElevationFlag[]
   slopeArrows: SlopeArrow[]
   mapTool: MapTool
+  snapshotParams: ContourParameters | null
+  snapshotStyle: ContourStyle | null
+  snapshotHillshadeParams: HillshadeParameters | null
+  snapshotElevationCalibration: ElevationCalibration | null
 }
 
 export const defaultParameters: ContourParameters = {

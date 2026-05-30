@@ -34,6 +34,8 @@ type DragPos = { x: number; y: number; elevation?: number; angleDeg?: number; sl
 
 export function MapCanvas(): JSX.Element {
   const terrainImageUrl = useStore((s) => s.terrainImageUrl)
+  const hillshadeImageUrl = useStore((s) => s.hillshadeImageUrl)
+  const activeTab = useStore((s) => s.activeTab)
   const heightmap = useStore((s) => s.heightmap)
   const parameters = useStore((s) => s.parameters)
   const style = useStore((s) => s.style)
@@ -248,7 +250,8 @@ export function MapCanvas(): JSX.Element {
     }
   }
 
-  const showPlaceholder = !terrainImageUrl && !heightmap && !hillshadeGenerating && !fileLoadingMessage
+  const baseImageUrl = activeTab === 'terrain' ? terrainImageUrl : hillshadeImageUrl
+  const showPlaceholder = !baseImageUrl && !heightmap && !hillshadeGenerating && !fileLoadingMessage
 
   const showLabels = style.showLabels
     && contourState !== null
@@ -272,16 +275,17 @@ export function MapCanvas(): JSX.Element {
         </Center>
       )}
 
-      {terrainImageUrl && (
+      {baseImageUrl && (
         <img
-          src={terrainImageUrl}
-          alt="Terrain"
+          src={baseImageUrl}
+          alt={activeTab === 'terrain' ? 'Terrain' : 'Hillshade'}
           style={{ display: 'block', maxWidth: '100%' }}
         />
       )}
 
       {contourState && heightmap && !hillshadeGenerating && (
         <svg
+          id="contour-svg"
           viewBox={`0 0 ${heightmap.width} ${heightmap.height}`}
           style={{
             position: 'absolute',
@@ -377,6 +381,7 @@ export function MapCanvas(): JSX.Element {
       {/* Annotation overlay — separate SVG at full opacity, handles all tool interaction */}
       {heightmap && (
         <svg
+          id="annotation-svg"
           ref={flagSvgRef}
           viewBox={`0 0 ${heightmap.width} ${heightmap.height}`}
           style={{

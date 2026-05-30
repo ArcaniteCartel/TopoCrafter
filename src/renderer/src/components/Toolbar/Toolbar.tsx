@@ -7,6 +7,7 @@ import {
 import { useStore } from '../../store/useStore'
 import { useThemeStore } from '../../store/useThemeStore'
 import { THEMES } from '../../themes'
+import { exportToBlob } from '../../utils/export'
 
 function CrosshairIcon(): JSX.Element {
   return (
@@ -40,7 +41,11 @@ function ArrowIcon(): JSX.Element {
 }
 
 export function Toolbar(): JSX.Element {
-  const isDirty = useStore((s) => s.isDirty)
+  const heightmap = useStore((s) => s.heightmap)
+  const terrainImageUrl = useStore((s) => s.terrainImageUrl)
+  const hillshadeImageUrl = useStore((s) => s.hillshadeImageUrl)
+  const activeTab = useStore((s) => s.activeTab)
+  const style = useStore((s) => s.style)
   const reset = useStore((s) => s.reset)
   const mapTool = useStore((s) => s.mapTool)
   const setMapTool = useStore((s) => s.setMapTool)
@@ -48,6 +53,7 @@ export function Toolbar(): JSX.Element {
   const { themeId, setTheme } = useThemeStore()
   const [themeModalOpen, setThemeModalOpen] = useState(false)
   const [toolPanelOpen, setToolPanelOpen] = useState(false)
+  const [exportError, setExportError] = useState<string | null>(null)
 
   const { unitType, customAbbr, customRatio, realMin, realMax, mapWidth } = elevationCalibration
   const calReady = (unitType === 'feet' || unitType === 'meters'
@@ -55,8 +61,40 @@ export function Toolbar(): JSX.Element {
     && realMin !== null && realMax !== null && realMax !== realMin
   const hasGroundResolution = calReady && mapWidth !== null && mapWidth > 0
 
-  const handleExport = async () => {
-    // TODO: implement canvas composite export
+  const canExport = !!heightmap
+  const baseImageUrl = activeTab === 'terrain' ? terrainImageUrl : hillshadeImageUrl
+
+  const handleExport = async (type: 'merged-terrain' | 'merged-hillshade' | 'overlay-layer' | 'unmarked-hillshade' | 'visible-map') => {
+    setExportError(null)
+    try {
+      let blob: Blob
+      switch (type) {
+        case 'merged-terrain':
+          blob = await exportToBlob({ baseImageUrl: terrainImageUrl, includeContours: true, includeAnnotations: true, contourOpacity: 1 })
+          break
+        case 'merged-hillshade':
+          blob = await exportToBlob({ baseImageUrl: hillshadeImageUrl, includeContours: true, includeAnnotations: true, contourOpacity: 1 })
+          break
+        case 'overlay-layer':
+          blob = await exportToBlob({ baseImageUrl: null, includeContours: true, includeAnnotations: true, contourOpacity: 1 })
+          break
+        case 'unmarked-hillshade':
+          blob = await exportToBlob({ baseImageUrl: hillshadeImageUrl, includeContours: false, includeAnnotations: false, contourOpacity: 1 })
+          break
+        case 'visible-map':
+          blob = await exportToBlob({ baseImageUrl, includeContours: true, includeAnnotations: true, contourOpacity: style.opacity })
+          break
+        default:
+          return
+      }
+
+      const savePath = await window.electronAPI.saveFile([{ name: 'PNG Image', extensions: ['png'] }])
+      if (!savePath) return
+      const buf = await blob.arrayBuffer()
+      await window.electronAPI.writeFile(savePath, new Uint8Array(buf))
+    } catch (err) {
+      setExportError(err instanceof Error ? err.message : String(err))
+    }
   }
 
   return (
@@ -128,9 +166,50 @@ export function Toolbar(): JSX.Element {
         </Group>
 
         <Group>
-          <Button size="xs" variant="light" onClick={handleExport} disabled={!isDirty}>
-            Export Merged Image
-          </Button>
+          <Menu shadow="md" width={220} disabled={!canExport}>
+            <Menu.Target>
+              <Button size="xs" variant="light" disabled={!canExport}>
+                Export
+              </Button>
+            </Menu.Target>
+            <Menu.Dropdown>
+              <Menu.Item
+                disabled={!terrainImageUrl}
+                onClick={() => handleExport('merged-terrain')}
+              >
+                Export merged Terrain image
+              </Menu.Item>
+              <Menu.Item
+                disabled={!hillshadeImageUrl}
+                onClick={() => handleExport('merged-hillshade')}
+              >
+                Export merged Hillshade image
+              </Menu.Item>
+              <Menu.Item
+                disabled={!heightmap}
+                onClick={() => handleExport('overlay-layer')}
+              >
+                Export overlay layer image
+              </Menu.Item>
+              <Menu.Item
+                disabled={!hillshadeImageUrl}
+                onClick={() => handleExport('unmarked-hillshade')}
+              >
+                Export unmarked Hillshade
+              </Menu.Item>
+              <Menu.Item
+                disabled={!baseImageUrl}
+                onClick={() => handleExport('visible-map')}
+              >
+                Export visible map
+              </Menu.Item>
+            </Menu.Dropdown>
+          </Menu>
+          {exportError && (
+            <Text size="xs" c="red" style={{ maxWidth: 200 }} lineClamp={1} title={exportError}>
+              {exportError}
+            </Text>
+          )}
           <Button size="xs" variant="subtle" color="red" onClick={reset}>
             Reset
           </Button>

@@ -35,7 +35,6 @@ function round1(n: number): number {
 interface AppActions {
   setTerrainImage: (path: string, url: string) => void
   setTerrainHillshade: (url: string) => void
-  setTerrainIsHillshade: (val: boolean) => void
   setHillshadeGenerating: (val: boolean) => void
   setFileLoading: (message: string | null) => void
   setHeightmap: (path: string, info: HeightmapInfo) => void
@@ -57,6 +56,8 @@ interface AppActions {
   updateSlopeArrow: (id: string, updates: Partial<Omit<SlopeArrow, 'id'>>) => void
   removeSlopeArrow: (id: string) => void
   setMapTool: (tool: MapTool) => void
+  setActiveTab: (tab: 'terrain' | 'hillshade') => void
+  clearPendingChanges: () => void
   markClean: () => void
   reset: () => void
 }
@@ -65,7 +66,8 @@ const initialState: ProjectState = {
   terrainImagePath: null,
   heightmapPath: null,
   terrainImageUrl: null,
-  terrainIsHillshade: false,
+  hillshadeImageUrl: null,
+  activeTab: 'hillshade',
   hillshadeGenerating: false,
   fileLoadingMessage: null,
   heightmap: null,
@@ -82,23 +84,20 @@ const initialState: ProjectState = {
   elevationFlags: [],
   slopeArrows: [],
   mapTool: 'none',
+  snapshotParams: null,
+  snapshotStyle: null,
+  snapshotHillshadeParams: null,
+  snapshotElevationCalibration: null,
 }
 
 export const useStore = create<ProjectState & AppActions>((set, get) => ({
   ...initialState,
 
   setTerrainImage: (path, url) =>
-    set({ terrainImagePath: path, terrainImageUrl: url, terrainIsHillshade: false, hillshadeGenerating: false, isDirty: true }),
+    set({ terrainImagePath: path, terrainImageUrl: url, isDirty: true, activeTab: 'terrain' }),
 
   setTerrainHillshade: (url) =>
-    set({ terrainImageUrl: url, terrainIsHillshade: true, hillshadeGenerating: false, isDirty: true }),
-
-  setTerrainIsHillshade: (val) =>
-    set((state) => ({
-      terrainIsHillshade: val,
-      hillshadeGenerating: val,
-      ...(val ? { hillshadeVersion: state.hillshadeVersion + 1 } : {}),
-    })),
+    set({ hillshadeImageUrl: url, hillshadeGenerating: false, isDirty: true }),
 
   setHillshadeGenerating: (val) =>
     set({ hillshadeGenerating: val }),
@@ -112,6 +111,14 @@ export const useStore = create<ProjectState & AppActions>((set, get) => ({
       heightmap: info,
       isDirty: true,
       contoursVersion: state.contoursVersion + 1,
+      hillshadeVersion: state.hillshadeVersion + 1,
+      hillshadeDirty: false,
+      contoursDirty: false,
+      activeTab: state.terrainImageUrl ? state.activeTab : 'hillshade',
+      snapshotParams: state.parameters,
+      snapshotStyle: state.style,
+      snapshotHillshadeParams: state.hillshadeParams,
+      snapshotElevationCalibration: state.elevationCalibration,
     })),
 
   updateParameters: (params) =>
@@ -130,7 +137,7 @@ export const useStore = create<ProjectState & AppActions>((set, get) => ({
   updateHillshadeParams: (params) =>
     set((state) => ({
       hillshadeParams: { ...state.hillshadeParams, ...params },
-      ...(state.terrainIsHillshade ? { hillshadeDirty: true } : {}),
+      ...(state.heightmap ? { hillshadeDirty: true } : {}),
     })),
 
   updateElevationCalibration: (cal) =>
@@ -140,12 +147,12 @@ export const useStore = create<ProjectState & AppActions>((set, get) => ({
         elevationCalibration: { ...state.elevationCalibration, ...cal },
         isDirty: true,
         contoursDirty: true,
-        ...(state.terrainIsHillshade && affectsHillshade ? { hillshadeDirty: true } : {}),
+        ...(state.heightmap && affectsHillshade ? { hillshadeDirty: true } : {}),
       }
     }),
 
   setElevationUnits: (newType, customData) => {
-    const { elevationCalibration: old, terrainIsHillshade } = get()
+    const { elevationCalibration: old, heightmap } = get()
     const merged: ElevationCalibration = { ...old, ...customData, unitType: newType }
 
     let newRealMin = old.realMin
@@ -154,13 +161,10 @@ export const useStore = create<ProjectState & AppActions>((set, get) => ({
     let newMapWidth = old.mapWidth
 
     if (newType === 'custom') {
-      // Keep existing values — they'll be converted once the user enters the ratio (onBlur).
-      // Record the source unit so finalizeCustomConversion knows how to convert.
       merged.preCustomUnit = (old.unitType === 'feet' || old.unitType === 'meters')
         ? old.unitType
         : null
     } else if (old.unitType && old.unitType !== newType) {
-      // Known-to-known conversion (feet ↔ meters, or custom → feet/meters)
       if (old.realMin !== null && old.realMax !== null) {
         const minM = calToMeters(old.realMin, old)
         const maxM = calToMeters(old.realMax, old)
@@ -177,14 +181,13 @@ export const useStore = create<ProjectState & AppActions>((set, get) => ({
       }
     }
 
-    // When switching away from custom, clear the pending-conversion flag
     const preCustomUnit = newType === 'custom' ? merged.preCustomUnit : null
 
     set({
       elevationCalibration: { ...merged, realMin: newRealMin, realMax: newRealMax, realInterval: newRealInterval, mapWidth: newMapWidth, preCustomUnit },
       isDirty: true,
       contoursDirty: true,
-      ...(terrainIsHillshade ? { hillshadeDirty: true } : {}),
+      ...(heightmap ? { hillshadeDirty: true } : {}),
     })
   },
 
@@ -198,6 +201,10 @@ export const useStore = create<ProjectState & AppActions>((set, get) => ({
     set((state) => ({
       hillshadeVersion: state.hillshadeVersion + 1,
       hillshadeDirty: false,
+      snapshotParams: state.parameters,
+      snapshotStyle: state.style,
+      snapshotHillshadeParams: state.hillshadeParams,
+      snapshotElevationCalibration: state.elevationCalibration,
     })),
 
   triggerContours: () =>
@@ -205,10 +212,14 @@ export const useStore = create<ProjectState & AppActions>((set, get) => ({
       contoursVersion: state.contoursVersion + 1,
       contoursDirty: false,
       contoursGenerating: true,
+      snapshotParams: state.parameters,
+      snapshotStyle: state.style,
+      snapshotHillshadeParams: state.hillshadeParams,
+      snapshotElevationCalibration: state.elevationCalibration,
     })),
 
   finalizeCustomConversion: () => {
-    const { elevationCalibration: cal, terrainIsHillshade } = get()
+    const { elevationCalibration: cal, heightmap } = get()
     if (cal.unitType !== 'custom' || cal.preCustomUnit === null || cal.customRatio <= 0) return
 
     const src: ElevationCalibration = { ...cal, unitType: cal.preCustomUnit }
@@ -228,7 +239,7 @@ export const useStore = create<ProjectState & AppActions>((set, get) => ({
       },
       isDirty: true,
       contoursDirty: true,
-      ...(terrainIsHillshade ? { hillshadeDirty: true } : {}),
+      ...(heightmap ? { hillshadeDirty: true } : {}),
     })
   },
 
@@ -263,6 +274,18 @@ export const useStore = create<ProjectState & AppActions>((set, get) => ({
     })),
 
   setMapTool: (tool) => set({ mapTool: tool }),
+
+  setActiveTab: (tab) => set({ activeTab: tab }),
+
+  clearPendingChanges: () =>
+    set((state) => ({
+      parameters: state.snapshotParams ?? state.parameters,
+      style: state.snapshotStyle ?? state.style,
+      hillshadeParams: state.snapshotHillshadeParams ?? state.hillshadeParams,
+      elevationCalibration: state.snapshotElevationCalibration ?? state.elevationCalibration,
+      hillshadeDirty: false,
+      contoursDirty: false,
+    })),
 
   markClean: () => set({ isDirty: false }),
 

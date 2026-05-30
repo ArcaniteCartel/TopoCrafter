@@ -5,15 +5,15 @@ import { loadHeightmapFromPath, loadTerrainImageUrl } from '../../utils/heightma
 
 export function FilePanel(): JSX.Element {
   const {
-    terrainImagePath, heightmapPath, terrainIsHillshade, heightmap,
+    terrainImagePath, heightmapPath, heightmap,
     hillshadeGenerating, hillshadeDirty, contoursDirty, contoursGenerating,
-    setTerrainImage, setHeightmap, setTerrainIsHillshade, updateParameters,
-    setFileLoading, setHillshadeDirty, setContoursDirty,
-    triggerHillshade, triggerContours,
+    setTerrainImage, setHeightmap, updateParameters,
+    setFileLoading, triggerHillshade, triggerContours, clearPendingChanges,
   } = useStore()
 
   const isRecalculating = hillshadeGenerating || contoursGenerating
   const canRecalculate = (hillshadeDirty || contoursDirty) && !!heightmap
+  const hasPendingChanges = (hillshadeDirty || contoursDirty) && !!heightmap
 
   const handleRecalculate = () => {
     if (hillshadeDirty) triggerHillshade()
@@ -61,12 +61,6 @@ export function FilePanel(): JSX.Element {
         maxElevation: parseFloat(info.maxValue.toFixed(4)),
         interval,
       })
-      if (!terrainImagePath || terrainIsHillshade) {
-        setTerrainIsHillshade(true)
-      }
-      // Clear dirty flags — both operations were just auto-triggered by the load
-      setHillshadeDirty(false)
-      setContoursDirty(false)
     } catch (err) {
       setError(`Could not load heightmap: ${err instanceof Error ? err.message : String(err)}`)
     } finally {
@@ -74,8 +68,6 @@ export function FilePanel(): JSX.Element {
       setFileLoading(null)
     }
   }
-
-  const terrainLoaded = !!terrainImagePath || terrainIsHillshade
 
   return (
     <Stack gap="xs" mb="md">
@@ -110,19 +102,15 @@ export function FilePanel(): JSX.Element {
         <Stack gap={6}>
           <Group justify="space-between">
             <Text size="xs" fw={500}>Terrain Image</Text>
-            {terrainIsHillshade && <Badge size="xs" color="violet">Hillshade</Badge>}
-            {terrainImagePath && !terrainIsHillshade && <Badge size="xs" color="teal">Loaded</Badge>}
+            {terrainImagePath && <Badge size="xs" color="teal">Loaded</Badge>}
           </Group>
-          {terrainImagePath && !terrainIsHillshade && (
+          {terrainImagePath && (
             <Text size="xs" c="dimmed" lineClamp={1} title={terrainImagePath}>
               {terrainImagePath}
             </Text>
           )}
-          {terrainIsHillshade && (
-            <Text size="xs" c="dimmed">Auto-generated from heightmap</Text>
-          )}
           <Button size="xs" variant="light" onClick={handleLoadTerrain} loading={loadingTerrain}>
-            {terrainLoaded ? 'Load Custom Terrain Image' : 'Load Terrain Image'}
+            {terrainImagePath ? 'Replace Terrain Image' : 'Load Terrain Image'}
           </Button>
         </Stack>
       </Paper>
@@ -137,6 +125,15 @@ export function FilePanel(): JSX.Element {
             onClick={handleRecalculate}
           >
             Recalculate Map
+          </Button>
+          <Button
+            size="xs"
+            variant="subtle"
+            color="orange"
+            disabled={!hasPendingChanges}
+            onClick={clearPendingChanges}
+          >
+            Clear Pending Changes
           </Button>
         </Stack>
       </Paper>
