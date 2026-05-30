@@ -66,6 +66,9 @@ export function ParameterPanel(): JSX.Element {
     updateElevationCalibration, setElevationUnits, finalizeCustomConversion,
   } = useStore()
 
+  const activeTab = useStore((s) => s.activeTab)
+  const hillshadeDisabled = activeTab !== 'hillshade'
+
   const { unitType, customName, customAbbr, customBase, customRatio, realMin, realMax, realInterval, mapWidth } = elevationCalibration
 
   const abbr = unitType === 'feet' ? 'ft'
@@ -178,6 +181,7 @@ export function ParameterPanel(): JSX.Element {
               value={hillshadeParams.azimuth}
               onChange={(v) => updateHillshadeParams({ azimuth: v })}
               label={(v) => `${v}°`}
+              disabled={hillshadeDisabled}
             />
           </Stack>
 
@@ -190,6 +194,7 @@ export function ParameterPanel(): JSX.Element {
               value={hillshadeParams.altitude}
               onChange={(v) => updateHillshadeParams({ altitude: v })}
               label={(v) => `${v}°`}
+              disabled={hillshadeDisabled}
             />
           </Stack>
 
@@ -204,6 +209,7 @@ export function ParameterPanel(): JSX.Element {
                   value={hillshadeParams.verticalExaggeration}
                   onChange={(v) => updateHillshadeParams({ verticalExaggeration: v })}
                   label={(v) => `${v.toFixed(1)}×`}
+                  disabled={hillshadeDisabled}
                 />
               </Stack>
               <NumberInput
@@ -225,6 +231,7 @@ export function ParameterPanel(): JSX.Element {
                 value={hillshadeParams.zFactor}
                 onChange={(v) => updateHillshadeParams({ zFactor: v })}
                 label={(v) => `${v}×`}
+                disabled={hillshadeDisabled}
               />
             </Stack>
           )}
@@ -238,6 +245,7 @@ export function ParameterPanel(): JSX.Element {
               value={intensityToIndex(hillshadeParams.intensity)}
               onChange={(i) => updateHillshadeParams({ intensity: INTENSITY_STOPS[i] })}
               label={(i) => formatIntensity(INTENSITY_STOPS[i])}
+              disabled={hillshadeDisabled}
             />
           </Stack>
 
@@ -250,6 +258,7 @@ export function ParameterPanel(): JSX.Element {
               value={hillshadeParams.brightness}
               onChange={(v) => updateHillshadeParams({ brightness: v })}
               label={(v) => `${Math.round(v * 100)}%`}
+              disabled={hillshadeDisabled}
             />
           </Stack>
 

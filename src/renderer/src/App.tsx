@@ -44,7 +44,14 @@ export function App(): JSX.Element {
           <Tabs
             value={activeTab}
             onChange={(v) => v && setActiveTab(v as 'terrain' | 'hillshade')}
-            style={{ flexShrink: 0, borderBottom: '1px solid var(--mantine-color-default-border)' }}
+            style={{
+              flexShrink: 0,
+              position: 'sticky',
+              top: 52,
+              zIndex: 100,
+              backgroundColor: 'var(--mantine-color-body)',
+              borderBottom: '1px solid var(--mantine-color-default-border)',
+            }}
           >
             <Tabs.List>
               {showTerrainTab && <Tabs.Tab value="terrain">Terrain</Tabs.Tab>}
