@@ -7,7 +7,8 @@ import {
 import { useStore } from '../../store/useStore'
 import { useThemeStore } from '../../store/useThemeStore'
 import { THEMES } from '../../themes'
-import { exportToBlob } from '../../utils/export'
+import { exportToBlob, exportOverlayToBlob, OverlayExportConfig } from '../../utils/export'
+import { OverlayExportModal } from './OverlayExportModal'
 
 function CrosshairIcon(): JSX.Element {
   return (
@@ -55,6 +56,7 @@ export function Toolbar(): JSX.Element {
   const { themeId, setTheme } = useThemeStore()
   const [themeModalOpen, setThemeModalOpen] = useState(false)
   const [toolPanelOpen, setToolPanelOpen] = useState(false)
+  const [overlayModalOpen, setOverlayModalOpen] = useState(false)
   const [exportError, setExportError] = useState<string | null>(null)
 
   const { unitType, customAbbr, customRatio, realMin, realMax, mapWidth } = elevationCalibration
@@ -66,7 +68,7 @@ export function Toolbar(): JSX.Element {
   const canExport = !!heightmap
   const baseImageUrl = activeTab === 'terrain' ? terrainImageUrl : hillshadeImageUrl
 
-  const handleExport = async (type: 'merged-terrain' | 'merged-hillshade' | 'overlay-layer' | 'unmarked-hillshade' | 'visible-map') => {
+  const handleExport = async (type: 'merged-terrain' | 'merged-hillshade' | 'unmarked-hillshade' | 'visible-map') => {
     setExportError(null)
     try {
       let blob: Blob
@@ -76,9 +78,6 @@ export function Toolbar(): JSX.Element {
           break
         case 'merged-hillshade':
           blob = await exportToBlob({ baseImageUrl: hillshadeImageUrl, includeContours: true, includeAnnotations: true, contourOpacity: 1 })
-          break
-        case 'overlay-layer':
-          blob = await exportToBlob({ baseImageUrl: null, includeContours: true, includeAnnotations: true, contourOpacity: 1 })
           break
         case 'unmarked-hillshade':
           blob = await exportToBlob({ baseImageUrl: hillshadeImageUrl, includeContours: false, includeAnnotations: false, contourOpacity: 1 })
@@ -97,6 +96,14 @@ export function Toolbar(): JSX.Element {
     } catch (err) {
       setExportError(err instanceof Error ? err.message : String(err))
     }
+  }
+
+  const handleOverlayExport = async (config: OverlayExportConfig) => {
+    const blob = await exportOverlayToBlob(config)
+    const savePath = await window.electronAPI.saveFile([{ name: 'PNG Image', extensions: ['png'] }])
+    if (!savePath) return
+    const buf = await blob.arrayBuffer()
+    await window.electronAPI.writeFile(savePath, new Uint8Array(buf))
   }
 
   return (
@@ -211,7 +218,7 @@ export function Toolbar(): JSX.Element {
               </Menu.Item>
               <Menu.Item
                 disabled={!heightmap}
-                onClick={() => handleExport('overlay-layer')}
+                onClick={() => setOverlayModalOpen(true)}
               >
                 Export overlay layer image
               </Menu.Item>
@@ -239,6 +246,16 @@ export function Toolbar(): JSX.Element {
           </Button>
         </Group>
       </Group>
+
+      {overlayModalOpen && (
+        <OverlayExportModal
+          opened={overlayModalOpen}
+          onClose={() => setOverlayModalOpen(false)}
+          onExport={handleOverlayExport}
+          elevationCalibration={elevationCalibration}
+          hasGroundResolution={hasGroundResolution}
+        />
+      )}
 
       <Modal
         opened={themeModalOpen}
