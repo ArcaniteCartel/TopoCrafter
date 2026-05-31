@@ -39,27 +39,34 @@ export function App(): JSX.Element {
         <FilePanel />
         <ParameterPanel />
       </AppShell.Navbar>
-      <AppShell.Main style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
-        {showTabs && (
-          <Tabs
-            value={activeTab}
-            onChange={(v) => v && setActiveTab(v as 'terrain' | 'hillshade')}
-            style={{
-              flexShrink: 0,
-              position: 'sticky',
-              top: 52,
-              zIndex: 100,
-              backgroundColor: 'var(--mantine-color-body)',
-              borderBottom: '1px solid var(--mantine-color-default-border)',
-            }}
-          >
-            <Tabs.List>
-              {showTerrainTab && <Tabs.Tab value="terrain">Terrain</Tabs.Tab>}
-              {showHillshadeTab && <Tabs.Tab value="hillshade">Hillshade</Tabs.Tab>}
-            </Tabs.List>
-          </Tabs>
-        )}
-        <MapCanvas />
+      <AppShell.Main>
+        <div style={{
+          position: 'fixed',
+          top: 'var(--app-shell-header-height, 52px)',
+          left: 'var(--app-shell-navbar-width, 300px)',
+          right: 0,
+          bottom: 0,
+          display: 'flex',
+          flexDirection: 'column',
+          overflow: 'hidden',
+        }}>
+          {showTabs && (
+            <Tabs
+              value={activeTab}
+              onChange={(v) => v && setActiveTab(v as 'terrain' | 'hillshade')}
+              style={{
+                flexShrink: 0,
+                borderBottom: '1px solid var(--mantine-color-default-border)',
+              }}
+            >
+              <Tabs.List>
+                {showTerrainTab && <Tabs.Tab value="terrain">Terrain</Tabs.Tab>}
+                {showHillshadeTab && <Tabs.Tab value="hillshade">Hillshade</Tabs.Tab>}
+              </Tabs.List>
+            </Tabs>
+          )}
+          <MapCanvas />
+        </div>
       </AppShell.Main>
     </AppShell>
   )

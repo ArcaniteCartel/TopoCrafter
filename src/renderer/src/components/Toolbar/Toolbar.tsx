@@ -2,7 +2,7 @@ import { useState } from 'react'
 import {
   Group, Title, Button, Menu, UnstyledButton,
   Modal, SimpleGrid, Paper, Text, Stack, Box,
-  Popover, Tooltip, ActionIcon,
+  Popover, Tooltip, ActionIcon, Slider,
 } from '@mantine/core'
 import { useStore } from '../../store/useStore'
 import { useThemeStore } from '../../store/useThemeStore'
@@ -42,6 +42,8 @@ function ArrowIcon(): JSX.Element {
 
 export function Toolbar(): JSX.Element {
   const heightmap = useStore((s) => s.heightmap)
+  const mapZoom = useStore((s) => s.mapZoom)
+  const setMapZoom = useStore((s) => s.setMapZoom)
   const terrainImageUrl = useStore((s) => s.terrainImageUrl)
   const hillshadeImageUrl = useStore((s) => s.hillshadeImageUrl)
   const activeTab = useStore((s) => s.activeTab)
@@ -166,6 +168,28 @@ export function Toolbar(): JSX.Element {
         </Group>
 
         <Group>
+          <Group gap={6} align="center">
+            <Slider
+              min={-100}
+              max={100}
+              step={5}
+              value={Math.round(50 * Math.log2(mapZoom / 100))}
+              onChange={(v) => setMapZoom(Math.round(100 * Math.pow(2, v / 50)))}
+              label={(v) => `${Math.round(100 * Math.pow(2, v / 50))}%`}
+              size="xs"
+              style={{ width: 120 }}
+            />
+            <Text
+              size="xs"
+              c="dimmed"
+              style={{ width: 36, textAlign: 'right', fontVariantNumeric: 'tabular-nums', cursor: 'default' }}
+              title="Double-click to reset to 100%"
+              onDoubleClick={() => setMapZoom(100)}
+            >
+              {mapZoom}%
+            </Text>
+          </Group>
+
           <Menu shadow="md" width={220} disabled={!canExport}>
             <Menu.Target>
               <Button size="xs" variant="light" disabled={!canExport}>

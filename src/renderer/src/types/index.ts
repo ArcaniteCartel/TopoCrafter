@@ -113,6 +113,7 @@ export interface ProjectState {
   snapshotStyle: ContourStyle | null
   snapshotHillshadeParams: HillshadeParameters | null
   snapshotElevationCalibration: ElevationCalibration | null
+  mapZoom: number
 }
 
 export const defaultParameters: ContourParameters = {

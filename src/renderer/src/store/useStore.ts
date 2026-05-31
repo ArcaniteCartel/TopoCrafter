@@ -57,6 +57,7 @@ interface AppActions {
   removeSlopeArrow: (id: string) => void
   setMapTool: (tool: MapTool) => void
   setActiveTab: (tab: 'terrain' | 'hillshade') => void
+  setMapZoom: (zoom: number) => void
   clearPendingChanges: () => void
   markClean: () => void
   reset: () => void
@@ -88,6 +89,7 @@ const initialState: ProjectState = {
   snapshotStyle: null,
   snapshotHillshadeParams: null,
   snapshotElevationCalibration: null,
+  mapZoom: 100,
 }
 
 export const useStore = create<ProjectState & AppActions>((set, get) => ({
@@ -276,6 +278,8 @@ export const useStore = create<ProjectState & AppActions>((set, get) => ({
   setMapTool: (tool) => set({ mapTool: tool }),
 
   setActiveTab: (tab) => set({ activeTab: tab }),
+
+  setMapZoom: (zoom) => set({ mapZoom: zoom }),
 
   clearPendingChanges: () =>
     set((state) => ({

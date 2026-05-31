@@ -250,6 +250,8 @@ export function MapCanvas(): JSX.Element {
     }
   }
 
+  const mapZoom = useStore((s) => s.mapZoom)
+
   const baseImageUrl = activeTab === 'terrain' ? terrainImageUrl : hillshadeImageUrl
   const showPlaceholder = !baseImageUrl && !heightmap && !hillshadeGenerating && !fileLoadingMessage
 
@@ -268,18 +270,20 @@ export function MapCanvas(): JSX.Element {
   const flagSvgInteractive = toolActive || elevationFlags.length > 0 || slopeArrows.length > 0
 
   return (
-    <div style={{ position: 'relative', width: '100%', flex: 1, overflow: 'auto' }}>
+    <div style={{ position: 'relative', width: '100%', flex: 1, minHeight: 0, overflow: 'auto' }}>
       {showPlaceholder && (
         <Center style={{ height: '100%', minHeight: 200 }}>
           <Text c="dimmed" size="sm">Load a terrain image and heightmap to get started</Text>
         </Center>
       )}
 
+      {/* Inner div scales with zoom; image establishes height, SVGs overlay it */}
+      <div style={{ position: 'relative', display: 'inline-block', width: `${mapZoom}%` }}>
       {baseImageUrl && (
         <img
           src={baseImageUrl}
           alt={activeTab === 'terrain' ? 'Terrain' : 'Hillshade'}
-          style={{ display: 'block', maxWidth: '100%' }}
+          style={{ display: 'block', width: '100%' }}
         />
       )}
 
@@ -533,6 +537,8 @@ export function MapCanvas(): JSX.Element {
           })}
         </svg>
       )}
+
+      </div>{/* end zoom inner div */}
 
       {(hillshadeGenerating || fileLoadingMessage) && (
         <Overlay backgroundOpacity={0.5} style={{ position: 'absolute', inset: 0 }}>
