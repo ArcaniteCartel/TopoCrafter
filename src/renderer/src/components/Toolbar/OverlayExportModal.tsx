@@ -35,7 +35,7 @@ export function OverlayExportModal({
   const [overlayOpacity, setOverlayOpacity] = useState(100)
   const [bgColor, setBgColor] = useState('#ffffff')
   const [bgOpacity, setBgOpacity] = useState(100)
-  const [gridType, setGridType] = useState<OverlayGridType>('square')
+  const [gridType, setGridType] = useState<OverlayGridType>('hex-flat')
   const [gridInterval, setGridInterval] = useState<number>(defaultInterval)
   const [gridColor, setGridColor] = useState('#000000')
   const [gridThickness, setGridThickness] = useState<number>(1)
@@ -144,9 +144,11 @@ export function OverlayExportModal({
               value={gridType}
               onChange={(v) => setGridType(v as OverlayGridType)}
             >
-              <Group gap="md" mt={4}>
+              <Group gap="md" mt={4} wrap="wrap">
                 <Radio value="square" label="Square" />
-                <Radio value="hex" label="Hex (flat-top)" />
+                <Radio value="hex-flat" label="Hex (flat-top)" />
+                <Radio value="hex-pointy" label="Hex (pointy-top)" />
+                <Radio value="hex-rotated" label="Hex (rotated 45°)" />
               </Group>
             </Radio.Group>
 

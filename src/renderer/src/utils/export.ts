@@ -6,7 +6,7 @@ export interface ExportLayerConfig {
 }
 
 export type OverlayBackgroundMode = 'transparent' | 'white' | 'colored' | 'grid'
-export type OverlayGridType = 'square' | 'hex'
+export type OverlayGridType = 'square' | 'hex-flat' | 'hex-pointy' | 'hex-rotated'
 
 export interface OverlayExportConfig {
   overlayOpacity: number
@@ -55,7 +55,11 @@ export async function exportOverlayToBlob(config: OverlayExportConfig): Promise<
     if (config.gridType === 'square') {
       drawSquareGrid(ctx, width, height, config.gridIntervalPx, config.gridColor, config.gridThickness, config.gridOpacity)
     } else {
-      drawHexGrid(ctx, width, height, config.gridIntervalPx, config.gridColor, config.gridThickness, config.gridOpacity)
+      const rotation =
+        config.gridType === 'hex-flat'    ? 0 :
+        config.gridType === 'hex-pointy'  ? Math.PI / 6 :
+        /* hex-rotated */                   Math.PI / 4
+      drawHexGrid(ctx, width, height, config.gridIntervalPx, rotation, config.gridColor, config.gridThickness, config.gridOpacity)
     }
   }
 
@@ -115,15 +119,28 @@ function drawHexGrid(
   width: number,
   height: number,
   intervalPx: number,
+  rotationRad: number,
   color: string,
   thickness: number,
   opacity: number,
 ): void {
-  // intervalPx = flat-to-flat distance (hex height for flat-top orientation)
-  const R = intervalPx / Math.sqrt(3)   // circumradius (center to vertex)
-  const colStep = 1.5 * R               // horizontal distance between column centers
-  const rowStep = intervalPx            // vertical distance between hex centers in a column
-  const rowOffset = intervalPx / 2      // odd-column vertical offset
+  // intervalPx = flat-to-flat distance; R = circumradius (center to vertex)
+  const R = intervalPx / Math.sqrt(3)
+  const cos = Math.cos(rotationRad)
+  const sin = Math.sin(rotationRad)
+
+  // Hexagonal Bravais lattice basis vectors for flat-top (rotationRad=0):
+  //   b1 = (3R/2,  R√3/2)   b2 = (0, R√3)
+  // Rotated by rotationRad via 2D rotation matrix:
+  const b1x = R * (1.5 * cos - (Math.sqrt(3) / 2) * sin)
+  const b1y = R * (1.5 * sin + (Math.sqrt(3) / 2) * cos)
+  const b2x = R * (-Math.sqrt(3) * sin)
+  const b2y = R * (Math.sqrt(3) * cos)
+
+  // Grid centred on canvas so it is symmetric for all rotation angles
+  const originX = width / 2
+  const originY = height / 2
+  const N = Math.ceil(Math.sqrt(width * width + height * height) / intervalPx) + 2
 
   const temp = document.createElement('canvas')
   temp.width = width
@@ -132,17 +149,14 @@ function drawHexGrid(
   tc.strokeStyle = color
   tc.lineWidth = thickness
 
-  const numCols = Math.ceil(width / colStep) + 2
-  const numRows = Math.ceil(height / rowStep) + 2
-
-  for (let col = -1; col < numCols; col++) {
-    const cx = col * colStep
-    const yOff = col % 2 !== 0 ? rowOffset : 0
-    for (let row = -1; row < numRows; row++) {
-      const cy = row * rowStep + yOff
+  for (let n = -N; n <= N; n++) {
+    for (let m = -N; m <= N; m++) {
+      const cx = originX + n * b1x + m * b2x
+      const cy = originY + n * b1y + m * b2y
+      if (cx < -2 * R || cx > width + 2 * R || cy < -2 * R || cy > height + 2 * R) continue
       tc.beginPath()
       for (let i = 0; i < 6; i++) {
-        const angle = (Math.PI / 3) * i   // 0°, 60°, 120°, 180°, 240°, 300° → flat-top
+        const angle = rotationRad + (Math.PI / 3) * i
         const vx = cx + R * Math.cos(angle)
         const vy = cy + R * Math.sin(angle)
         if (i === 0) tc.moveTo(vx, vy)
