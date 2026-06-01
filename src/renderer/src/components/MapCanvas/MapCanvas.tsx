@@ -68,6 +68,7 @@ export function MapCanvas(): JSX.Element {
   // Unified selection and drag state for all annotation tools
   const [selectedItem, setSelectedItem] = useState<SelectedItem | null>(null)
   const [dragPos, setDragPos] = useState<DragPos | null>(null)
+  const [hoverPos, setHoverPos] = useState<DragPos | null>(null)
   const dragRef = useRef<DragRef | null>(null)
   const flagSvgRef = useRef<SVGSVGElement>(null)
   const selectedItemRef = useRef<SelectedItem | null>(null)
@@ -160,6 +161,7 @@ export function MapCanvas(): JSX.Element {
         setSelectedItem(null)
         dragRef.current = null
         setDragPos(null)
+        setHoverPos(null)
       }
       if (e.key === 'Delete' && selectedItemRef.current) {
         const { type, id } = selectedItemRef.current
@@ -219,6 +221,28 @@ export function MapCanvas(): JSX.Element {
       document.removeEventListener('mouseup', onUp)
     }
   }, [getSvgPoint, computeElevationAt, computeSlopeAt, updateElevationFlag, updateSlopeArrow])
+
+  // Clear hover preview whenever the tool mode is turned off
+  useEffect(() => {
+    if (mapTool === 'none') setHoverPos(null)
+  }, [mapTool])
+
+  function handleSvgMouseMove(e: React.MouseEvent<SVGSVGElement>) {
+    if (!toolActive || dragRef.current) { setHoverPos(null); return }
+    const pt = getSvgPoint(e.clientX, e.clientY)
+    if (!pt) return
+    if (mapTool === 'elevation-flag') {
+      const elevation = computeElevationAt(pt.x, pt.y)
+      setHoverPos(elevation !== null ? { x: pt.x, y: pt.y, elevation } : null)
+    } else if (mapTool === 'slope-arrow') {
+      const slope = computeSlopeAt(pt.x, pt.y)
+      setHoverPos(slope ? { x: pt.x, y: pt.y, ...slope } : null)
+    }
+  }
+
+  function handleSvgMouseLeave() {
+    setHoverPos(null)
+  }
 
   function handleItemMouseDown(e: React.MouseEvent, type: 'flag' | 'slope-arrow', itemId: string) {
     e.stopPropagation()
@@ -399,6 +423,8 @@ export function MapCanvas(): JSX.Element {
           }}
           onMouseDown={handleSvgMouseDown}
           onMouseUp={handleSvgMouseUp}
+          onMouseMove={handleSvgMouseMove}
+          onMouseLeave={handleSvgMouseLeave}
         >
           {/* Transparent background rect captures clicks for placement */}
           {toolActive && (
@@ -535,6 +561,69 @@ export function MapCanvas(): JSX.Element {
               </g>
             )
           })}
+          {/* Hover preview — live readout while tool is active, no drag in progress */}
+          {toolActive && hoverPos && !dragPos && (() => {
+            const s = labelFontSize
+            if (mapTool === 'elevation-flag' && hoverPos.elevation !== undefined) {
+              return (
+                <text
+                  x={hoverPos.x + s * 0.9}
+                  y={hoverPos.y - s * 0.3}
+                  fontSize={s}
+                  fontFamily={style.labelFont}
+                  fontWeight={style.labelBold ? 'bold' : 'normal'}
+                  fontStyle={style.labelItalic ? 'italic' : 'normal'}
+                  fill={style.labelColor}
+                  dominantBaseline="middle"
+                  style={{ pointerEvents: 'none' }}
+                  opacity={0.75}
+                >{hoverPos.elevation}</text>
+              )
+            }
+            if (mapTool === 'slope-arrow' && hoverPos.angleDeg !== undefined && hoverPos.slopeDeg !== undefined) {
+              const angleRad = (hoverPos.angleDeg * Math.PI) / 180
+              const cos = Math.cos(angleRad)
+              const sin = Math.sin(angleRad)
+              const halfLen = s * 0.5
+              const headLen = s * 0.28
+              const headWid = s * 0.18
+              const tipX = hoverPos.x + cos * halfLen
+              const tipY = hoverPos.y + sin * halfLen
+              const tailX = hoverPos.x - cos * halfLen
+              const tailY = hoverPos.y - sin * halfLen
+              const headBaseX = tipX - cos * headLen
+              const headBaseY = tipY - sin * headLen
+              const perpX = -sin
+              const perpY = cos
+              const arrowPoints = [
+                `${tipX},${tipY}`,
+                `${headBaseX + perpX * headWid},${headBaseY + perpY * headWid}`,
+                `${headBaseX - perpX * headWid},${headBaseY - perpY * headWid}`,
+              ].join(' ')
+              return (
+                <g opacity={0.75} style={{ pointerEvents: 'none' }}>
+                  <line
+                    x1={tailX} y1={tailY} x2={headBaseX} y2={headBaseY}
+                    stroke={style.labelColor} strokeWidth={1.5}
+                    vectorEffect="non-scaling-stroke"
+                  />
+                  <polygon points={arrowPoints} fill={style.labelColor} />
+                  <text
+                    x={hoverPos.x}
+                    y={hoverPos.y + s * 0.85}
+                    fontSize={s}
+                    fontFamily={style.labelFont}
+                    fontWeight={style.labelBold ? 'bold' : 'normal'}
+                    fontStyle={style.labelItalic ? 'italic' : 'normal'}
+                    fill={style.labelColor}
+                    textAnchor="middle"
+                    dominantBaseline="middle"
+                  >{hoverPos.slopeDeg}°</text>
+                </g>
+              )
+            }
+            return null
+          })()}
         </svg>
       )}
 
