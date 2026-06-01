@@ -275,6 +275,8 @@ export function MapCanvas(): JSX.Element {
   }
 
   const mapZoom = useStore((s) => s.mapZoom)
+  const overlayOnly = useStore((s) => s.overlayOnly)
+  const overlayBrightness = useStore((s) => s.overlayBrightness)
 
   const baseImageUrl = activeTab === 'terrain' ? terrainImageUrl : hillshadeImageUrl
   const showPlaceholder = !baseImageUrl && !heightmap && !hillshadeGenerating && !fileLoadingMessage
@@ -302,12 +304,29 @@ export function MapCanvas(): JSX.Element {
       )}
 
       {/* Inner div scales with zoom; image establishes height, SVGs overlay it */}
-      <div style={{ position: 'relative', display: 'inline-block', width: `${mapZoom}%` }}>
-      {baseImageUrl && (
+      <div style={{
+        position: 'relative',
+        display: 'inline-block',
+        width: `${mapZoom}%`,
+        backgroundColor: overlayOnly
+          ? `rgb(${Math.round(255 * (0.85 + 0.15 * overlayBrightness))},` +
+            `${Math.round(255 * (0.85 + 0.15 * overlayBrightness))},` +
+            `${Math.round(255 * (0.85 + 0.15 * overlayBrightness))})`
+          : undefined,
+      }}>
+      {baseImageUrl && !overlayOnly && (
         <img
           src={baseImageUrl}
           alt={activeTab === 'terrain' ? 'Terrain' : 'Hillshade'}
           style={{ display: 'block', width: '100%' }}
+        />
+      )}
+      {baseImageUrl && overlayOnly && (
+        <img
+          src={baseImageUrl}
+          alt=""
+          aria-hidden
+          style={{ display: 'block', width: '100%', visibility: 'hidden' }}
         />
       )}
 

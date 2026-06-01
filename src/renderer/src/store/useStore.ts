@@ -58,6 +58,8 @@ interface AppActions {
   setMapTool: (tool: MapTool) => void
   setActiveTab: (tab: 'terrain' | 'hillshade') => void
   setMapZoom: (zoom: number) => void
+  setOverlayOnly: (val: boolean) => void
+  setOverlayBrightness: (brightness: number) => void
   clearPendingChanges: () => void
   markClean: () => void
   reset: () => void
@@ -90,6 +92,8 @@ const initialState: ProjectState = {
   snapshotHillshadeParams: null,
   snapshotElevationCalibration: null,
   mapZoom: 100,
+  overlayOnly: false,
+  overlayBrightness: 0.65,
 }
 
 export const useStore = create<ProjectState & AppActions>((set, get) => ({
@@ -280,6 +284,10 @@ export const useStore = create<ProjectState & AppActions>((set, get) => ({
   setActiveTab: (tab) => set({ activeTab: tab }),
 
   setMapZoom: (zoom) => set({ mapZoom: zoom }),
+
+  setOverlayOnly: (val) => set({ overlayOnly: val }),
+
+  setOverlayBrightness: (brightness) => set({ overlayBrightness: brightness }),
 
   clearPendingChanges: () =>
     set((state) => ({

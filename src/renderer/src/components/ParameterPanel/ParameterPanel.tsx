@@ -68,6 +68,10 @@ export function ParameterPanel(): JSX.Element {
 
   const activeTab = useStore((s) => s.activeTab)
   const hillshadeDisabled = activeTab !== 'hillshade'
+  const overlayOnly = useStore((s) => s.overlayOnly)
+  const setOverlayOnly = useStore((s) => s.setOverlayOnly)
+  const overlayBrightness = useStore((s) => s.overlayBrightness)
+  const setOverlayBrightness = useStore((s) => s.setOverlayBrightness)
 
   const { unitType, customName, customAbbr, customBase, customRatio, realMin, realMax, realInterval, mapWidth } = elevationCalibration
 
@@ -168,9 +172,17 @@ export function ParameterPanel(): JSX.Element {
 
       {!!heightmap && (
         <>
-          <Text fw={600} size="sm" c="dimmed" tt="uppercase" style={{ letterSpacing: 1 }}>
-            Hillshade
-          </Text>
+          <Group justify="space-between" align="center">
+            <Text fw={600} size="sm" c="dimmed" tt="uppercase" style={{ letterSpacing: 1 }}>
+              Hillshade
+            </Text>
+            <Switch
+              size="xs"
+              label="Overlay only"
+              checked={overlayOnly}
+              onChange={(e) => setOverlayOnly(e.currentTarget.checked)}
+            />
+          </Group>
 
           <Stack gap={4}>
             <Text size="xs" fw={500}>Sun Azimuth</Text>
@@ -181,7 +193,7 @@ export function ParameterPanel(): JSX.Element {
               value={hillshadeParams.azimuth}
               onChange={(v) => updateHillshadeParams({ azimuth: v })}
               label={(v) => `${v}°`}
-              disabled={hillshadeDisabled}
+              disabled={hillshadeDisabled || overlayOnly}
             />
           </Stack>
 
@@ -194,7 +206,7 @@ export function ParameterPanel(): JSX.Element {
               value={hillshadeParams.altitude}
               onChange={(v) => updateHillshadeParams({ altitude: v })}
               label={(v) => `${v}°`}
-              disabled={hillshadeDisabled}
+              disabled={hillshadeDisabled || overlayOnly}
             />
           </Stack>
 
@@ -209,7 +221,7 @@ export function ParameterPanel(): JSX.Element {
                   value={hillshadeParams.verticalExaggeration}
                   onChange={(v) => updateHillshadeParams({ verticalExaggeration: v })}
                   label={(v) => `${v.toFixed(1)}×`}
-                  disabled={hillshadeDisabled}
+                  disabled={hillshadeDisabled || overlayOnly}
                 />
               </Stack>
               <NumberInput
@@ -231,7 +243,7 @@ export function ParameterPanel(): JSX.Element {
                 value={hillshadeParams.zFactor}
                 onChange={(v) => updateHillshadeParams({ zFactor: v })}
                 label={(v) => `${v}×`}
-                disabled={hillshadeDisabled}
+                disabled={hillshadeDisabled || overlayOnly}
               />
             </Stack>
           )}
@@ -245,7 +257,7 @@ export function ParameterPanel(): JSX.Element {
               value={intensityToIndex(hillshadeParams.intensity)}
               onChange={(i) => updateHillshadeParams({ intensity: INTENSITY_STOPS[i] })}
               label={(i) => formatIntensity(INTENSITY_STOPS[i])}
-              disabled={hillshadeDisabled}
+              disabled={hillshadeDisabled || overlayOnly}
             />
           </Stack>
 
@@ -255,8 +267,8 @@ export function ParameterPanel(): JSX.Element {
               min={0.3}
               max={0.9}
               step={0.05}
-              value={hillshadeParams.brightness}
-              onChange={(v) => updateHillshadeParams({ brightness: v })}
+              value={overlayOnly ? overlayBrightness : hillshadeParams.brightness}
+              onChange={(v) => overlayOnly ? setOverlayBrightness(v) : updateHillshadeParams({ brightness: v })}
               label={(v) => `${Math.round(v * 100)}%`}
               disabled={hillshadeDisabled}
             />
