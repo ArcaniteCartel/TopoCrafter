@@ -353,6 +353,7 @@ export function MapCanvas(): JSX.Element {
   const overlayOnly = useStore((s) => s.overlayOnly)
   const overlayBrightness = useStore((s) => s.overlayBrightness)
   const frame = useStore((s) => s.frame)
+  const title = useStore((s) => s.title)
 
   const baseImageUrl = activeTab === 'terrain' ? terrainImageUrl : hillshadeImageUrl
   const showPlaceholder = !baseImageUrl && !heightmap && !hillshadeGenerating && !fileLoadingMessage
@@ -389,6 +390,27 @@ export function MapCanvas(): JSX.Element {
           ? `${frame.marginTop}px ${frame.marginRight}px ${frame.marginBottom}px ${frame.marginLeft}px`
           : undefined,
       }}>
+
+      {/* Title — absolutely positioned in the top margin area */}
+      {frame.enabled && title.enabled && title.text.trim() && (
+        <div style={{
+          position: 'absolute',
+          top: frame.marginTop / 2,
+          left: frame.marginLeft,
+          transform: 'translateY(-50%)',
+          pointerEvents: 'none',
+          userSelect: 'none',
+          color: title.color,
+          fontFamily: title.font,
+          fontSize: title.size,
+          fontWeight: title.bold ? 'bold' : 'normal',
+          fontStyle: title.italic ? 'italic' : 'normal',
+          whiteSpace: 'nowrap',
+          lineHeight: 1,
+        }}>
+          {title.text}
+        </div>
+      )}
 
       {/* Inner map area — position relative so SVG overlays stack correctly */}
       <div style={{

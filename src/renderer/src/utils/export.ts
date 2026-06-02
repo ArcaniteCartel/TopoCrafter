@@ -1,4 +1,4 @@
-import type { FrameConfig } from '../types'
+import type { FrameConfig, TitleConfig } from '../types'
 
 export interface ExportLayerConfig {
   baseImageUrl: string | null
@@ -7,6 +7,7 @@ export interface ExportLayerConfig {
   contourOpacity: number
   frame?: FrameConfig
   includeFrame?: boolean
+  title?: TitleConfig
 }
 
 export type OverlayBackgroundMode = 'transparent' | 'white' | 'colored' | 'grid'
@@ -24,6 +25,7 @@ export interface OverlayExportConfig {
   gridOpacity: number
   frame?: FrameConfig
   includeFrame?: boolean
+  title?: TitleConfig
 }
 
 // ---------------------------------------------------------------------------
@@ -91,6 +93,28 @@ function drawFrameBorder(
     ctx.fillRect(cornerOff,              totalH - cornerOff - cSize, cSize, cSize)
     ctx.fillRect(totalW - cornerOff - cSize, totalH - cornerOff - cSize, cSize, cSize)
   }
+}
+
+// ---------------------------------------------------------------------------
+// Title drawing
+// ---------------------------------------------------------------------------
+
+function drawTitle(
+  ctx: CanvasRenderingContext2D,
+  title: TitleConfig,
+  frame: FrameConfig,
+): void {
+  if (!title.enabled || !title.text.trim()) return
+  const parts: string[] = []
+  if (title.bold) parts.push('bold')
+  if (title.italic) parts.push('italic')
+  parts.push(`${title.size}px`)
+  parts.push(title.font)
+  ctx.font = parts.join(' ')
+  ctx.fillStyle = title.color
+  ctx.textBaseline = 'middle'
+  ctx.textAlign = 'left'
+  ctx.fillText(title.text.trim(), frame.marginLeft, frame.marginTop / 2)
 }
 
 // ---------------------------------------------------------------------------
@@ -270,6 +294,9 @@ export async function exportOverlayToBlob(config: OverlayExportConfig): Promise<
   if (withFrame && config.frame!.borderEnabled) {
     drawFrameBorder(ctx, config.frame!, totalW, totalH)
   }
+  if (withFrame && config.title) {
+    drawTitle(ctx, config.title, config.frame!)
+  }
 
   return canvasToBlob(canvas)
 }
@@ -329,6 +356,9 @@ export async function exportToBlob(config: ExportLayerConfig): Promise<Blob> {
 
   if (withFrame && config.frame!.borderEnabled) {
     drawFrameBorder(ctx, config.frame!, totalW, totalH)
+  }
+  if (withFrame && config.title) {
+    drawTitle(ctx, config.title, config.frame!)
   }
 
   return canvasToBlob(canvas)

@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { Stack, Text, Slider, NumberInput, ColorInput, Switch, Divider, Group, Select, TextInput, Collapse, Checkbox, SegmentedControl } from '@mantine/core'
 import { useStore } from '../../store/useStore'
-import type { FrameBorderStyle } from '../../types'
+import type { FrameBorderStyle, TitleConfig } from '../../types'
 
 const DASH_OPTIONS = [
   { value: 'solid', label: 'Solid' },
@@ -71,6 +71,8 @@ export function ParameterPanel(): JSX.Element {
   const hillshadeDisabled = activeTab !== 'hillshade'
   const frame = useStore((s) => s.frame)
   const updateFrame = useStore((s) => s.updateFrame)
+  const title = useStore((s) => s.title)
+  const updateTitle = useStore((s) => s.updateTitle)
   const overlayOnly = useStore((s) => s.overlayOnly)
   const setOverlayOnly = useStore((s) => s.setOverlayOnly)
   const overlayBrightness = useStore((s) => s.overlayBrightness)
@@ -768,6 +770,71 @@ export function ParameterPanel(): JSX.Element {
               { value: 'ornate',        label: 'Ornate' },
             ]}
           />
+
+          <Divider label="Title" labelPosition="left" />
+
+          <Switch
+            label="Show title"
+            size="sm"
+            checked={title.enabled}
+            onChange={(e) => updateTitle({ enabled: e.currentTarget.checked })}
+            disabled={!frame.enabled}
+          />
+
+          <TextInput
+            label="Title text"
+            size="xs"
+            placeholder="Map title…"
+            value={title.text}
+            onChange={(e) => updateTitle({ text: e.currentTarget.value })}
+            disabled={!frame.enabled || !title.enabled}
+          />
+
+          <Group grow>
+            <Select
+              label="Font"
+              size="xs"
+              data={FONT_OPTIONS}
+              value={title.font}
+              onChange={(v) => v && updateTitle({ font: v })}
+              disabled={!frame.enabled || !title.enabled}
+            />
+            <NumberInput
+              label="Size (px)"
+              size="xs"
+              min={6}
+              max={120}
+              step={2}
+              value={title.size}
+              onChange={(v) => typeof v === 'number' && updateTitle({ size: v })}
+              disabled={!frame.enabled || !title.enabled}
+            />
+          </Group>
+
+          <ColorInput
+            label="Color"
+            size="xs"
+            value={title.color}
+            onChange={(v) => updateTitle({ color: v })}
+            disabled={!frame.enabled || !title.enabled}
+          />
+
+          <Group gap="xl">
+            <Checkbox
+              label="Bold"
+              size="xs"
+              checked={title.bold}
+              onChange={(e) => updateTitle({ bold: e.currentTarget.checked })}
+              disabled={!frame.enabled || !title.enabled}
+            />
+            <Checkbox
+              label="Italic"
+              size="xs"
+              checked={title.italic}
+              onChange={(e) => updateTitle({ italic: e.currentTarget.checked })}
+              disabled={!frame.enabled || !title.enabled}
+            />
+          </Group>
         </Stack>
       </Collapse>
     </Stack>

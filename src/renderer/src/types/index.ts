@@ -115,6 +115,26 @@ export const defaultFrameConfig: FrameConfig = {
   borderWidth: 2,
 }
 
+export interface TitleConfig {
+  enabled: boolean
+  text: string
+  font: string
+  size: number    // px at screen resolution
+  color: string
+  bold: boolean
+  italic: boolean
+}
+
+export const defaultTitleConfig: TitleConfig = {
+  enabled: false,
+  text: '',
+  font: 'serif',
+  size: 24,
+  color: '#2E2412',
+  bold: false,
+  italic: false,
+}
+
 export interface ProjectState {
   terrainImagePath: string | null
   heightmapPath: string | null
@@ -145,6 +165,7 @@ export interface ProjectState {
   overlayOnly: boolean
   overlayBrightness: number
   frame: FrameConfig
+  title: TitleConfig
 }
 
 export const defaultParameters: ContourParameters = {
