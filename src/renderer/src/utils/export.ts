@@ -1,4 +1,4 @@
-import type { FrameConfig, TitleConfig } from '../types'
+import type { FrameConfig, TitleConfig, CompassConfig } from '../types'
 
 export interface ExportLayerConfig {
   baseImageUrl: string | null
@@ -8,6 +8,7 @@ export interface ExportLayerConfig {
   frame?: FrameConfig
   includeFrame?: boolean
   title?: TitleConfig
+  compass?: CompassConfig
 }
 
 export type OverlayBackgroundMode = 'transparent' | 'white' | 'colored' | 'grid'
@@ -26,6 +27,7 @@ export interface OverlayExportConfig {
   frame?: FrameConfig
   includeFrame?: boolean
   title?: TitleConfig
+  compass?: CompassConfig
 }
 
 // ---------------------------------------------------------------------------
@@ -115,6 +117,73 @@ function drawTitle(
   ctx.textBaseline = 'middle'
   ctx.textAlign = 'left'
   ctx.fillText(title.text.trim(), frame.marginLeft, frame.marginTop / 2)
+}
+
+// ---------------------------------------------------------------------------
+// Compass rose drawing
+// ---------------------------------------------------------------------------
+
+function drawCompassRose(
+  ctx: CanvasRenderingContext2D,
+  cx: number,
+  cy: number,
+  compass: CompassConfig,
+): void {
+  if (!compass.enabled) return
+  const { size, color, lineWidth } = compass
+  const headLen = size * 0.3
+  const headWid = size * 0.14
+  const labelFontSize = Math.max(8, Math.round(size * 0.35))
+  const labelGap = labelFontSize * 0.8
+
+  const arms = [
+    { dx:  0, dy: -1, label: compass.topLabel,    showArrow: compass.topArrow    },
+    { dx:  1, dy:  0, label: compass.rightLabel,  showArrow: compass.rightArrow  },
+    { dx:  0, dy:  1, label: compass.bottomLabel, showArrow: compass.bottomArrow },
+    { dx: -1, dy:  0, label: compass.leftLabel,   showArrow: compass.leftArrow   },
+  ]
+
+  // Central dot
+  ctx.fillStyle = color
+  ctx.beginPath()
+  ctx.arc(cx, cy, lineWidth * 1.5, 0, Math.PI * 2)
+  ctx.fill()
+
+  for (const { dx, dy, label, showArrow } of arms) {
+    const tipX  = cx + dx * size
+    const tipY  = cy + dy * size
+    const baseX = cx + dx * (size - headLen)
+    const baseY = cy + dy * (size - headLen)
+
+    // Shaft
+    ctx.strokeStyle = color
+    ctx.lineWidth = lineWidth
+    ctx.lineCap = 'round'
+    ctx.beginPath()
+    ctx.moveTo(cx, cy)
+    ctx.lineTo(showArrow ? baseX : tipX, showArrow ? baseY : tipY)
+    ctx.stroke()
+
+    // Arrowhead
+    if (showArrow) {
+      ctx.fillStyle = color
+      ctx.beginPath()
+      ctx.moveTo(tipX, tipY)
+      ctx.lineTo(baseX - dy * headWid, baseY + dx * headWid)
+      ctx.lineTo(baseX + dy * headWid, baseY - dx * headWid)
+      ctx.closePath()
+      ctx.fill()
+    }
+
+    // Label
+    if (label.trim()) {
+      ctx.font = `${labelFontSize}px serif`
+      ctx.fillStyle = color
+      ctx.textAlign   = dx > 0 ? 'left' : dx < 0 ? 'right' : 'center'
+      ctx.textBaseline = dy > 0 ? 'top' : dy < 0 ? 'alphabetic' : 'middle'
+      ctx.fillText(label.trim(), cx + dx * (size + labelGap), cy + dy * (size + labelGap))
+    }
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -297,6 +366,9 @@ export async function exportOverlayToBlob(config: OverlayExportConfig): Promise<
   if (withFrame && config.title) {
     drawTitle(ctx, config.title, config.frame!)
   }
+  if (withFrame && config.compass) {
+    drawCompassRose(ctx, totalW / 2, totalH - config.frame!.marginBottom / 2, config.compass)
+  }
 
   return canvasToBlob(canvas)
 }
@@ -359,6 +431,9 @@ export async function exportToBlob(config: ExportLayerConfig): Promise<Blob> {
   }
   if (withFrame && config.title) {
     drawTitle(ctx, config.title, config.frame!)
+  }
+  if (withFrame && config.compass) {
+    drawCompassRose(ctx, totalW / 2, totalH - config.frame!.marginBottom / 2, config.compass)
   }
 
   return canvasToBlob(canvas)

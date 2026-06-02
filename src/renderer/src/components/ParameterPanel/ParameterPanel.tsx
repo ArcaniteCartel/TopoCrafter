@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { Stack, Text, Slider, NumberInput, ColorInput, Switch, Divider, Group, Select, TextInput, Collapse, Checkbox, SegmentedControl } from '@mantine/core'
 import { useStore } from '../../store/useStore'
-import type { FrameBorderStyle, TitleConfig } from '../../types'
+import type { FrameBorderStyle, TitleConfig, CompassConfig } from '../../types'
 
 const DASH_OPTIONS = [
   { value: 'solid', label: 'Solid' },
@@ -73,6 +73,8 @@ export function ParameterPanel(): JSX.Element {
   const updateFrame = useStore((s) => s.updateFrame)
   const title = useStore((s) => s.title)
   const updateTitle = useStore((s) => s.updateTitle)
+  const compass = useStore((s) => s.compass)
+  const updateCompass = useStore((s) => s.updateCompass)
   const overlayOnly = useStore((s) => s.overlayOnly)
   const setOverlayOnly = useStore((s) => s.setOverlayOnly)
   const overlayBrightness = useStore((s) => s.overlayBrightness)
@@ -835,6 +837,77 @@ export function ParameterPanel(): JSX.Element {
               disabled={!frame.enabled || !title.enabled}
             />
           </Group>
+
+          <Divider label="Compass" labelPosition="left" />
+
+          <Switch
+            label="Show compass"
+            size="sm"
+            checked={compass.enabled}
+            onChange={(e) => updateCompass({ enabled: e.currentTarget.checked })}
+            disabled={!frame.enabled}
+          />
+
+          <Group grow>
+            <NumberInput
+              label="Size (px)"
+              size="xs"
+              min={20}
+              max={200}
+              step={5}
+              value={compass.size}
+              onChange={(v) => typeof v === 'number' && updateCompass({ size: v })}
+              disabled={!frame.enabled || !compass.enabled}
+            />
+            <ColorInput
+              label="Color"
+              size="xs"
+              value={compass.color}
+              onChange={(v) => updateCompass({ color: v })}
+              disabled={!frame.enabled || !compass.enabled}
+            />
+          </Group>
+
+          <NumberInput
+            label="Line width (px)"
+            size="xs"
+            min={0.5}
+            max={5}
+            step={0.5}
+            decimalScale={1}
+            value={compass.lineWidth}
+            onChange={(v) => typeof v === 'number' && updateCompass({ lineWidth: v })}
+            disabled={!frame.enabled || !compass.enabled}
+          />
+
+          <Text size="xs" fw={500} c={frame.enabled && compass.enabled ? undefined : 'dimmed'}>Arms</Text>
+
+          {([
+            { dir: '↑ Top',    labelKey: 'topLabel',    arrowKey: 'topArrow'    },
+            { dir: '→ Right',  labelKey: 'rightLabel',  arrowKey: 'rightArrow'  },
+            { dir: '↓ Bottom', labelKey: 'bottomLabel', arrowKey: 'bottomArrow' },
+            { dir: '← Left',   labelKey: 'leftLabel',   arrowKey: 'leftArrow'   },
+          ] as { dir: string; labelKey: keyof CompassConfig; arrowKey: keyof CompassConfig }[]).map(({ dir, labelKey, arrowKey }) => (
+            <Group key={dir} gap="xs" align="center">
+              <Text size="xs" style={{ width: 56, flexShrink: 0 }}>{dir}</Text>
+              <TextInput
+                size="xs"
+                placeholder="—"
+                value={compass[labelKey] as string}
+                onChange={(e) => updateCompass({ [labelKey]: e.currentTarget.value })}
+                disabled={!frame.enabled || !compass.enabled}
+                maxLength={4}
+                style={{ flex: 1 }}
+              />
+              <Switch
+                size="xs"
+                label="Arrow"
+                checked={compass[arrowKey] as boolean}
+                onChange={(e) => updateCompass({ [arrowKey]: e.currentTarget.checked })}
+                disabled={!frame.enabled || !compass.enabled}
+              />
+            </Group>
+          ))}
         </Stack>
       </Collapse>
     </Stack>

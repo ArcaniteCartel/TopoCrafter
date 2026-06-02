@@ -55,6 +55,7 @@ export function Toolbar(): JSX.Element {
   const elevationCalibration = useStore((s) => s.elevationCalibration)
   const frame = useStore((s) => s.frame)
   const title = useStore((s) => s.title)
+  const compass = useStore((s) => s.compass)
   const { themeId, setTheme } = useThemeStore()
   const [themeModalOpen, setThemeModalOpen] = useState(false)
   const [toolPanelOpen, setToolPanelOpen] = useState(false)
@@ -77,7 +78,7 @@ export function Toolbar(): JSX.Element {
   const handleExport = async (type: StandardExportType, includeFrame: boolean) => {
     setExportError(null)
     try {
-      const frameOpts = { frame, includeFrame: frame.enabled && includeFrame, title }
+      const frameOpts = { frame, includeFrame: frame.enabled && includeFrame, title, compass }
       let blob: Blob
       switch (type) {
         case 'merged-terrain':
@@ -273,6 +274,7 @@ export function Toolbar(): JSX.Element {
           hasGroundResolution={hasGroundResolution}
           frame={frame}
           title={title}
+          compass={compass}
         />
       )}
 

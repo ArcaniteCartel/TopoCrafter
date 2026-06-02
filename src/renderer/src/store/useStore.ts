@@ -2,9 +2,9 @@ import { create } from 'zustand'
 import type {
   ProjectState, ContourParameters, ContourStyle,
   HeightmapInfo, HillshadeParameters, ElevationCalibration,
-  ElevationFlag, SlopeArrow, MapTool, FrameConfig, TitleConfig,
+  ElevationFlag, SlopeArrow, MapTool, FrameConfig, TitleConfig, CompassConfig,
 } from '../types'
-import { defaultParameters, defaultStyle, defaultHillshadeParameters, defaultElevationCalibration, defaultFrameConfig, defaultTitleConfig } from '../types'
+import { defaultParameters, defaultStyle, defaultHillshadeParameters, defaultElevationCalibration, defaultFrameConfig, defaultTitleConfig, defaultCompassConfig } from '../types'
 
 function calToMeters(value: number, cal: ElevationCalibration): number {
   if (cal.unitType === 'feet') return value * 0.3048
@@ -62,6 +62,7 @@ interface AppActions {
   setOverlayBrightness: (brightness: number) => void
   updateFrame: (f: Partial<FrameConfig>) => void
   updateTitle: (t: Partial<TitleConfig>) => void
+  updateCompass: (c: Partial<CompassConfig>) => void
   clearPendingChanges: () => void
   markClean: () => void
   reset: () => void
@@ -98,6 +99,7 @@ const initialState: ProjectState = {
   overlayBrightness: 0.65,
   frame: defaultFrameConfig,
   title: defaultTitleConfig,
+  compass: defaultCompassConfig,
 }
 
 export const useStore = create<ProjectState & AppActions>((set, get) => ({
@@ -298,6 +300,9 @@ export const useStore = create<ProjectState & AppActions>((set, get) => ({
 
   updateTitle: (t) =>
     set((state) => ({ title: { ...state.title, ...t } })),
+
+  updateCompass: (c) =>
+    set((state) => ({ compass: { ...state.compass, ...c } })),
 
   clearPendingChanges: () =>
     set((state) => ({

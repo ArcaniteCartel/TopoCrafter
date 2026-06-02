@@ -135,6 +135,36 @@ export const defaultTitleConfig: TitleConfig = {
   italic: false,
 }
 
+export interface CompassConfig {
+  enabled: boolean
+  size: number       // arm length in px (center to arrow tip)
+  color: string
+  lineWidth: number
+  topLabel: string
+  rightLabel: string
+  bottomLabel: string
+  leftLabel: string
+  topArrow: boolean
+  rightArrow: boolean
+  bottomArrow: boolean
+  leftArrow: boolean
+}
+
+export const defaultCompassConfig: CompassConfig = {
+  enabled: false,
+  size: 40,
+  color: '#2E2412',
+  lineWidth: 1.5,
+  topLabel: 'N',
+  rightLabel: 'E',
+  bottomLabel: 'S',
+  leftLabel: 'W',
+  topArrow: true,
+  rightArrow: true,
+  bottomArrow: true,
+  leftArrow: true,
+}
+
 export interface ProjectState {
   terrainImagePath: string | null
   heightmapPath: string | null
@@ -166,6 +196,7 @@ export interface ProjectState {
   overlayBrightness: number
   frame: FrameConfig
   title: TitleConfig
+  compass: CompassConfig
 }
 
 export const defaultParameters: ContourParameters = {

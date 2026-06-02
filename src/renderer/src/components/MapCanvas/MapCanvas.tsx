@@ -4,7 +4,7 @@ import type { ContourMultiPolygon } from 'd3-contour'
 import { useStore } from '../../store/useStore'
 import { generateContours, contourToSvgPath } from '../../utils/contour'
 import type { ContourSet } from '../../utils/contour'
-import type { ElevationFlag, SlopeArrow, FrameConfig } from '../../types'
+import type { ElevationFlag, SlopeArrow, FrameConfig, CompassConfig } from '../../types'
 
 function getLabelPoint(poly: ContourMultiPolygon): [number, number] | null {
   let best: [number, number][] | null = null
@@ -31,6 +31,83 @@ interface ContourState {
 type SelectedItem = { type: 'flag' | 'slope-arrow'; id: string }
 type DragRef = { type: 'flag' | 'slope-arrow'; itemId: string; startX: number; startY: number; moved: boolean }
 type DragPos = { x: number; y: number; elevation?: number; angleDeg?: number; slopeDeg?: number }
+
+function CompassRoseSvg({ compass, frame }: { compass: CompassConfig; frame: FrameConfig }): JSX.Element {
+  const { size, color, lineWidth } = compass
+  const headLen = size * 0.3
+  const headWid = size * 0.14
+  const labelFontSize = Math.max(8, Math.round(size * 0.35))
+  const labelGap = labelFontSize * 0.8
+  const svgPad = size * 0.15 + labelFontSize * 1.4
+  const svgR = size + svgPad   // SVG viewport radius (center to outer edge)
+  const svgSize = svgR * 2
+  const cx = svgR
+  const cy = svgR
+
+  const arms = [
+    { dx:  0, dy: -1, label: compass.topLabel,    showArrow: compass.topArrow    },
+    { dx:  1, dy:  0, label: compass.rightLabel,  showArrow: compass.rightArrow  },
+    { dx:  0, dy:  1, label: compass.bottomLabel, showArrow: compass.bottomArrow },
+    { dx: -1, dy:  0, label: compass.leftLabel,   showArrow: compass.leftArrow   },
+  ]
+
+  return (
+    <svg
+      width={svgSize}
+      height={svgSize}
+      viewBox={`0 0 ${svgSize} ${svgSize}`}
+      style={{
+        position: 'absolute',
+        left: `calc(50% - ${svgR}px)`,
+        bottom: `calc(${frame.marginBottom / 2}px - ${svgR}px)`,
+        pointerEvents: 'none',
+        overflow: 'visible',
+      }}
+    >
+      {/* Central dot */}
+      <circle cx={cx} cy={cy} r={lineWidth * 1.5} fill={color} />
+
+      {arms.map(({ dx, dy, label, showArrow }, i) => {
+        const tipX  = cx + dx * size
+        const tipY  = cy + dy * size
+        const baseX = cx + dx * (size - headLen)
+        const baseY = cy + dy * (size - headLen)
+        const b1x   = baseX - dy * headWid
+        const b1y   = baseY + dx * headWid
+        const b2x   = baseX + dy * headWid
+        const b2y   = baseY - dx * headWid
+        const lblX  = cx + dx * (size + labelGap)
+        const lblY  = cy + dy * (size + labelGap)
+        const anchor = dx > 0 ? 'start' : dx < 0 ? 'end' : 'middle'
+        const baseline = dy > 0 ? 'hanging' : dy < 0 ? 'auto' : 'middle'
+
+        return (
+          <g key={i}>
+            <line
+              x1={cx} y1={cy}
+              x2={showArrow ? baseX : tipX}
+              y2={showArrow ? baseY : tipY}
+              stroke={color} strokeWidth={lineWidth} strokeLinecap="round"
+            />
+            {showArrow && (
+              <polygon points={`${tipX},${tipY} ${b1x},${b1y} ${b2x},${b2y}`} fill={color} />
+            )}
+            {label.trim() && (
+              <text
+                x={lblX} y={lblY}
+                fontSize={labelFontSize}
+                fontFamily="serif"
+                fill={color}
+                textAnchor={anchor}
+                dominantBaseline={baseline}
+              >{label}</text>
+            )}
+          </g>
+        )
+      })}
+    </svg>
+  )
+}
 
 function FrameBorderOverlay({ frame }: { frame: FrameConfig }): JSX.Element {
   const { borderStyle, borderColor, borderWidth: bw } = frame
@@ -354,6 +431,7 @@ export function MapCanvas(): JSX.Element {
   const overlayBrightness = useStore((s) => s.overlayBrightness)
   const frame = useStore((s) => s.frame)
   const title = useStore((s) => s.title)
+  const compass = useStore((s) => s.compass)
 
   const baseImageUrl = activeTab === 'terrain' ? terrainImageUrl : hillshadeImageUrl
   const showPlaceholder = !baseImageUrl && !heightmap && !hillshadeGenerating && !fileLoadingMessage
@@ -754,6 +832,11 @@ export function MapCanvas(): JSX.Element {
       )}
 
       </div>{/* end inner map area */}
+
+      {/* Compass rose — bottom-centre of the composition */}
+      {frame.enabled && compass.enabled && heightmap && (
+        <CompassRoseSvg compass={compass} frame={frame} />
+      )}
 
       {/* Frame border overlay — rendered over the entire composition (margins + map) */}
       {frame.enabled && frame.borderEnabled && heightmap && (
