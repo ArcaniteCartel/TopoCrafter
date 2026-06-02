@@ -1,4 +1,4 @@
-import type { FrameConfig, TitleConfig, CompassConfig } from '../types'
+import type { FrameConfig, TitleConfig, CompassConfig, ContourStyle, LegendConfig } from '../types'
 
 export interface ExportLayerConfig {
   baseImageUrl: string | null
@@ -9,6 +9,10 @@ export interface ExportLayerConfig {
   includeFrame?: boolean
   title?: TitleConfig
   compass?: CompassConfig
+  legend?: LegendConfig
+  contourStyle?: ContourStyle
+  hasElevationFlags?: boolean
+  hasSlopeArrows?: boolean
 }
 
 export type OverlayBackgroundMode = 'transparent' | 'white' | 'colored' | 'grid'
@@ -28,6 +32,10 @@ export interface OverlayExportConfig {
   includeFrame?: boolean
   title?: TitleConfig
   compass?: CompassConfig
+  legend?: LegendConfig
+  contourStyle?: ContourStyle
+  hasElevationFlags?: boolean
+  hasSlopeArrows?: boolean
 }
 
 // ---------------------------------------------------------------------------
@@ -370,6 +378,93 @@ function drawCompassRose(
 }
 
 // ---------------------------------------------------------------------------
+// Legend drawing
+// ---------------------------------------------------------------------------
+
+function drawLegend(
+  ctx: CanvasRenderingContext2D,
+  legend: LegendConfig,
+  frame: FrameConfig,
+  contourStyle: ContourStyle,
+  hasElevationFlags: boolean,
+  hasSlopeArrows: boolean,
+  totalW: number,
+  totalH: number,
+): void {
+  const items = [
+    legend.showMinorContour                             ? { type: 'minor',     label: legend.minorLabel    } : null,
+    legend.showMajorContour                             ? { type: 'major',     label: legend.majorLabel    } : null,
+    legend.showSeaLevel && contourStyle.showSeaLevel    ? { type: 'sea-level', label: legend.seaLevelLabel } : null,
+    legend.showElevationFlags && hasElevationFlags      ? { type: 'flag',      label: legend.flagLabel     } : null,
+    legend.showSlopeArrows && hasSlopeArrows            ? { type: 'arrow',     label: legend.arrowLabel    } : null,
+  ].filter(Boolean) as { type: string; label: string }[]
+
+  if (items.length === 0) return
+
+  const fs = legend.fontSize
+  const rowH = fs * 1.6
+  const sampW = fs * 3
+  const gapX = fs * 0.6
+  const pad = fs * 0.6
+
+  ctx.font = `${fs}px serif`
+  const maxLabelW = Math.max(...items.map(i => ctx.measureText(i.label).width))
+  const boxW = pad + sampW + gapX + maxLabelW + pad
+  const boxH = pad + items.length * rowH + pad
+
+  const isRight  = legend.position.includes('right')
+  const isBottom = legend.position.includes('bottom')
+  const edgeGap  = Math.max(4, (frame.borderEnabled ? frame.borderWidth * 2 : 0) + 3)
+  const boxX = isRight ? totalW - edgeGap - boxW : edgeGap
+  const boxY = (isBottom ? totalH - frame.marginBottom / 2 : frame.marginTop / 2) - boxH / 2
+
+  ctx.fillStyle = frame.marginColor
+  ctx.fillRect(boxX, boxY, boxW, boxH)
+  ctx.strokeStyle = legend.color; ctx.lineWidth = 0.5
+  ctx.strokeRect(boxX + 0.25, boxY + 0.25, boxW - 0.5, boxH - 0.5)
+
+  ctx.lineCap = 'round'; ctx.setLineDash([])
+
+  for (let i = 0; i < items.length; i++) {
+    const { type, label } = items[i]
+    const midY = boxY + pad + i * rowH + rowH / 2
+    const sx1 = boxX + pad, sx2 = sx1 + sampW
+
+    if (type === 'minor') {
+      ctx.strokeStyle = contourStyle.minorColor; ctx.lineWidth = contourStyle.minorWidth
+      ctx.beginPath(); ctx.moveTo(sx1, midY); ctx.lineTo(sx2, midY); ctx.stroke()
+    } else if (type === 'major') {
+      ctx.strokeStyle = contourStyle.majorColor; ctx.lineWidth = contourStyle.majorWidth
+      ctx.beginPath(); ctx.moveTo(sx1, midY); ctx.lineTo(sx2, midY); ctx.stroke()
+    } else if (type === 'sea-level') {
+      ctx.strokeStyle = contourStyle.seaLevelColor; ctx.lineWidth = contourStyle.seaLevelWidth
+      ctx.setLineDash(contourStyle.seaLevelDash === 'dashed' ? [4, 2] : contourStyle.seaLevelDash === 'dotted' ? [1, 2] : [])
+      ctx.beginPath(); ctx.moveTo(sx1, midY); ctx.lineTo(sx2, midY); ctx.stroke()
+      ctx.setLineDash([])
+    } else if (type === 'flag') {
+      const h = rowH * 0.65, fx = sx1 + sampW / 2 - h * 0.2, fy = midY - h / 2
+      ctx.strokeStyle = contourStyle.labelColor; ctx.lineWidth = 1
+      ctx.beginPath(); ctx.moveTo(fx, fy); ctx.lineTo(fx, fy + h); ctx.stroke()
+      ctx.fillStyle = contourStyle.labelColor; ctx.beginPath()
+      ctx.moveTo(fx, fy); ctx.lineTo(fx + h*0.5, fy + h*0.22); ctx.lineTo(fx, fy + h*0.43)
+      ctx.closePath(); ctx.fill()
+    } else {
+      const w = sampW * 0.6, hw = w * 0.28, hl = w * 0.3
+      const ax1 = sx1 + (sampW - w) / 2, ax2 = ax1 + w, ab = ax2 - hl
+      ctx.strokeStyle = contourStyle.labelColor; ctx.lineWidth = 1
+      ctx.beginPath(); ctx.moveTo(ax1, midY); ctx.lineTo(ab, midY); ctx.stroke()
+      ctx.fillStyle = contourStyle.labelColor; ctx.beginPath()
+      ctx.moveTo(ax2, midY); ctx.lineTo(ab, midY - hw); ctx.lineTo(ab, midY + hw)
+      ctx.closePath(); ctx.fill()
+    }
+
+    ctx.fillStyle = legend.color; ctx.font = `${fs}px serif`
+    ctx.textAlign = 'left'; ctx.textBaseline = 'middle'
+    ctx.fillText(label, sx2 + gapX, midY)
+  }
+}
+
+// ---------------------------------------------------------------------------
 // Grid helpers — draw into offset region of the destination canvas
 // ---------------------------------------------------------------------------
 
@@ -552,6 +647,10 @@ export async function exportOverlayToBlob(config: OverlayExportConfig): Promise<
   if (withFrame && config.compass) {
     drawCompassRose(ctx, totalW / 2, totalH - config.frame!.marginBottom / 2, config.compass)
   }
+  if (withFrame && config.legend && config.contourStyle) {
+    drawLegend(ctx, config.legend, config.frame!, config.contourStyle,
+      config.hasElevationFlags ?? false, config.hasSlopeArrows ?? false, totalW, totalH)
+  }
 
   return canvasToBlob(canvas)
 }
@@ -617,6 +716,10 @@ export async function exportToBlob(config: ExportLayerConfig): Promise<Blob> {
   }
   if (withFrame && config.compass) {
     drawCompassRose(ctx, totalW / 2, totalH - config.frame!.marginBottom / 2, config.compass)
+  }
+  if (withFrame && config.legend && config.contourStyle) {
+    drawLegend(ctx, config.legend, config.frame!, config.contourStyle,
+      config.hasElevationFlags ?? false, config.hasSlopeArrows ?? false, totalW, totalH)
   }
 
   return canvasToBlob(canvas)

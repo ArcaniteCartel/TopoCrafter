@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { Stack, Text, Slider, NumberInput, ColorInput, Switch, Divider, Group, Select, TextInput, Collapse, Checkbox, SegmentedControl } from '@mantine/core'
 import { useStore } from '../../store/useStore'
-import type { FrameBorderStyle, TitleConfig, CompassConfig } from '../../types'
+import type { FrameBorderStyle, TitleConfig, CompassConfig, LegendPosition } from '../../types'
 
 const DASH_OPTIONS = [
   { value: 'solid', label: 'Solid' },
@@ -75,6 +75,10 @@ export function ParameterPanel(): JSX.Element {
   const updateTitle = useStore((s) => s.updateTitle)
   const compass = useStore((s) => s.compass)
   const updateCompass = useStore((s) => s.updateCompass)
+  const legend = useStore((s) => s.legend)
+  const updateLegend = useStore((s) => s.updateLegend)
+  const elevationFlags = useStore((s) => s.elevationFlags)
+  const slopeArrows = useStore((s) => s.slopeArrows)
   const overlayOnly = useStore((s) => s.overlayOnly)
   const setOverlayOnly = useStore((s) => s.setOverlayOnly)
   const overlayBrightness = useStore((s) => s.overlayBrightness)
@@ -925,6 +929,74 @@ export function ParameterPanel(): JSX.Element {
               )}
             </Group>
           ))}
+        <Divider label="Legend" labelPosition="left" />
+        <Switch
+          label="Show legend"
+          size="sm"
+          checked={legend.enabled}
+          onChange={(e) => updateLegend({ enabled: e.currentTarget.checked })}
+          disabled={!frame.enabled}
+        />
+        <Select
+          label="Position"
+          size="xs"
+          value={legend.position}
+          onChange={(v) => v && updateLegend({ position: v as LegendPosition })}
+          disabled={!frame.enabled || !legend.enabled}
+          data={[
+            { value: 'bottom-right', label: 'Bottom right' },
+            { value: 'bottom-left',  label: 'Bottom left' },
+            { value: 'top-right',    label: 'Top right' },
+            { value: 'top-left',     label: 'Top left' },
+          ]}
+        />
+        <Group gap="md" align="flex-end" grow>
+          <NumberInput
+            label="Font size (px)"
+            size="xs"
+            value={legend.fontSize}
+            onChange={(v) => typeof v === 'number' && updateLegend({ fontSize: v })}
+            disabled={!frame.enabled || !legend.enabled}
+            min={6}
+            max={32}
+            step={1}
+          />
+          <ColorInput
+            label="Color"
+            size="xs"
+            value={legend.color}
+            onChange={(v) => updateLegend({ color: v })}
+            disabled={!frame.enabled || !legend.enabled}
+            format="hex"
+          />
+        </Group>
+        <Divider label="Items" labelPosition="left" />
+        {([
+          { key: 'showMinorContour', labelKey: 'minorLabel', label: 'Minor contour' },
+          { key: 'showMajorContour', labelKey: 'majorLabel', label: 'Major contour' },
+          { key: 'showSeaLevel',     labelKey: 'seaLevelLabel', label: 'Sea level' },
+          { key: 'showElevationFlags', labelKey: 'flagLabel', label: 'Elevation flags', requiresData: elevationFlags.length > 0 },
+          { key: 'showSlopeArrows',  labelKey: 'arrowLabel', label: 'Slope arrows', requiresData: slopeArrows.length > 0 },
+        ] as { key: keyof typeof legend; labelKey: keyof typeof legend; label: string; requiresData?: boolean }[]).map(({ key, labelKey, label, requiresData }) => (
+          <Group key={key as string} gap="xs" align="center" wrap="nowrap">
+            <Switch
+              size="xs"
+              checked={legend[key] as boolean}
+              onChange={(e) => updateLegend({ [key]: e.currentTarget.checked })}
+              disabled={!frame.enabled || !legend.enabled || requiresData === false}
+              label={label}
+              style={{ flex: '0 0 auto' }}
+            />
+            <TextInput
+              size="xs"
+              placeholder={label}
+              value={legend[labelKey] as string}
+              onChange={(e) => updateLegend({ [labelKey]: e.currentTarget.value })}
+              disabled={!frame.enabled || !legend.enabled || !(legend[key] as boolean)}
+              style={{ flex: 1, minWidth: 0 }}
+            />
+          </Group>
+        ))}
         </Stack>
       </Collapse>
     </Stack>

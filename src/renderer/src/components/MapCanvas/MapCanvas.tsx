@@ -4,7 +4,7 @@ import type { ContourMultiPolygon } from 'd3-contour'
 import { useStore } from '../../store/useStore'
 import { generateContours, contourToSvgPath } from '../../utils/contour'
 import type { ContourSet } from '../../utils/contour'
-import type { ElevationFlag, SlopeArrow, FrameConfig, CompassConfig } from '../../types'
+import type { ElevationFlag, SlopeArrow, FrameConfig, CompassConfig, LegendConfig, ContourStyle } from '../../types'
 
 function getLabelPoint(poly: ContourMultiPolygon): [number, number] | null {
   let best: [number, number][] | null = null
@@ -289,6 +289,95 @@ function CompassRoseSvg({ compass, frame }: { compass: CompassConfig; frame: Fra
       <g transform={`translate(${svgR},${svgR})`}>
         {rose}
       </g>
+    </svg>
+  )
+}
+
+// ---------------------------------------------------------------------------
+// Legend overlay
+// ---------------------------------------------------------------------------
+
+function LegendOverlay({ legend, frame, style, hasElevationFlags, hasSlopeArrows }: {
+  legend: LegendConfig; frame: FrameConfig; style: ContourStyle
+  hasElevationFlags: boolean; hasSlopeArrows: boolean
+}): JSX.Element | null {
+  const items = [
+    legend.showMinorContour                           ? { type: 'minor',     label: legend.minorLabel    } : null,
+    legend.showMajorContour                           ? { type: 'major',     label: legend.majorLabel    } : null,
+    legend.showSeaLevel && style.showSeaLevel         ? { type: 'sea-level', label: legend.seaLevelLabel } : null,
+    legend.showElevationFlags && hasElevationFlags    ? { type: 'flag',      label: legend.flagLabel     } : null,
+    legend.showSlopeArrows && hasSlopeArrows          ? { type: 'arrow',     label: legend.arrowLabel    } : null,
+  ].filter(Boolean) as { type: string; label: string }[]
+
+  if (items.length === 0) return null
+
+  const fs = legend.fontSize
+  const rowH = fs * 1.6
+  const sampW = fs * 3
+  const gapX = fs * 0.6
+  const pad = fs * 0.6
+  const maxLabelLen = Math.max(...items.map(i => i.label.length))
+  const boxW = pad + sampW + gapX + maxLabelLen * fs * 0.56 + pad
+  const boxH = pad + items.length * rowH + pad
+
+  const isRight  = legend.position.includes('right')
+  const isBottom = legend.position.includes('bottom')
+  const edgeGap  = Math.max(4, (frame.borderEnabled ? frame.borderWidth * 2 : 0) + 3)
+
+  const posStyle: React.CSSProperties = {
+    position: 'absolute',
+    ...(isRight  ? { right: edgeGap }                                  : { left: edgeGap }),
+    ...(isBottom ? { bottom: frame.marginBottom / 2 - boxH / 2 }      : { top: frame.marginTop / 2 - boxH / 2 }),
+    pointerEvents: 'none',
+  }
+
+  return (
+    <svg width={boxW} height={boxH} style={posStyle} overflow="visible">
+      <rect x={0.5} y={0.5} width={boxW-1} height={boxH-1}
+        fill={frame.marginColor} stroke={legend.color} strokeWidth={0.5} rx={1.5} />
+      {items.map(({ type, label }, i) => {
+        const midY = pad + i * rowH + rowH / 2
+        const sx1 = pad, sx2 = pad + sampW
+
+        let sample: JSX.Element
+        if (type === 'minor') {
+          sample = <line x1={sx1} y1={midY} x2={sx2} y2={midY}
+            stroke={style.minorColor} strokeWidth={style.minorWidth} strokeLinecap="round" />
+        } else if (type === 'major') {
+          sample = <line x1={sx1} y1={midY} x2={sx2} y2={midY}
+            stroke={style.majorColor} strokeWidth={style.majorWidth} strokeLinecap="round" />
+        } else if (type === 'sea-level') {
+          sample = <line x1={sx1} y1={midY} x2={sx2} y2={midY}
+            stroke={style.seaLevelColor} strokeWidth={style.seaLevelWidth} strokeLinecap="round"
+            strokeDasharray={style.seaLevelDash === 'dashed' ? '4 2' : style.seaLevelDash === 'dotted' ? '1 2' : undefined} />
+        } else if (type === 'flag') {
+          const h = rowH * 0.65, fx = sx1 + sampW/2 - h*0.2, fy = midY - h/2
+          sample = (
+            <g>
+              <line x1={fx} y1={fy} x2={fx} y2={fy+h} stroke={style.labelColor} strokeWidth={1} />
+              <polygon points={`${fx},${fy} ${fx+h*0.5},${fy+h*0.22} ${fx},${fy+h*0.43}`} fill={style.labelColor} />
+            </g>
+          )
+        } else {
+          const w = sampW * 0.6, hw = w * 0.28, hl = w * 0.3
+          const ax1 = sx1 + (sampW-w)/2, ax2 = ax1 + w, ab = ax2 - hl
+          sample = (
+            <g>
+              <line x1={ax1} y1={midY} x2={ab} y2={midY} stroke={style.labelColor} strokeWidth={1} />
+              <polygon points={`${ax2},${midY} ${ab},${midY-hw} ${ab},${midY+hw}`} fill={style.labelColor} />
+            </g>
+          )
+        }
+        return (
+          <g key={i}>
+            {sample}
+            <text x={sx2 + gapX} y={midY}
+              fontSize={fs} fontFamily="serif" fill={legend.color} dominantBaseline="middle">
+              {label}
+            </text>
+          </g>
+        )
+      })}
     </svg>
   )
 }
@@ -616,6 +705,7 @@ export function MapCanvas(): JSX.Element {
   const frame = useStore((s) => s.frame)
   const title = useStore((s) => s.title)
   const compass = useStore((s) => s.compass)
+  const legend = useStore((s) => s.legend)
 
   const baseImageUrl = activeTab === 'terrain' ? terrainImageUrl : hillshadeImageUrl
   const showPlaceholder = !baseImageUrl && !heightmap && !hillshadeGenerating && !fileLoadingMessage
@@ -1020,6 +1110,17 @@ export function MapCanvas(): JSX.Element {
       {/* Compass rose — bottom-centre of the composition */}
       {frame.enabled && compass.enabled && heightmap && (
         <CompassRoseSvg compass={compass} frame={frame} />
+      )}
+
+      {/* Legend overlay — positioned in margin corner */}
+      {frame.enabled && legend.enabled && heightmap && (
+        <LegendOverlay
+          legend={legend}
+          frame={frame}
+          style={style}
+          hasElevationFlags={elevationFlags.length > 0}
+          hasSlopeArrows={slopeArrows.length > 0}
+        />
       )}
 
       {/* Frame border overlay — rendered over the entire composition (margins + map) */}

@@ -3,7 +3,7 @@ import {
   Modal, SegmentedControl, Slider, NumberInput, ColorInput,
   Radio, Group, Stack, Text, Button, Divider, Switch,
 } from '@mantine/core'
-import { ElevationCalibration, FrameConfig, TitleConfig, CompassConfig } from '../../types'
+import { ElevationCalibration, FrameConfig, TitleConfig, CompassConfig, LegendConfig, ContourStyle } from '../../types'
 import { OverlayExportConfig, OverlayBackgroundMode, OverlayGridType } from '../../utils/export'
 
 interface Props {
@@ -15,6 +15,10 @@ interface Props {
   frame: FrameConfig
   title: TitleConfig
   compass: CompassConfig
+  legend: LegendConfig
+  contourStyle: ContourStyle
+  hasElevationFlags: boolean
+  hasSlopeArrows: boolean
 }
 
 export function OverlayExportModal({
@@ -26,6 +30,10 @@ export function OverlayExportModal({
   frame,
   title,
   compass,
+  legend,
+  contourStyle,
+  hasElevationFlags,
+  hasSlopeArrows,
 }: Props): JSX.Element {
   const unitAbbr = hasGroundResolution
     ? (elevationCalibration.unitType === 'custom'
@@ -81,6 +89,10 @@ export function OverlayExportModal({
         includeFrame: frame.enabled && includeFrame,
         title,
         compass,
+        legend,
+        contourStyle,
+        hasElevationFlags,
+        hasSlopeArrows,
       })
       onClose()
     } catch (e) {

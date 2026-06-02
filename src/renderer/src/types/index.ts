@@ -136,6 +136,41 @@ export const defaultTitleConfig: TitleConfig = {
 }
 
 export type CompassStyle = 'plain' | 'compass' | 'nautical' | 'celtic' | 'dragon'
+export type LegendPosition = 'bottom-left' | 'bottom-right' | 'top-left' | 'top-right'
+
+export interface LegendConfig {
+  enabled: boolean
+  position: LegendPosition
+  fontSize: number
+  color: string
+  showMinorContour: boolean
+  showMajorContour: boolean
+  showSeaLevel: boolean
+  showElevationFlags: boolean
+  showSlopeArrows: boolean
+  minorLabel: string
+  majorLabel: string
+  seaLevelLabel: string
+  flagLabel: string
+  arrowLabel: string
+}
+
+export const defaultLegendConfig: LegendConfig = {
+  enabled: false,
+  position: 'bottom-right',
+  fontSize: 10,
+  color: '#2E2412',
+  showMinorContour: true,
+  showMajorContour: true,
+  showSeaLevel: true,
+  showElevationFlags: true,
+  showSlopeArrows: true,
+  minorLabel: 'Minor contour',
+  majorLabel: 'Major contour',
+  seaLevelLabel: 'Sea level',
+  flagLabel: 'Elevation flag',
+  arrowLabel: 'Slope angle',
+}
 
 export interface CompassConfig {
   enabled: boolean
@@ -201,6 +236,7 @@ export interface ProjectState {
   frame: FrameConfig
   title: TitleConfig
   compass: CompassConfig
+  legend: LegendConfig
 }
 
 export const defaultParameters: ContourParameters = {
