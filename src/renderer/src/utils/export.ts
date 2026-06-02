@@ -1,8 +1,12 @@
+import type { FrameConfig } from '../types'
+
 export interface ExportLayerConfig {
   baseImageUrl: string | null
   includeContours: boolean
   includeAnnotations: boolean
   contourOpacity: number
+  frame?: FrameConfig
+  includeFrame?: boolean
 }
 
 export type OverlayBackgroundMode = 'transparent' | 'white' | 'colored' | 'grid'
@@ -18,106 +22,115 @@ export interface OverlayExportConfig {
   gridColor: string
   gridThickness: number
   gridOpacity: number
+  frame?: FrameConfig
+  includeFrame?: boolean
 }
 
-export async function exportOverlayToBlob(config: OverlayExportConfig): Promise<Blob> {
-  const contourSvg = document.getElementById('contour-svg') as SVGSVGElement | null
-  const annotSvg = document.getElementById('annotation-svg') as SVGSVGElement | null
+// ---------------------------------------------------------------------------
+// Frame border drawing on canvas
+// ---------------------------------------------------------------------------
 
-  const ref = annotSvg ?? contourSvg
-  if (!ref) throw new Error('No SVG layer found — nothing to export')
+function drawFrameBorder(
+  ctx: CanvasRenderingContext2D,
+  frame: FrameConfig,
+  totalW: number,
+  totalH: number,
+): void {
+  const { borderStyle, borderColor, borderWidth: bw } = frame
+  const inset = bw / 2
+  ctx.strokeStyle = borderColor
+  ctx.lineWidth = bw
 
-  const rect = ref.getBoundingClientRect()
-  const width = Math.round(rect.width)
-  const height = Math.round(rect.height)
-  if (width === 0 || height === 0) throw new Error('Map area has zero size')
-
-  const canvas = document.createElement('canvas')
-  canvas.width = width
-  canvas.height = height
-  const ctx = canvas.getContext('2d')!
-
-  if (config.mode === 'white') {
-    ctx.fillStyle = '#ffffff'
-    ctx.fillRect(0, 0, width, height)
-  } else if (config.mode === 'colored') {
-    ctx.globalAlpha = config.bgOpacity
-    ctx.fillStyle = config.bgColor
-    ctx.fillRect(0, 0, width, height)
-    ctx.globalAlpha = 1
-  } else if (config.mode === 'grid') {
-    if (config.bgOpacity > 0) {
-      ctx.globalAlpha = config.bgOpacity
-      ctx.fillStyle = config.bgColor
-      ctx.fillRect(0, 0, width, height)
-      ctx.globalAlpha = 1
-    }
-    if (config.gridType === 'square') {
-      drawSquareGrid(ctx, width, height, config.gridIntervalPx, config.gridColor, config.gridThickness, config.gridOpacity)
-    } else {
-      const rotation =
-        config.gridType === 'hex-flat'    ? 0 :
-        config.gridType === 'hex-pointy'  ? Math.PI / 6 :
-        /* hex-rotated */                   Math.PI / 4
-      drawHexGrid(ctx, width, height, config.gridIntervalPx, rotation, config.gridColor, config.gridThickness, config.gridOpacity)
-    }
+  if (borderStyle === 'single') {
+    ctx.strokeRect(inset, inset, totalW - bw, totalH - bw)
+    return
   }
 
-  if (config.overlayOpacity > 0) {
-    if (contourSvg) {
-      const url = svgToDataUrl(contourSvg, width, height)
-      const img = await loadImage(url)
-      ctx.globalAlpha = config.overlayOpacity
-      ctx.drawImage(img, 0, 0, width, height)
-      ctx.globalAlpha = 1
-    }
-    if (annotSvg) {
-      const url = svgToDataUrl(annotSvg, width, height)
-      const img = await loadImage(url)
-      ctx.globalAlpha = config.overlayOpacity
-      ctx.drawImage(img, 0, 0, width, height)
-      ctx.globalAlpha = 1
-    }
+  if (borderStyle === 'double') {
+    ctx.strokeRect(inset, inset, totalW - bw, totalH - bw)
+    const gap = bw * 1.5
+    const inner = inset + bw + gap
+    ctx.strokeRect(inner, inner, totalW - inner * 2, totalH - inner * 2)
+    return
   }
 
-  return new Promise<Blob>((resolve, reject) => {
-    canvas.toBlob((blob) => {
-      if (blob) resolve(blob)
-      else reject(new Error('Canvas export failed'))
-    }, 'image/png')
-  })
+  if (borderStyle === 'cartographic') {
+    ctx.strokeRect(inset, inset, totalW - bw, totalH - bw)
+    const gap = bw * 2
+    const inner = inset + bw + gap
+    const innerBw = Math.max(1, bw * 0.6)
+    ctx.save()
+    ctx.lineWidth = innerBw
+    ctx.setLineDash([bw * 3, bw * 2])
+    ctx.strokeRect(inner, inner, totalW - inner * 2, totalH - inner * 2)
+    ctx.restore()
+    return
+  }
+
+  if (borderStyle === 'shadow') {
+    ctx.save()
+    ctx.shadowColor = 'rgba(0,0,0,0.45)'
+    ctx.shadowBlur = bw * 2
+    ctx.shadowOffsetX = bw * 1.5
+    ctx.shadowOffsetY = bw * 1.5
+    ctx.strokeRect(inset, inset, totalW - bw, totalH - bw)
+    ctx.restore()
+    return
+  }
+
+  if (borderStyle === 'ornate') {
+    ctx.strokeRect(inset, inset, totalW - bw, totalH - bw)
+    const gap = bw * 1.5
+    const inner = inset + bw + gap
+    ctx.strokeRect(inner, inner, totalW - inner * 2, totalH - inner * 2)
+    const cSize = bw * 3
+    const cornerOff = inner - bw / 2
+    ctx.fillStyle = borderColor
+    ctx.fillRect(cornerOff,              cornerOff,              cSize, cSize)
+    ctx.fillRect(totalW - cornerOff - cSize, cornerOff,              cSize, cSize)
+    ctx.fillRect(cornerOff,              totalH - cornerOff - cSize, cSize, cSize)
+    ctx.fillRect(totalW - cornerOff - cSize, totalH - cornerOff - cSize, cSize, cSize)
+  }
 }
+
+// ---------------------------------------------------------------------------
+// Grid helpers — draw into offset region of the destination canvas
+// ---------------------------------------------------------------------------
 
 function drawSquareGrid(
   ctx: CanvasRenderingContext2D,
-  width: number,
-  height: number,
+  offsetX: number,
+  offsetY: number,
+  mapW: number,
+  mapH: number,
   intervalPx: number,
   color: string,
   thickness: number,
   opacity: number,
 ): void {
   const temp = document.createElement('canvas')
-  temp.width = width
-  temp.height = height
+  temp.width = mapW
+  temp.height = mapH
   const tc = temp.getContext('2d')!
   tc.strokeStyle = color
   tc.lineWidth = thickness
-  for (let x = 0; x <= width; x += intervalPx) {
-    tc.beginPath(); tc.moveTo(x, 0); tc.lineTo(x, height); tc.stroke()
+  for (let x = 0; x <= mapW; x += intervalPx) {
+    tc.beginPath(); tc.moveTo(x, 0); tc.lineTo(x, mapH); tc.stroke()
   }
-  for (let y = 0; y <= height; y += intervalPx) {
-    tc.beginPath(); tc.moveTo(0, y); tc.lineTo(width, y); tc.stroke()
+  for (let y = 0; y <= mapH; y += intervalPx) {
+    tc.beginPath(); tc.moveTo(0, y); tc.lineTo(mapW, y); tc.stroke()
   }
   ctx.globalAlpha = opacity
-  ctx.drawImage(temp, 0, 0)
+  ctx.drawImage(temp, offsetX, offsetY)
   ctx.globalAlpha = 1
 }
 
 function drawHexGrid(
   ctx: CanvasRenderingContext2D,
-  width: number,
-  height: number,
+  offsetX: number,
+  offsetY: number,
+  mapW: number,
+  mapH: number,
   intervalPx: number,
   rotationRad: number,
   color: string,
@@ -137,14 +150,13 @@ function drawHexGrid(
   const b2x = R * (-Math.sqrt(3) * sin)
   const b2y = R * (Math.sqrt(3) * cos)
 
-  // Grid centred on canvas so it is symmetric for all rotation angles
-  const originX = width / 2
-  const originY = height / 2
-  const N = Math.ceil(Math.sqrt(width * width + height * height) / intervalPx) + 2
+  const originX = mapW / 2
+  const originY = mapH / 2
+  const N = Math.ceil(Math.sqrt(mapW * mapW + mapH * mapH) / intervalPx) + 2
 
   const temp = document.createElement('canvas')
-  temp.width = width
-  temp.height = height
+  temp.width = mapW
+  temp.height = mapH
   const tc = temp.getContext('2d')!
   tc.strokeStyle = color
   tc.lineWidth = thickness
@@ -153,7 +165,7 @@ function drawHexGrid(
     for (let m = -N; m <= N; m++) {
       const cx = originX + n * b1x + m * b2x
       const cy = originY + n * b1y + m * b2y
-      if (cx < -2 * R || cx > width + 2 * R || cy < -2 * R || cy > height + 2 * R) continue
+      if (cx < -2 * R || cx > mapW + 2 * R || cy < -2 * R || cy > mapH + 2 * R) continue
       tc.beginPath()
       for (let i = 0; i < 6; i++) {
         const angle = rotationRad + (Math.PI / 3) * i
@@ -168,9 +180,103 @@ function drawHexGrid(
   }
 
   ctx.globalAlpha = opacity
-  ctx.drawImage(temp, 0, 0)
+  ctx.drawImage(temp, offsetX, offsetY)
   ctx.globalAlpha = 1
 }
+
+// ---------------------------------------------------------------------------
+// Overlay-only export
+// ---------------------------------------------------------------------------
+
+export async function exportOverlayToBlob(config: OverlayExportConfig): Promise<Blob> {
+  const contourSvg = document.getElementById('contour-svg') as SVGSVGElement | null
+  const annotSvg = document.getElementById('annotation-svg') as SVGSVGElement | null
+
+  const ref = annotSvg ?? contourSvg
+  if (!ref) throw new Error('No SVG layer found — nothing to export')
+
+  const rect = ref.getBoundingClientRect()
+  const mapW = Math.round(rect.width)
+  const mapH = Math.round(rect.height)
+  if (mapW === 0 || mapH === 0) throw new Error('Map area has zero size')
+
+  const withFrame = !!(config.includeFrame && config.frame)
+  const ml = withFrame ? config.frame!.marginLeft  : 0
+  const mt = withFrame ? config.frame!.marginTop    : 0
+  const mr = withFrame ? config.frame!.marginRight  : 0
+  const mb = withFrame ? config.frame!.marginBottom : 0
+  const totalW = mapW + ml + mr
+  const totalH = mapH + mt + mb
+
+  const canvas = document.createElement('canvas')
+  canvas.width = totalW
+  canvas.height = totalH
+  const ctx = canvas.getContext('2d')!
+
+  // Margin background
+  if (withFrame) {
+    ctx.fillStyle = config.frame!.marginColor
+    ctx.fillRect(0, 0, totalW, totalH)
+  }
+
+  // Map area background (never extends into margins)
+  if (config.mode === 'white') {
+    ctx.fillStyle = '#ffffff'
+    ctx.fillRect(ml, mt, mapW, mapH)
+  } else if (config.mode === 'colored') {
+    ctx.globalAlpha = config.bgOpacity
+    ctx.fillStyle = config.bgColor
+    ctx.fillRect(ml, mt, mapW, mapH)
+    ctx.globalAlpha = 1
+  } else if (config.mode === 'grid') {
+    if (config.bgOpacity > 0) {
+      ctx.globalAlpha = config.bgOpacity
+      ctx.fillStyle = config.bgColor
+      ctx.fillRect(ml, mt, mapW, mapH)
+      ctx.globalAlpha = 1
+    }
+    // Grid drawn onto a temp canvas sized for the map area, then composited at map offset
+    // — ensures grid lines never bleed into the frame margins
+    if (config.gridType === 'square') {
+      drawSquareGrid(ctx, ml, mt, mapW, mapH, config.gridIntervalPx, config.gridColor, config.gridThickness, config.gridOpacity)
+    } else {
+      const rotation =
+        config.gridType === 'hex-flat'   ? 0 :
+        config.gridType === 'hex-pointy' ? Math.PI / 6 :
+        /* hex-rotated */                  Math.PI / 4
+      drawHexGrid(ctx, ml, mt, mapW, mapH, config.gridIntervalPx, rotation, config.gridColor, config.gridThickness, config.gridOpacity)
+    }
+  }
+
+  // SVG overlay layers
+  if (config.overlayOpacity > 0) {
+    if (contourSvg) {
+      const url = svgToDataUrl(contourSvg, mapW, mapH)
+      const img = await loadImage(url)
+      ctx.globalAlpha = config.overlayOpacity
+      ctx.drawImage(img, ml, mt, mapW, mapH)
+      ctx.globalAlpha = 1
+    }
+    if (annotSvg) {
+      const url = svgToDataUrl(annotSvg, mapW, mapH)
+      const img = await loadImage(url)
+      ctx.globalAlpha = config.overlayOpacity
+      ctx.drawImage(img, ml, mt, mapW, mapH)
+      ctx.globalAlpha = 1
+    }
+  }
+
+  // Frame border on top of everything
+  if (withFrame && config.frame!.borderEnabled) {
+    drawFrameBorder(ctx, config.frame!, totalW, totalH)
+  }
+
+  return canvasToBlob(canvas)
+}
+
+// ---------------------------------------------------------------------------
+// Full map export (base image + overlays)
+// ---------------------------------------------------------------------------
 
 export async function exportToBlob(config: ExportLayerConfig): Promise<Blob> {
   const contourSvg = document.getElementById('contour-svg') as SVGSVGElement | null
@@ -180,41 +286,57 @@ export async function exportToBlob(config: ExportLayerConfig): Promise<Blob> {
   if (!ref) throw new Error('No SVG layer found — nothing to export')
 
   const rect = ref.getBoundingClientRect()
-  const width = Math.round(rect.width)
-  const height = Math.round(rect.height)
-  if (width === 0 || height === 0) throw new Error('Map area has zero size')
+  const mapW = Math.round(rect.width)
+  const mapH = Math.round(rect.height)
+  if (mapW === 0 || mapH === 0) throw new Error('Map area has zero size')
+
+  const withFrame = !!(config.includeFrame && config.frame)
+  const ml = withFrame ? config.frame!.marginLeft  : 0
+  const mt = withFrame ? config.frame!.marginTop    : 0
+  const mr = withFrame ? config.frame!.marginRight  : 0
+  const mb = withFrame ? config.frame!.marginBottom : 0
+  const totalW = mapW + ml + mr
+  const totalH = mapH + mt + mb
 
   const canvas = document.createElement('canvas')
-  canvas.width = width
-  canvas.height = height
+  canvas.width = totalW
+  canvas.height = totalH
   const ctx = canvas.getContext('2d')!
+
+  if (withFrame) {
+    ctx.fillStyle = config.frame!.marginColor
+    ctx.fillRect(0, 0, totalW, totalH)
+  }
 
   if (config.baseImageUrl) {
     const img = await loadImage(config.baseImageUrl)
-    ctx.drawImage(img, 0, 0, width, height)
+    ctx.drawImage(img, ml, mt, mapW, mapH)
   }
 
   if (config.includeContours && contourSvg && config.contourOpacity > 0) {
-    const url = svgToDataUrl(contourSvg, width, height)
+    const url = svgToDataUrl(contourSvg, mapW, mapH)
     const img = await loadImage(url)
     ctx.globalAlpha = config.contourOpacity
-    ctx.drawImage(img, 0, 0, width, height)
+    ctx.drawImage(img, ml, mt, mapW, mapH)
     ctx.globalAlpha = 1
   }
 
   if (config.includeAnnotations && annotSvg) {
-    const url = svgToDataUrl(annotSvg, width, height)
+    const url = svgToDataUrl(annotSvg, mapW, mapH)
     const img = await loadImage(url)
-    ctx.drawImage(img, 0, 0, width, height)
+    ctx.drawImage(img, ml, mt, mapW, mapH)
   }
 
-  return new Promise<Blob>((resolve, reject) => {
-    canvas.toBlob((blob) => {
-      if (blob) resolve(blob)
-      else reject(new Error('Canvas export failed'))
-    }, 'image/png')
-  })
+  if (withFrame && config.frame!.borderEnabled) {
+    drawFrameBorder(ctx, config.frame!, totalW, totalH)
+  }
+
+  return canvasToBlob(canvas)
 }
+
+// ---------------------------------------------------------------------------
+// Utilities
+// ---------------------------------------------------------------------------
 
 function svgToDataUrl(svg: SVGSVGElement, width: number, height: number): string {
   const clone = svg.cloneNode(true) as SVGSVGElement
@@ -230,5 +352,14 @@ async function loadImage(url: string): Promise<HTMLImageElement> {
     img.onload = () => resolve(img)
     img.onerror = () => reject(new Error(`Failed to load image: ${url.slice(0, 60)}`))
     img.src = url
+  })
+}
+
+function canvasToBlob(canvas: HTMLCanvasElement): Promise<Blob> {
+  return new Promise((resolve, reject) => {
+    canvas.toBlob((blob) => {
+      if (blob) resolve(blob)
+      else reject(new Error('Canvas export failed'))
+    }, 'image/png')
   })
 }

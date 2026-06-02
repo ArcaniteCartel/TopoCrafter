@@ -2,7 +2,7 @@ import { useState } from 'react'
 import {
   Group, Title, Button, Menu, UnstyledButton,
   Modal, SimpleGrid, Paper, Text, Stack, Box,
-  Popover, Tooltip, ActionIcon, Slider,
+  Popover, Tooltip, ActionIcon, Slider, Switch,
 } from '@mantine/core'
 import { useStore } from '../../store/useStore'
 import { useThemeStore } from '../../store/useThemeStore'
@@ -53,11 +53,16 @@ export function Toolbar(): JSX.Element {
   const mapTool = useStore((s) => s.mapTool)
   const setMapTool = useStore((s) => s.setMapTool)
   const elevationCalibration = useStore((s) => s.elevationCalibration)
+  const frame = useStore((s) => s.frame)
   const { themeId, setTheme } = useThemeStore()
   const [themeModalOpen, setThemeModalOpen] = useState(false)
   const [toolPanelOpen, setToolPanelOpen] = useState(false)
   const [overlayModalOpen, setOverlayModalOpen] = useState(false)
   const [exportError, setExportError] = useState<string | null>(null)
+
+  type StandardExportType = 'merged-terrain' | 'merged-hillshade' | 'unmarked-hillshade' | 'visible-map'
+  const [pendingExport, setPendingExport] = useState<StandardExportType | null>(null)
+  const [exportIncludeFrame, setExportIncludeFrame] = useState(true)
 
   const { unitType, customAbbr, customRatio, realMin, realMax, mapWidth } = elevationCalibration
   const calReady = (unitType === 'feet' || unitType === 'meters'
@@ -68,22 +73,23 @@ export function Toolbar(): JSX.Element {
   const canExport = !!heightmap
   const baseImageUrl = activeTab === 'terrain' ? terrainImageUrl : hillshadeImageUrl
 
-  const handleExport = async (type: 'merged-terrain' | 'merged-hillshade' | 'unmarked-hillshade' | 'visible-map') => {
+  const handleExport = async (type: StandardExportType, includeFrame: boolean) => {
     setExportError(null)
     try {
+      const frameOpts = { frame, includeFrame: frame.enabled && includeFrame }
       let blob: Blob
       switch (type) {
         case 'merged-terrain':
-          blob = await exportToBlob({ baseImageUrl: terrainImageUrl, includeContours: true, includeAnnotations: true, contourOpacity: 1 })
+          blob = await exportToBlob({ baseImageUrl: terrainImageUrl, includeContours: true, includeAnnotations: true, contourOpacity: 1, ...frameOpts })
           break
         case 'merged-hillshade':
-          blob = await exportToBlob({ baseImageUrl: hillshadeImageUrl, includeContours: true, includeAnnotations: true, contourOpacity: 1 })
+          blob = await exportToBlob({ baseImageUrl: hillshadeImageUrl, includeContours: true, includeAnnotations: true, contourOpacity: 1, ...frameOpts })
           break
         case 'unmarked-hillshade':
-          blob = await exportToBlob({ baseImageUrl: hillshadeImageUrl, includeContours: false, includeAnnotations: false, contourOpacity: 1 })
+          blob = await exportToBlob({ baseImageUrl: hillshadeImageUrl, includeContours: false, includeAnnotations: false, contourOpacity: 1, ...frameOpts })
           break
         case 'visible-map':
-          blob = await exportToBlob({ baseImageUrl, includeContours: true, includeAnnotations: true, contourOpacity: style.opacity })
+          blob = await exportToBlob({ baseImageUrl, includeContours: true, includeAnnotations: true, contourOpacity: style.opacity, ...frameOpts })
           break
         default:
           return
@@ -95,6 +101,16 @@ export function Toolbar(): JSX.Element {
       await window.electronAPI.writeFile(savePath, new Uint8Array(buf))
     } catch (err) {
       setExportError(err instanceof Error ? err.message : String(err))
+    }
+  }
+
+  // When frame is enabled, route standard exports through a small options modal first
+  const requestExport = (type: StandardExportType) => {
+    if (frame.enabled) {
+      setExportIncludeFrame(true)
+      setPendingExport(type)
+    } else {
+      handleExport(type, false)
     }
   }
 
@@ -206,13 +222,13 @@ export function Toolbar(): JSX.Element {
             <Menu.Dropdown>
               <Menu.Item
                 disabled={!terrainImageUrl}
-                onClick={() => handleExport('merged-terrain')}
+                onClick={() => requestExport('merged-terrain')}
               >
                 Export merged Terrain image
               </Menu.Item>
               <Menu.Item
                 disabled={!hillshadeImageUrl}
-                onClick={() => handleExport('merged-hillshade')}
+                onClick={() => requestExport('merged-hillshade')}
               >
                 Export merged Hillshade image
               </Menu.Item>
@@ -224,13 +240,13 @@ export function Toolbar(): JSX.Element {
               </Menu.Item>
               <Menu.Item
                 disabled={!hillshadeImageUrl}
-                onClick={() => handleExport('unmarked-hillshade')}
+                onClick={() => requestExport('unmarked-hillshade')}
               >
                 Export unmarked Hillshade
               </Menu.Item>
               <Menu.Item
                 disabled={!baseImageUrl}
-                onClick={() => handleExport('visible-map')}
+                onClick={() => requestExport('visible-map')}
               >
                 Export visible map
               </Menu.Item>
@@ -254,8 +270,35 @@ export function Toolbar(): JSX.Element {
           onExport={handleOverlayExport}
           elevationCalibration={elevationCalibration}
           hasGroundResolution={hasGroundResolution}
+          frame={frame}
         />
       )}
+
+      {/* Lightweight export options modal — shown for standard exports when frame is enabled */}
+      <Modal
+        opened={pendingExport !== null}
+        onClose={() => setPendingExport(null)}
+        title="Export options"
+        size="xs"
+        centered
+      >
+        <Stack gap="md">
+          <Switch
+            label="Include frame in export"
+            size="sm"
+            checked={exportIncludeFrame}
+            onChange={(e) => setExportIncludeFrame(e.currentTarget.checked)}
+          />
+          <Group justify="flex-end">
+            <Button variant="subtle" onClick={() => setPendingExport(null)}>Cancel</Button>
+            <Button onClick={() => {
+              const type = pendingExport!
+              setPendingExport(null)
+              handleExport(type, exportIncludeFrame)
+            }}>Export</Button>
+          </Group>
+        </Stack>
+      </Modal>
 
       <Modal
         opened={themeModalOpen}

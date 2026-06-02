@@ -1,9 +1,9 @@
 import { useState } from 'react'
 import {
   Modal, SegmentedControl, Slider, NumberInput, ColorInput,
-  Radio, Group, Stack, Text, Button, Divider,
+  Radio, Group, Stack, Text, Button, Divider, Switch,
 } from '@mantine/core'
-import { ElevationCalibration } from '../../types'
+import { ElevationCalibration, FrameConfig } from '../../types'
 import { OverlayExportConfig, OverlayBackgroundMode, OverlayGridType } from '../../utils/export'
 
 interface Props {
@@ -12,6 +12,7 @@ interface Props {
   onExport: (config: OverlayExportConfig) => Promise<void>
   elevationCalibration: ElevationCalibration
   hasGroundResolution: boolean
+  frame: FrameConfig
 }
 
 export function OverlayExportModal({
@@ -20,6 +21,7 @@ export function OverlayExportModal({
   onExport,
   elevationCalibration,
   hasGroundResolution,
+  frame,
 }: Props): JSX.Element {
   const unitAbbr = hasGroundResolution
     ? (elevationCalibration.unitType === 'custom'
@@ -40,6 +42,7 @@ export function OverlayExportModal({
   const [gridColor, setGridColor] = useState('#000000')
   const [gridThickness, setGridThickness] = useState<number>(1)
   const [gridOpacity, setGridOpacity] = useState(100)
+  const [includeFrame, setIncludeFrame] = useState(true)
   const [exporting, setExporting] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
@@ -70,6 +73,8 @@ export function OverlayExportModal({
         gridColor,
         gridThickness,
         gridOpacity: gridOpacity / 100,
+        frame,
+        includeFrame: frame.enabled && includeFrame,
       })
       onClose()
     } catch (e) {
@@ -199,6 +204,18 @@ export function OverlayExportModal({
                 </Group>
               </div>
             </Group>
+          </>
+        )}
+
+        {frame.enabled && (
+          <>
+            <Divider label="Frame" labelPosition="left" />
+            <Switch
+              label="Include frame in export"
+              size="sm"
+              checked={includeFrame}
+              onChange={(e) => setIncludeFrame(e.currentTarget.checked)}
+            />
           </>
         )}
 
