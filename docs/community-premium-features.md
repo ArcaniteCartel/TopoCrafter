@@ -9,9 +9,60 @@ fidelity or automation.
 
 ## Build Tier System
 
-The intended implementation uses a Vite compile-time constant (`__PREMIUM__`) so that
-premium code paths are completely absent from community builds (tree-shaken, not merely
-hidden). See `docs/build-tiers.md` (to be written) for the implementation plan.
+### Mechanism
+
+Vite's `define` option replaces named constants at compile time with literal values.
+Setting `__PREMIUM__: true` or `__PREMIUM__: false` in `vite.config.ts` (or
+`electron.vite.config.ts`) means any `if (__PREMIUM__) { … }` guard in source code
+is evaluated at bundle time. The bundler then tree-shakes the dead branch — premium
+code is **physically absent** from the community build, not merely hidden behind a
+runtime check.
+
+### Implementation steps (when ready)
+
+1. **`electron.vite.config.ts`** — add to the renderer (and optionally main) `define`
+   block:
+   ```ts
+   define: {
+     __PREMIUM__: JSON.stringify(process.env.BUILD_TIER === 'premium'),
+   }
+   ```
+
+2. **TypeScript ambient declaration** — add to `src/renderer/src/env.d.ts` (or a new
+   `src/globals.d.ts`):
+   ```ts
+   declare const __PREMIUM__: boolean
+   ```
+   This prevents TypeScript errors on the bare identifier.
+
+3. **`package.json` scripts** — add tier-specific scripts alongside the existing ones:
+   ```json
+   "dev:community":  "electron-vite dev",
+   "dev:premium":    "cross-env BUILD_TIER=premium electron-vite dev",
+   "build:community":"electron-vite build",
+   "build:premium":  "cross-env BUILD_TIER=premium electron-vite build"
+   ```
+   (`cross-env` handles `process.env` assignment cross-platform; add it as a dev
+   dependency if not already present.)
+
+4. **Feature guards in source** — wrap premium-only code paths:
+   ```ts
+   if (__PREMIUM__) {
+     // high-res export, etc.
+   }
+   ```
+   For UI elements (e.g. a locked button in community), use a ternary or conditional
+   render rather than outright removal, so the community user can see what premium
+   offers.
+
+### Properties
+
+| Property | Value |
+|----------|-------|
+| Premium code in community build? | No — tree-shaken out entirely |
+| Runtime performance cost? | None — constant folded at build time |
+| Dev workflow change? | Use `npm run dev:premium` to test premium paths locally |
+| Obfuscation needed? | Not for tree-shaken paths; consider for UI "teaser" elements |
 
 ---
 
