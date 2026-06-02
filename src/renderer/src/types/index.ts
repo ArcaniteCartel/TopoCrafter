@@ -135,8 +135,11 @@ export const defaultTitleConfig: TitleConfig = {
   italic: false,
 }
 
+export type CompassStyle = 'plain' | 'compass' | 'nautical' | 'celtic' | 'dragon'
+
 export interface CompassConfig {
   enabled: boolean
+  compassStyle: CompassStyle
   size: number       // arm length in px (center to arrow tip)
   color: string
   lineWidth: number
@@ -152,6 +155,7 @@ export interface CompassConfig {
 
 export const defaultCompassConfig: CompassConfig = {
   enabled: false,
+  compassStyle: 'plain',
   size: 40,
   color: '#2E2412',
   lineWidth: 1.5,

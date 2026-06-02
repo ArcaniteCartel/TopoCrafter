@@ -848,6 +848,21 @@ export function ParameterPanel(): JSX.Element {
             disabled={!frame.enabled}
           />
 
+          <Select
+            label="Style"
+            size="xs"
+            value={compass.compassStyle}
+            onChange={(v) => v && updateCompass({ compassStyle: v as CompassConfig['compassStyle'] })}
+            disabled={!frame.enabled || !compass.enabled}
+            data={[
+              { value: 'plain',    label: 'Plain' },
+              { value: 'compass',  label: 'Compass Star' },
+              { value: 'nautical', label: 'Nautical' },
+              { value: 'celtic',   label: 'Celtic Knot' },
+              { value: 'dragon',   label: 'Norse Dragon' },
+            ]}
+          />
+
           <Group grow>
             <NumberInput
               label="Size (px)"
@@ -880,7 +895,7 @@ export function ParameterPanel(): JSX.Element {
             disabled={!frame.enabled || !compass.enabled}
           />
 
-          <Text size="xs" fw={500} c={frame.enabled && compass.enabled ? undefined : 'dimmed'}>Arms</Text>
+          <Text size="xs" fw={500} c={frame.enabled && compass.enabled ? undefined : 'dimmed'}>Labels</Text>
 
           {([
             { dir: '↑ Top',    labelKey: 'topLabel',    arrowKey: 'topArrow'    },
@@ -899,13 +914,15 @@ export function ParameterPanel(): JSX.Element {
                 maxLength={4}
                 style={{ flex: 1 }}
               />
-              <Switch
-                size="xs"
-                label="Arrow"
-                checked={compass[arrowKey] as boolean}
-                onChange={(e) => updateCompass({ [arrowKey]: e.currentTarget.checked })}
-                disabled={!frame.enabled || !compass.enabled}
-              />
+              {compass.compassStyle === 'plain' && (
+                <Switch
+                  size="xs"
+                  label="Arrow"
+                  checked={compass[arrowKey] as boolean}
+                  onChange={(e) => updateCompass({ [arrowKey]: e.currentTarget.checked })}
+                  disabled={!frame.enabled || !compass.enabled}
+                />
+              )}
             </Group>
           ))}
         </Stack>

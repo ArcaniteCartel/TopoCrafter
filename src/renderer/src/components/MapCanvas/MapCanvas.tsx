@@ -32,30 +32,252 @@ type SelectedItem = { type: 'flag' | 'slope-arrow'; id: string }
 type DragRef = { type: 'flag' | 'slope-arrow'; itemId: string; startX: number; startY: number; moved: boolean }
 type DragPos = { x: number; y: number; elevation?: number; angleDeg?: number; slopeDeg?: number }
 
-function CompassRoseSvg({ compass, frame }: { compass: CompassConfig; frame: FrameConfig }): JSX.Element {
-  const { size, color, lineWidth } = compass
-  const headLen = size * 0.3
-  const headWid = size * 0.14
-  const labelFontSize = Math.max(8, Math.round(size * 0.35))
-  const labelGap = labelFontSize * 0.8
-  const svgPad = size * 0.15 + labelFontSize * 1.4
-  const svgR = size + svgPad   // SVG viewport radius (center to outer edge)
-  const svgSize = svgR * 2
-  const cx = svgR
-  const cy = svgR
+// ---------------------------------------------------------------------------
+// Compass rose — shared helpers
+// ---------------------------------------------------------------------------
 
+interface RoseProps { s: number; color: string; lw: number; gap: number; fs: number; compass: CompassConfig }
+
+function RLabel({ x, y, text, color, fs, dx, dy }: {
+  x: number; y: number; text: string; color: string; fs: number; dx: number; dy: number
+}): JSX.Element | null {
+  if (!text.trim()) return null
+  return (
+    <text x={x} y={y} fontSize={fs} fontFamily="serif" fill={color}
+      textAnchor={dx > 0 ? 'start' : dx < 0 ? 'end' : 'middle'}
+      dominantBaseline={dy > 0 ? 'hanging' : dy < 0 ? 'auto' : 'middle'}>
+      {text}
+    </text>
+  )
+}
+
+function CardinalLabels({ s, gap, fs, color, compass, nExtra = 0 }: {
+  s: number; gap: number; fs: number; color: string; compass: CompassConfig; nExtra?: number
+}): JSX.Element {
+  return (
+    <>
+      <RLabel x={0}       y={-(s+gap+nExtra)} text={compass.topLabel}    color={color} fs={fs} dx={0}  dy={-1} />
+      <RLabel x={s+gap}   y={0}               text={compass.rightLabel}  color={color} fs={fs} dx={1}  dy={0}  />
+      <RLabel x={0}       y={s+gap}           text={compass.bottomLabel} color={color} fs={fs} dx={0}  dy={1}  />
+      <RLabel x={-(s+gap)} y={0}              text={compass.leftLabel}   color={color} fs={fs} dx={-1} dy={0}  />
+    </>
+  )
+}
+
+// ---------------------------------------------------------------------------
+// Plain (original 4-arm lines)
+// ---------------------------------------------------------------------------
+
+function PlainRose({ s, color, lw, gap, fs, compass }: RoseProps): JSX.Element {
+  const hl = s * 0.3, hw = s * 0.14
   const arms = [
-    { dx:  0, dy: -1, label: compass.topLabel,    showArrow: compass.topArrow    },
-    { dx:  1, dy:  0, label: compass.rightLabel,  showArrow: compass.rightArrow  },
-    { dx:  0, dy:  1, label: compass.bottomLabel, showArrow: compass.bottomArrow },
-    { dx: -1, dy:  0, label: compass.leftLabel,   showArrow: compass.leftArrow   },
+    { dx:  0, dy: -1, label: compass.topLabel,    arrow: compass.topArrow    },
+    { dx:  1, dy:  0, label: compass.rightLabel,  arrow: compass.rightArrow  },
+    { dx:  0, dy:  1, label: compass.bottomLabel, arrow: compass.bottomArrow },
+    { dx: -1, dy:  0, label: compass.leftLabel,   arrow: compass.leftArrow   },
   ]
+  return (
+    <g>
+      <circle r={lw * 1.5} fill={color} />
+      {arms.map(({ dx, dy, label, arrow }, i) => {
+        const tx = dx*s, ty = dy*s
+        const bx = dx*(s-hl), by = dy*(s-hl)
+        return (
+          <g key={i}>
+            <line x1={0} y1={0} x2={arrow ? bx : tx} y2={arrow ? by : ty}
+              stroke={color} strokeWidth={lw} strokeLinecap="round" />
+            {arrow && <polygon points={`${tx},${ty} ${bx-dy*hw},${by+dx*hw} ${bx+dy*hw},${by-dx*hw}`} fill={color} />}
+            <RLabel x={dx*(s+gap)} y={dy*(s+gap)} text={label} color={color} fs={fs} dx={dx} dy={dy} />
+          </g>
+        )
+      })}
+    </g>
+  )
+}
+
+// ---------------------------------------------------------------------------
+// Compass Star (two overlapping 4-pointed stars, N arm white)
+// ---------------------------------------------------------------------------
+
+function CompassStarRose({ s, color, lw, gap, fs, compass }: RoseProps): JSX.Element {
+  const ir = s * 0.22
+  const is_ = s * 0.65, ir2 = is_ * 0.22
+  const sq = Math.SQRT2 / 2
+  const cardPts = [[0,-s],[ir,-ir],[s,0],[ir,ir],[0,s],[-ir,ir],[-s,0],[-ir,-ir]].map(p=>p.join(',')).join(' ')
+  const icPts   = [[is_*sq,-is_*sq],[ir2,0],[is_*sq,is_*sq],[0,ir2],[-is_*sq,is_*sq],[-ir2,0],[-is_*sq,-is_*sq],[0,-ir2]].map(p=>p.join(',')).join(' ')
+  const nPts    = `0,${-s} ${ir},${-ir} 0,0 ${-ir},${-ir}`
+  return (
+    <g>
+      <polygon points={icPts} fill={color} />
+      <polygon points={cardPts} fill={color} />
+      <polygon points={nPts} fill="white" />
+      <polygon points={nPts} fill="none" stroke={color} strokeWidth={lw * 0.5} />
+      <circle r={lw * 2} fill={color} />
+      <CardinalLabels s={s} gap={gap} fs={fs} color={color} compass={compass} />
+    </g>
+  )
+}
+
+// ---------------------------------------------------------------------------
+// Nautical (16-point windrose, N arm white + fleur-de-lis)
+// ---------------------------------------------------------------------------
+
+function NauticalRose({ s, color, lw, gap, fs, compass }: RoseProps): JSX.Element {
+  const fr = s * 0.2
+  const diamonds = Array.from({ length: 16 }, (_, i) => {
+    const θ = i * 22.5 * Math.PI / 180
+    const dx = Math.sin(θ), dy = -Math.cos(θ), px = Math.cos(θ), py = Math.sin(θ)
+    const isC = i % 4 === 0, isIC = i % 4 === 2
+    const tl = isC ? s : isIC ? s*0.72 : s*0.48
+    const hw = isC ? s*0.18 : isIC ? s*0.13 : s*0.06
+    const pts = [[dx*tl,dy*tl],[px*hw,py*hw],[0,0],[-px*hw,-py*hw]].map(p=>p.join(',')).join(' ')
+    return { pts, isN: i === 0 }
+  })
+  return (
+    <g>
+      <circle r={s * 0.22} fill="none" stroke={color} strokeWidth={lw} />
+      {diamonds.map(({ pts, isN }, i) => (
+        <polygon key={i} points={pts}
+          fill={isN ? 'white' : color}
+          stroke={isN ? color : 'none'}
+          strokeWidth={isN ? lw * 0.5 : 0} />
+      ))}
+      {/* Fleur-de-lis at N tip: 3 prongs + collar bar */}
+      <g stroke={color} strokeWidth={lw * 0.9} strokeLinecap="round" fill="none">
+        <line x1={0}       y1={-s}          x2={0}        y2={-(s+fr)}       />
+        <line x1={0}       y1={-s}          x2={-fr*0.55} y2={-(s+fr*0.5)}   />
+        <line x1={0}       y1={-s}          x2={fr*0.55}  y2={-(s+fr*0.5)}   />
+        <line x1={-fr*0.65} y1={-s+fr*0.15} x2={fr*0.65}  y2={-s+fr*0.15}   />
+      </g>
+      <circle r={lw * 2} fill={color} />
+      <CardinalLabels s={s} gap={gap} fs={fs} color={color} compass={compass} nExtra={fr * 0.8} />
+    </g>
+  )
+}
+
+// ---------------------------------------------------------------------------
+// Celtic (cross with ring, double-band groove effect, terminal knots)
+// ---------------------------------------------------------------------------
+
+function CelticRose({ s, color, lw, gap, fs, compass }: RoseProps): JSX.Element {
+  const aw = s * 0.22, ah = aw / 2, rr = s * 0.40, gw = aw * 0.38
+  const termR = ah * 0.85
+  return (
+    <g>
+      {/* Cross arms */}
+      <rect x={-ah} y={-s} width={aw} height={s*2} fill={color} rx={ah} />
+      <rect x={-s} y={-ah} width={s*2} height={aw} fill={color} rx={ah} />
+      {/* Ring donut */}
+      <circle r={rr} fill="none" stroke={color} strokeWidth={aw} />
+      {/* Groove channels along exposed arm sections */}
+      <g stroke="white" strokeOpacity={0.55} strokeLinecap="round" fill="none">
+        <line x1={0} y1={-(rr+ah)} x2={0} y2={-(s-termR)} strokeWidth={gw} />
+        <line x1={0} y1={rr+ah}    x2={0} y2={s-termR}    strokeWidth={gw} />
+        <line x1={-(rr+ah)} y1={0} x2={-(s-termR)} y2={0} strokeWidth={gw} />
+        <line x1={rr+ah}    y1={0} x2={s-termR}    y2={0} strokeWidth={gw} />
+        <circle r={rr} strokeWidth={gw} />
+      </g>
+      {/* Terminal knot circles */}
+      {([[0,-1],[1,0],[0,1],[-1,0]] as [number,number][]).map(([dx,dy],i) => (
+        <g key={i}>
+          <circle cx={dx*s} cy={dy*s} r={termR} fill={color} />
+          <circle cx={dx*s} cy={dy*s} r={termR*0.52} fill="none" stroke="white" strokeOpacity={0.55} strokeWidth={gw*0.65} />
+        </g>
+      ))}
+      <circle r={ah * 0.55} fill={color} />
+      <CardinalLabels s={s} gap={gap + termR} fs={fs} color={color} compass={compass} />
+    </g>
+  )
+}
+
+// ---------------------------------------------------------------------------
+// Dragon / Vegvisir-inspired (8 runic staves, branches, fork terminals)
+// ---------------------------------------------------------------------------
+
+function DragonRose({ s, color, lw, gap, fs, compass }: RoseProps): JSX.Element {
+  const forkLen = s * 0.15, forkAngle = Math.PI / 6
+  const cosF = Math.cos(forkAngle), sinF = Math.sin(forkAngle)
+  const elements: JSX.Element[] = []
+
+  for (let i = 0; i < 8; i++) {
+    const θ = i * Math.PI / 4
+    const dx = Math.sin(θ), dy = -Math.cos(θ), px = Math.cos(θ), py = Math.sin(θ)
+    const isCardinal = i % 2 === 0
+    const tl = isCardinal ? s : s * 0.76
+
+    // Shaft
+    elements.push(
+      <line key={`s${i}`} x1={0} y1={0} x2={dx*tl} y2={dy*tl}
+        stroke={color} strokeWidth={lw * 1.2} strokeLinecap="round" />
+    )
+    // Branches
+    if (isCardinal) {
+      const bps: [number, number, number][] = [[0.60, 0.21, 0], [0.80, 0.14, 0]]
+      bps.forEach(([frac, hr], j) => {
+        const bx = dx*tl*frac, by = dy*tl*frac
+        elements.push(
+          <line key={`b${i}_${j}`} x1={bx-px*s*hr} y1={by-py*s*hr} x2={bx+px*s*hr} y2={by+py*s*hr}
+            stroke={color} strokeWidth={lw} strokeLinecap="round" />
+        )
+      })
+    } else {
+      const bx = dx*tl*0.65, by = dy*tl*0.65
+      elements.push(
+        <line key={`b${i}`} x1={bx-px*s*0.13} y1={by-py*s*0.13} x2={bx+px*s*0.13} y2={by+py*s*0.13}
+          stroke={color} strokeWidth={lw} strokeLinecap="round" />
+      )
+    }
+    // Fork terminal (dragon tail)
+    const f1dx = dx*cosF - dy*sinF, f1dy = dx*sinF + dy*cosF
+    const f2dx = dx*cosF + dy*sinF, f2dy = -dx*sinF + dy*cosF
+    elements.push(
+      <line key={`f1${i}`} x1={dx*tl} y1={dy*tl} x2={dx*tl+f1dx*forkLen} y2={dy*tl+f1dy*forkLen}
+        stroke={color} strokeWidth={lw} strokeLinecap="round" />,
+      <line key={`f2${i}`} x1={dx*tl} y1={dy*tl} x2={dx*tl+f2dx*forkLen} y2={dy*tl+f2dy*forkLen}
+        stroke={color} strokeWidth={lw} strokeLinecap="round" />
+    )
+  }
+
+  // Center: runic ring + dot
+  const cr = lw * 4.5
+  elements.push(
+    <circle key="cr" r={cr} fill="none" stroke={color} strokeWidth={lw * 0.8} />,
+    <circle key="cd" r={lw * 1.8} fill={color} />
+  )
+
+  return (
+    <g>
+      {elements}
+      <CardinalLabels s={s} gap={gap + s * 0.14} fs={fs} color={color} compass={compass} />
+    </g>
+  )
+}
+
+// ---------------------------------------------------------------------------
+// Compass rose SVG container — dispatches to style
+// ---------------------------------------------------------------------------
+
+function CompassRoseSvg({ compass, frame }: { compass: CompassConfig; frame: FrameConfig }): JSX.Element {
+  const { size: s, color, lineWidth: lw } = compass
+  const fs = Math.max(8, Math.round(s * 0.35))
+  const gap = fs * 0.8
+  const svgPad = s * 0.22 + fs * 1.4
+  const svgR = s + svgPad
+  const svgSize = svgR * 2
+  const roseProps: RoseProps = { s, color, lw, gap, fs, compass }
+
+  let rose: JSX.Element
+  switch (compass.compassStyle) {
+    case 'compass':  rose = <CompassStarRose {...roseProps} />; break
+    case 'nautical': rose = <NauticalRose    {...roseProps} />; break
+    case 'celtic':   rose = <CelticRose      {...roseProps} />; break
+    case 'dragon':   rose = <DragonRose      {...roseProps} />; break
+    default:         rose = <PlainRose       {...roseProps} />; break
+  }
 
   return (
     <svg
-      width={svgSize}
-      height={svgSize}
-      viewBox={`0 0 ${svgSize} ${svgSize}`}
+      width={svgSize} height={svgSize} viewBox={`0 0 ${svgSize} ${svgSize}`}
       style={{
         position: 'absolute',
         left: `calc(50% - ${svgR}px)`,
@@ -64,47 +286,9 @@ function CompassRoseSvg({ compass, frame }: { compass: CompassConfig; frame: Fra
         overflow: 'visible',
       }}
     >
-      {/* Central dot */}
-      <circle cx={cx} cy={cy} r={lineWidth * 1.5} fill={color} />
-
-      {arms.map(({ dx, dy, label, showArrow }, i) => {
-        const tipX  = cx + dx * size
-        const tipY  = cy + dy * size
-        const baseX = cx + dx * (size - headLen)
-        const baseY = cy + dy * (size - headLen)
-        const b1x   = baseX - dy * headWid
-        const b1y   = baseY + dx * headWid
-        const b2x   = baseX + dy * headWid
-        const b2y   = baseY - dx * headWid
-        const lblX  = cx + dx * (size + labelGap)
-        const lblY  = cy + dy * (size + labelGap)
-        const anchor = dx > 0 ? 'start' : dx < 0 ? 'end' : 'middle'
-        const baseline = dy > 0 ? 'hanging' : dy < 0 ? 'auto' : 'middle'
-
-        return (
-          <g key={i}>
-            <line
-              x1={cx} y1={cy}
-              x2={showArrow ? baseX : tipX}
-              y2={showArrow ? baseY : tipY}
-              stroke={color} strokeWidth={lineWidth} strokeLinecap="round"
-            />
-            {showArrow && (
-              <polygon points={`${tipX},${tipY} ${b1x},${b1y} ${b2x},${b2y}`} fill={color} />
-            )}
-            {label.trim() && (
-              <text
-                x={lblX} y={lblY}
-                fontSize={labelFontSize}
-                fontFamily="serif"
-                fill={color}
-                textAnchor={anchor}
-                dominantBaseline={baseline}
-              >{label}</text>
-            )}
-          </g>
-        )
-      })}
+      <g transform={`translate(${svgR},${svgR})`}>
+        {rose}
+      </g>
     </svg>
   )
 }
