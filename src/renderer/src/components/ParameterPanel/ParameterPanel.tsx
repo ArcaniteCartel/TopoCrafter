@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
-import { Stack, Text, Slider, NumberInput, ColorInput, Switch, Divider, Group, Select, TextInput, Collapse, Checkbox } from '@mantine/core'
+import { Stack, Text, Slider, NumberInput, ColorInput, Switch, Divider, Group, Select, TextInput, Collapse, Checkbox, SegmentedControl } from '@mantine/core'
 import { useStore } from '../../store/useStore'
+import type { FrameBorderStyle } from '../../types'
 
 const DASH_OPTIONS = [
   { value: 'solid', label: 'Solid' },
@@ -68,6 +69,8 @@ export function ParameterPanel(): JSX.Element {
 
   const activeTab = useStore((s) => s.activeTab)
   const hillshadeDisabled = activeTab !== 'hillshade'
+  const frame = useStore((s) => s.frame)
+  const updateFrame = useStore((s) => s.updateFrame)
   const overlayOnly = useStore((s) => s.overlayOnly)
   const setOverlayOnly = useStore((s) => s.setOverlayOnly)
   const overlayBrightness = useStore((s) => s.overlayBrightness)
@@ -99,6 +102,7 @@ export function ParameterPanel(): JSX.Element {
   )
   const [labelStylingOpen, setLabelStylingOpen] = useState(true)
   const [seaLevelOpen, setSeaLevelOpen] = useState(true)
+  const [framingOpen, setFramingOpen] = useState(true)
 
   // Refs for latest values — safe to read inside event handlers and effects
   const normIntervalRef = useRef(parameters.interval)
@@ -277,6 +281,128 @@ export function ParameterPanel(): JSX.Element {
           <Divider />
         </>
       )}
+
+      <Group
+        justify="space-between"
+        style={{ cursor: 'pointer', userSelect: 'none' }}
+        onClick={() => setFramingOpen((o) => !o)}
+      >
+        <Text fw={600} size="sm" c="dimmed" tt="uppercase" style={{ letterSpacing: 1 }}>
+          Framing
+        </Text>
+        <Text size="lg" c="dimmed">{framingOpen ? '▾' : '▸'}</Text>
+      </Group>
+
+      <Collapse in={framingOpen}>
+        <Stack gap="md">
+          <Switch
+            label="Enable frame"
+            size="sm"
+            checked={frame.enabled}
+            onChange={(e) => updateFrame({ enabled: e.currentTarget.checked })}
+          />
+
+          <ColorInput
+            label="Margin color"
+            size="xs"
+            value={frame.marginColor}
+            onChange={(v) => updateFrame({ marginColor: v })}
+            disabled={!frame.enabled}
+          />
+
+          <Text size="xs" fw={500} c={frame.enabled ? undefined : 'dimmed'}>Margin (px)</Text>
+          <Group grow>
+            <NumberInput
+              label="Top"
+              size="xs"
+              min={0}
+              max={500}
+              step={5}
+              value={frame.marginTop}
+              onChange={(v) => typeof v === 'number' && updateFrame({ marginTop: v })}
+              disabled={!frame.enabled}
+            />
+            <NumberInput
+              label="Bottom"
+              size="xs"
+              min={0}
+              max={500}
+              step={5}
+              value={frame.marginBottom}
+              onChange={(v) => typeof v === 'number' && updateFrame({ marginBottom: v })}
+              disabled={!frame.enabled}
+            />
+          </Group>
+          <Group grow>
+            <NumberInput
+              label="Left"
+              size="xs"
+              min={0}
+              max={500}
+              step={5}
+              value={frame.marginLeft}
+              onChange={(v) => typeof v === 'number' && updateFrame({ marginLeft: v })}
+              disabled={!frame.enabled}
+            />
+            <NumberInput
+              label="Right"
+              size="xs"
+              min={0}
+              max={500}
+              step={5}
+              value={frame.marginRight}
+              onChange={(v) => typeof v === 'number' && updateFrame({ marginRight: v })}
+              disabled={!frame.enabled}
+            />
+          </Group>
+
+          <Switch
+            label="Show border"
+            size="sm"
+            checked={frame.borderEnabled}
+            onChange={(e) => updateFrame({ borderEnabled: e.currentTarget.checked })}
+            disabled={!frame.enabled}
+          />
+
+          <ColorInput
+            label="Border color"
+            size="xs"
+            value={frame.borderColor}
+            onChange={(v) => updateFrame({ borderColor: v })}
+            disabled={!frame.enabled || !frame.borderEnabled}
+          />
+
+          <NumberInput
+            label="Border width (px)"
+            size="xs"
+            min={0.5}
+            max={20}
+            step={0.5}
+            decimalScale={1}
+            value={frame.borderWidth}
+            onChange={(v) => typeof v === 'number' && updateFrame({ borderWidth: v })}
+            disabled={!frame.enabled || !frame.borderEnabled}
+          />
+
+          <Text size="xs" fw={500} c={frame.enabled && frame.borderEnabled ? undefined : 'dimmed'}>Border style</Text>
+          <SegmentedControl
+            size="xs"
+            orientation="vertical"
+            value={frame.borderStyle}
+            onChange={(v) => updateFrame({ borderStyle: v as FrameBorderStyle })}
+            disabled={!frame.enabled || !frame.borderEnabled}
+            data={[
+              { value: 'single',        label: 'Single line' },
+              { value: 'double',        label: 'Double line' },
+              { value: 'cartographic',  label: 'Cartographic' },
+              { value: 'shadow',        label: 'Drop shadow' },
+              { value: 'ornate',        label: 'Ornate' },
+            ]}
+          />
+        </Stack>
+      </Collapse>
+
+      <Divider />
 
       <Text fw={600} size="sm" c="dimmed" tt="uppercase" style={{ letterSpacing: 1 }}>
         Contour Parameters

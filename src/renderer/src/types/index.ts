@@ -87,6 +87,34 @@ export interface SlopeArrow {
 
 export type MapTool = 'none' | 'elevation-flag' | 'slope-arrow'
 
+export type FrameBorderStyle = 'single' | 'double' | 'cartographic' | 'shadow' | 'ornate'
+
+export interface FrameConfig {
+  enabled: boolean
+  marginTop: number
+  marginBottom: number
+  marginLeft: number
+  marginRight: number
+  marginColor: string
+  borderEnabled: boolean
+  borderStyle: FrameBorderStyle
+  borderColor: string
+  borderWidth: number
+}
+
+export const defaultFrameConfig: FrameConfig = {
+  enabled: false,
+  marginTop: 40,
+  marginBottom: 40,
+  marginLeft: 40,
+  marginRight: 40,
+  marginColor: '#ffffff',
+  borderEnabled: true,
+  borderStyle: 'single',
+  borderColor: '#2E2412',
+  borderWidth: 2,
+}
+
 export interface ProjectState {
   terrainImagePath: string | null
   heightmapPath: string | null
@@ -116,6 +144,7 @@ export interface ProjectState {
   mapZoom: number
   overlayOnly: boolean
   overlayBrightness: number
+  frame: FrameConfig
 }
 
 export const defaultParameters: ContourParameters = {

@@ -4,7 +4,7 @@ import type { ContourMultiPolygon } from 'd3-contour'
 import { useStore } from '../../store/useStore'
 import { generateContours, contourToSvgPath } from '../../utils/contour'
 import type { ContourSet } from '../../utils/contour'
-import type { ElevationFlag, SlopeArrow } from '../../types'
+import type { ElevationFlag, SlopeArrow, FrameConfig } from '../../types'
 
 function getLabelPoint(poly: ContourMultiPolygon): [number, number] | null {
   let best: [number, number][] | null = null
@@ -31,6 +31,81 @@ interface ContourState {
 type SelectedItem = { type: 'flag' | 'slope-arrow'; id: string }
 type DragRef = { type: 'flag' | 'slope-arrow'; itemId: string; startX: number; startY: number; moved: boolean }
 type DragPos = { x: number; y: number; elevation?: number; angleDeg?: number; slopeDeg?: number }
+
+function FrameBorderOverlay({ frame }: { frame: FrameConfig }): JSX.Element {
+  const { borderStyle, borderColor, borderWidth: bw } = frame
+  const base: React.CSSProperties = {
+    position: 'absolute',
+    inset: 0,
+    pointerEvents: 'none',
+  }
+
+  if (borderStyle === 'single') {
+    return <div style={{ ...base, border: `${bw}px solid ${borderColor}` }} />
+  }
+
+  if (borderStyle === 'double') {
+    const gap = Math.round(bw * 1.5)
+    return (
+      <div style={{
+        ...base,
+        border: `${bw}px solid ${borderColor}`,
+        outline: `${bw}px solid ${borderColor}`,
+        outlineOffset: `-${bw + gap + bw}px`,
+      }} />
+    )
+  }
+
+  if (borderStyle === 'cartographic') {
+    // Outer solid + inner dashed
+    const gap = Math.round(bw * 2)
+    const innerInset = bw + gap
+    const innerBw = Math.max(1, Math.round(bw * 0.6))
+    return (
+      <>
+        <div style={{ ...base, border: `${bw}px solid ${borderColor}` }} />
+        <div style={{ ...base, inset: innerInset, border: `${innerBw}px dashed ${borderColor}` }} />
+      </>
+    )
+  }
+
+  if (borderStyle === 'shadow') {
+    return (
+      <div style={{
+        ...base,
+        border: `${bw}px solid ${borderColor}`,
+        boxShadow: `${bw * 1.5}px ${bw * 1.5}px ${bw * 2}px rgba(0,0,0,0.45)`,
+      }} />
+    )
+  }
+
+  // ornate — double line with corner accent squares
+  if (borderStyle === 'ornate') {
+    const gap = Math.round(bw * 1.5)
+    const innerInset = bw + gap
+    const cornerSize = bw * 3
+    const cornerStyle: React.CSSProperties = {
+      position: 'absolute',
+      width: cornerSize,
+      height: cornerSize,
+      background: borderColor,
+      pointerEvents: 'none',
+    }
+    return (
+      <>
+        <div style={{ ...base, border: `${bw}px solid ${borderColor}` }} />
+        <div style={{ ...base, inset: innerInset, border: `${bw}px solid ${borderColor}` }} />
+        {/* Corner accent squares at inner border corners */}
+        <div style={{ ...cornerStyle, top: innerInset - bw / 2, left: innerInset - bw / 2 }} />
+        <div style={{ ...cornerStyle, top: innerInset - bw / 2, right: innerInset - bw / 2 }} />
+        <div style={{ ...cornerStyle, bottom: innerInset - bw / 2, left: innerInset - bw / 2 }} />
+        <div style={{ ...cornerStyle, bottom: innerInset - bw / 2, right: innerInset - bw / 2 }} />
+      </>
+    )
+  }
+
+  return <></>
+}
 
 export function MapCanvas(): JSX.Element {
   const terrainImageUrl = useStore((s) => s.terrainImageUrl)
@@ -277,6 +352,7 @@ export function MapCanvas(): JSX.Element {
   const mapZoom = useStore((s) => s.mapZoom)
   const overlayOnly = useStore((s) => s.overlayOnly)
   const overlayBrightness = useStore((s) => s.overlayBrightness)
+  const frame = useStore((s) => s.frame)
 
   const baseImageUrl = activeTab === 'terrain' ? terrainImageUrl : hillshadeImageUrl
   const showPlaceholder = !baseImageUrl && !heightmap && !hillshadeGenerating && !fileLoadingMessage
@@ -303,11 +379,20 @@ export function MapCanvas(): JSX.Element {
         </Center>
       )}
 
-      {/* Inner div scales with zoom; image establishes height, SVGs overlay it */}
+      {/* Outer composition div — establishes total width, includes frame margins */}
       <div style={{
         position: 'relative',
         display: 'inline-block',
         width: `${mapZoom}%`,
+        backgroundColor: (frame.enabled && heightmap) ? frame.marginColor : undefined,
+        padding: (frame.enabled && heightmap)
+          ? `${frame.marginTop}px ${frame.marginRight}px ${frame.marginBottom}px ${frame.marginLeft}px`
+          : undefined,
+      }}>
+
+      {/* Inner map area — position relative so SVG overlays stack correctly */}
+      <div style={{
+        position: 'relative',
         backgroundColor: overlayOnly
           ? `rgb(${Math.round(255 * (0.85 + 0.15 * overlayBrightness))},` +
             `${Math.round(255 * (0.85 + 0.15 * overlayBrightness))},` +
@@ -646,7 +731,14 @@ export function MapCanvas(): JSX.Element {
         </svg>
       )}
 
-      </div>{/* end zoom inner div */}
+      </div>{/* end inner map area */}
+
+      {/* Frame border overlay — rendered over the entire composition (margins + map) */}
+      {frame.enabled && frame.borderEnabled && heightmap && (
+        <FrameBorderOverlay frame={frame} />
+      )}
+
+      </div>{/* end outer composition div */}
 
       {(hillshadeGenerating || fileLoadingMessage) && (
         <Overlay backgroundOpacity={0.5} style={{ position: 'absolute', inset: 0 }}>

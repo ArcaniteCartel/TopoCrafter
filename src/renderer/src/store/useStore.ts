@@ -2,9 +2,9 @@ import { create } from 'zustand'
 import type {
   ProjectState, ContourParameters, ContourStyle,
   HeightmapInfo, HillshadeParameters, ElevationCalibration,
-  ElevationFlag, SlopeArrow, MapTool,
+  ElevationFlag, SlopeArrow, MapTool, FrameConfig,
 } from '../types'
-import { defaultParameters, defaultStyle, defaultHillshadeParameters, defaultElevationCalibration } from '../types'
+import { defaultParameters, defaultStyle, defaultHillshadeParameters, defaultElevationCalibration, defaultFrameConfig } from '../types'
 
 function calToMeters(value: number, cal: ElevationCalibration): number {
   if (cal.unitType === 'feet') return value * 0.3048
@@ -60,6 +60,7 @@ interface AppActions {
   setMapZoom: (zoom: number) => void
   setOverlayOnly: (val: boolean) => void
   setOverlayBrightness: (brightness: number) => void
+  updateFrame: (f: Partial<FrameConfig>) => void
   clearPendingChanges: () => void
   markClean: () => void
   reset: () => void
@@ -94,6 +95,7 @@ const initialState: ProjectState = {
   mapZoom: 100,
   overlayOnly: false,
   overlayBrightness: 0.65,
+  frame: defaultFrameConfig,
 }
 
 export const useStore = create<ProjectState & AppActions>((set, get) => ({
@@ -288,6 +290,9 @@ export const useStore = create<ProjectState & AppActions>((set, get) => ({
   setOverlayOnly: (val) => set({ overlayOnly: val }),
 
   setOverlayBrightness: (brightness) => set({ overlayBrightness: brightness }),
+
+  updateFrame: (f) =>
+    set((state) => ({ frame: { ...state.frame, ...f } })),
 
   clearPendingChanges: () =>
     set((state) => ({
