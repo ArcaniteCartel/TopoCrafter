@@ -89,6 +89,12 @@ export type MapTool = 'none' | 'elevation-flag' | 'slope-arrow'
 
 export type FrameBorderStyle = 'single' | 'double' | 'cartographic' | 'shadow' | 'ornate'
 
+export type FramePosition =
+  | 'top-left'    | 'top-center'    | 'top-right'
+  | 'right-top'   | 'right-middle'  | 'right-bottom'
+  | 'bottom-right'| 'bottom-center' | 'bottom-left'
+  | 'left-bottom' | 'left-middle'   | 'left-top'
+
 export interface FrameConfig {
   enabled: boolean
   marginTop: number
@@ -117,6 +123,7 @@ export const defaultFrameConfig: FrameConfig = {
 
 export interface TitleConfig {
   enabled: boolean
+  position: FramePosition
   text: string
   font: string
   size: number    // px at screen resolution
@@ -127,6 +134,7 @@ export interface TitleConfig {
 
 export const defaultTitleConfig: TitleConfig = {
   enabled: false,
+  position: 'top-left',
   text: '',
   font: 'serif',
   size: 24,
@@ -136,11 +144,11 @@ export const defaultTitleConfig: TitleConfig = {
 }
 
 export type CompassStyle = 'plain' | 'compass' | 'nautical' | 'celtic' | 'dragon'
-export type LegendPosition = 'bottom-left' | 'bottom-right' | 'top-left' | 'top-right'
 
 export interface LegendConfig {
   enabled: boolean
-  position: LegendPosition
+  position: FramePosition
+  columns: number
   fontSize: number
   color: string
   showMinorContour: boolean
@@ -158,6 +166,7 @@ export interface LegendConfig {
 export const defaultLegendConfig: LegendConfig = {
   enabled: false,
   position: 'bottom-right',
+  columns: 1,
   fontSize: 10,
   color: '#2E2412',
   showMinorContour: true,
@@ -175,6 +184,7 @@ export const defaultLegendConfig: LegendConfig = {
 export interface CompassConfig {
   enabled: boolean
   compassStyle: CompassStyle
+  position: FramePosition
   size: number       // arm length in px (center to arrow tip)
   color: string
   lineWidth: number
@@ -191,6 +201,7 @@ export interface CompassConfig {
 export const defaultCompassConfig: CompassConfig = {
   enabled: false,
   compassStyle: 'plain',
+  position: 'bottom-center',
   size: 40,
   color: '#2E2412',
   lineWidth: 1.5,

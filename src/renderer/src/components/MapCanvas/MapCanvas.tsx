@@ -4,7 +4,7 @@ import type { ContourMultiPolygon } from 'd3-contour'
 import { useStore } from '../../store/useStore'
 import { generateContours, contourToSvgPath } from '../../utils/contour'
 import type { ContourSet } from '../../utils/contour'
-import type { ElevationFlag, SlopeArrow, FrameConfig, CompassConfig, LegendConfig, ContourStyle } from '../../types'
+import type { ElevationFlag, SlopeArrow, FrameConfig, CompassConfig, LegendConfig, ContourStyle, FramePosition } from '../../types'
 
 function getLabelPoint(poly: ContourMultiPolygon): [number, number] | null {
   let best: [number, number][] | null = null
@@ -275,14 +275,12 @@ function CompassRoseSvg({ compass, frame }: { compass: CompassConfig; frame: Fra
     default:         rose = <PlainRose       {...roseProps} />; break
   }
 
+  const edgeGap = 4
   return (
     <svg
       width={svgSize} height={svgSize} viewBox={`0 0 ${svgSize} ${svgSize}`}
       style={{
-        position: 'absolute',
-        left: `calc(50% - ${svgR}px)`,
-        bottom: `calc(${frame.marginBottom / 2}px - ${svgR}px)`,
-        pointerEvents: 'none',
+        ...getElementPositionStyle(compass.position, frame, svgSize, svgSize, edgeGap),
         overflow: 'visible',
       }}
     >
@@ -291,6 +289,60 @@ function CompassRoseSvg({ compass, frame }: { compass: CompassConfig; frame: Fra
       </g>
     </svg>
   )
+}
+
+// ---------------------------------------------------------------------------
+// Frame positioning helpers
+// ---------------------------------------------------------------------------
+
+// For elements with known pixel dimensions (SVG overlays like compass, legend)
+function getElementPositionStyle(
+  pos: FramePosition,
+  frame: FrameConfig,
+  w: number,
+  h: number,
+  edgeGap: number,
+): React.CSSProperties {
+  const ml = frame.marginLeft, mr = frame.marginRight
+  const mt = frame.marginTop, mb = frame.marginBottom
+  const mco = (mt - mb) / 2
+  const base: React.CSSProperties = { position: 'absolute', pointerEvents: 'none' }
+  switch (pos) {
+    case 'top-left':     return { ...base, top: mt/2 - h/2,                                     left: edgeGap }
+    case 'top-center':   return { ...base, top: mt/2 - h/2,    left: '50%',    transform: 'translateX(-50%)' }
+    case 'top-right':    return { ...base, top: mt/2 - h/2,                                     right: edgeGap }
+    case 'right-top':    return { ...base, top: mt + edgeGap,                                    right: mr/2 - w/2 }
+    case 'right-middle': return { ...base, top: `calc(50% + ${mco}px)`, transform: 'translateY(-50%)', right: mr/2 - w/2 }
+    case 'right-bottom': return { ...base, bottom: mb + edgeGap,                                 right: mr/2 - w/2 }
+    case 'bottom-right': return { ...base, bottom: mb/2 - h/2,                                  right: edgeGap }
+    case 'bottom-center':return { ...base, bottom: mb/2 - h/2, left: '50%',    transform: 'translateX(-50%)' }
+    case 'bottom-left':  return { ...base, bottom: mb/2 - h/2,                                  left: edgeGap }
+    case 'left-bottom':  return { ...base, bottom: mb + edgeGap,                                 left: ml/2 - w/2 }
+    case 'left-middle':  return { ...base, top: `calc(50% + ${mco}px)`, transform: 'translateY(-50%)', left: ml/2 - w/2 }
+    case 'left-top':     return { ...base, top: mt + edgeGap,                                   left: ml/2 - w/2 }
+  }
+}
+
+// For the title (variable width text) — wrapper is positioned at anchor, inner may rotate
+function getTitleWrapperStyle(pos: FramePosition, frame: FrameConfig, edgeGap: number): React.CSSProperties {
+  const ml = frame.marginLeft, mr = frame.marginRight
+  const mt = frame.marginTop, mb = frame.marginBottom
+  const mco = (mt - mb) / 2
+  const base: React.CSSProperties = { position: 'absolute', pointerEvents: 'none', userSelect: 'none' }
+  switch (pos) {
+    case 'top-left':     return { ...base, left: edgeGap,  top:    mt/2,                      transform: 'translateY(-50%)' }
+    case 'top-center':   return { ...base, left: '50%',    top:    mt/2,                      transform: 'translate(-50%, -50%)' }
+    case 'top-right':    return { ...base, right: edgeGap, top:    mt/2,                      transform: 'translateY(-50%)' }
+    case 'right-top':    return { ...base, right: mr/2,    top:    mt + edgeGap,              transform: 'translateX(50%)' }
+    case 'right-middle': return { ...base, right: mr/2,    top:    `calc(50% + ${mco}px)`,   transform: 'translate(50%, -50%)' }
+    case 'right-bottom': return { ...base, right: mr/2,    bottom: mb + edgeGap,              transform: 'translateX(50%)' }
+    case 'bottom-right': return { ...base, right: edgeGap, bottom: mb/2,                      transform: 'translateY(50%)' }
+    case 'bottom-center':return { ...base, left: '50%',    bottom: mb/2,                      transform: 'translate(-50%, 50%)' }
+    case 'bottom-left':  return { ...base, left: edgeGap,  bottom: mb/2,                      transform: 'translateY(50%)' }
+    case 'left-bottom':  return { ...base, left: ml/2,     bottom: mb + edgeGap,              transform: 'translateX(-50%)' }
+    case 'left-middle':  return { ...base, left: ml/2,     top:    `calc(50% + ${mco}px)`,   transform: 'translate(-50%, -50%)' }
+    case 'left-top':     return { ...base, left: ml/2,     top:    mt + edgeGap,              transform: 'translateX(-50%)' }
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -316,28 +368,27 @@ function LegendOverlay({ legend, frame, style, hasElevationFlags, hasSlopeArrows
   const sampW = fs * 3
   const gapX = fs * 0.6
   const pad = fs * 0.6
+  const colGap = pad
   const maxLabelLen = Math.max(...items.map(i => i.label.length))
-  const boxW = pad + sampW + gapX + maxLabelLen * fs * 0.56 + pad
-  const boxH = pad + items.length * rowH + pad
+  const colW = sampW + gapX + maxLabelLen * fs * 0.56
 
-  const isRight  = legend.position.includes('right')
-  const isBottom = legend.position.includes('bottom')
-  const edgeGap  = Math.max(4, (frame.borderEnabled ? frame.borderWidth * 2 : 0) + 3)
+  const cols = Math.max(1, Math.min(legend.columns, items.length))
+  const rows = Math.ceil(items.length / cols)
 
-  const posStyle: React.CSSProperties = {
-    position: 'absolute',
-    ...(isRight  ? { right: edgeGap }                                  : { left: edgeGap }),
-    ...(isBottom ? { bottom: frame.marginBottom / 2 - boxH / 2 }      : { top: frame.marginTop / 2 - boxH / 2 }),
-    pointerEvents: 'none',
-  }
+  const boxW = pad + cols * colW + (cols - 1) * colGap + pad
+  const boxH = pad + rows * rowH + pad
+  const edgeGap = Math.max(4, (frame.borderEnabled ? frame.borderWidth * 2 : 0) + 3)
 
   return (
-    <svg width={boxW} height={boxH} style={posStyle} overflow="visible">
+    <svg width={boxW} height={boxH} style={getElementPositionStyle(legend.position, frame, boxW, boxH, edgeGap)} overflow="visible">
       <rect x={0.5} y={0.5} width={boxW-1} height={boxH-1}
         fill={frame.marginColor} stroke={legend.color} strokeWidth={0.5} rx={1.5} />
       {items.map(({ type, label }, i) => {
-        const midY = pad + i * rowH + rowH / 2
-        const sx1 = pad, sx2 = pad + sampW
+        const col = Math.floor(i / rows)
+        const row = i % rows
+        const sx1 = pad + col * (colW + colGap)
+        const sx2 = sx1 + sampW
+        const midY = pad + row * rowH + rowH / 2
 
         let sample: JSX.Element
         if (type === 'minor') {
@@ -743,26 +794,24 @@ export function MapCanvas(): JSX.Element {
           : undefined,
       }}>
 
-      {/* Title — absolutely positioned in the top margin area */}
-      {frame.enabled && title.enabled && title.text.trim() && (
-        <div style={{
-          position: 'absolute',
-          top: frame.marginTop / 2,
-          left: frame.marginLeft,
-          transform: 'translateY(-50%)',
-          pointerEvents: 'none',
-          userSelect: 'none',
-          color: title.color,
-          fontFamily: title.font,
-          fontSize: title.size,
-          fontWeight: title.bold ? 'bold' : 'normal',
-          fontStyle: title.italic ? 'italic' : 'normal',
-          whiteSpace: 'nowrap',
-          lineHeight: 1,
-        }}>
-          {title.text}
-        </div>
-      )}
+      {/* Title — positioned in the chosen margin area */}
+      {frame.enabled && title.enabled && title.text.trim() && (() => {
+        const edgeGap = 4
+        const isLeft = title.position.startsWith('left-')
+        const isRight = title.position.startsWith('right-')
+        const rotation = isLeft ? 'rotate(-90deg)' : isRight ? 'rotate(90deg)' : undefined
+        const textStyle: React.CSSProperties = {
+          color: title.color, fontFamily: title.font, fontSize: title.size,
+          fontWeight: title.bold ? 'bold' : 'normal', fontStyle: title.italic ? 'italic' : 'normal',
+          whiteSpace: 'nowrap', lineHeight: 1,
+          ...(rotation ? { transform: rotation } : {}),
+        }
+        return (
+          <div style={getTitleWrapperStyle(title.position, frame, edgeGap)}>
+            <div style={textStyle}>{title.text}</div>
+          </div>
+        )
+      })()}
 
       {/* Inner map area — position relative so SVG overlays stack correctly */}
       <div style={{

@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { Stack, Text, Slider, NumberInput, ColorInput, Switch, Divider, Group, Select, TextInput, Collapse, Checkbox, SegmentedControl } from '@mantine/core'
 import { useStore } from '../../store/useStore'
-import type { FrameBorderStyle, TitleConfig, CompassConfig, LegendPosition } from '../../types'
+import type { FrameBorderStyle, TitleConfig, CompassConfig, FramePosition } from '../../types'
 
 const DASH_OPTIONS = [
   { value: 'solid', label: 'Solid' },
@@ -16,6 +16,21 @@ const FONT_OPTIONS = [
   { value: 'Times New Roman, serif', label: 'Times New Roman' },
   { value: 'Arial, sans-serif', label: 'Arial' },
   { value: 'monospace', label: 'Monospace' },
+]
+
+const POSITION_OPTIONS: { value: FramePosition; label: string }[] = [
+  { value: 'top-left',      label: 'Top — left corner' },
+  { value: 'top-center',    label: 'Top — center' },
+  { value: 'top-right',     label: 'Top — right corner' },
+  { value: 'right-top',     label: 'Right — near top' },
+  { value: 'right-middle',  label: 'Right — middle' },
+  { value: 'right-bottom',  label: 'Right — near bottom' },
+  { value: 'bottom-right',  label: 'Bottom — right corner' },
+  { value: 'bottom-center', label: 'Bottom — center' },
+  { value: 'bottom-left',   label: 'Bottom — left corner' },
+  { value: 'left-bottom',   label: 'Left — near bottom' },
+  { value: 'left-middle',   label: 'Left — middle' },
+  { value: 'left-top',      label: 'Left — near top' },
 ]
 
 const UNIT_OPTIONS = [
@@ -787,6 +802,15 @@ export function ParameterPanel(): JSX.Element {
             disabled={!frame.enabled}
           />
 
+          <Select
+            label="Position"
+            size="xs"
+            data={POSITION_OPTIONS}
+            value={title.position}
+            onChange={(v) => v && updateTitle({ position: v as FramePosition })}
+            disabled={!frame.enabled || !title.enabled}
+          />
+
           <TextInput
             label="Title text"
             size="xs"
@@ -850,6 +874,15 @@ export function ParameterPanel(): JSX.Element {
             checked={compass.enabled}
             onChange={(e) => updateCompass({ enabled: e.currentTarget.checked })}
             disabled={!frame.enabled}
+          />
+
+          <Select
+            label="Position"
+            size="xs"
+            data={POSITION_OPTIONS}
+            value={compass.position}
+            onChange={(v) => v && updateCompass({ position: v as FramePosition })}
+            disabled={!frame.enabled || !compass.enabled}
           />
 
           <Select
@@ -940,17 +973,22 @@ export function ParameterPanel(): JSX.Element {
         <Select
           label="Position"
           size="xs"
+          data={POSITION_OPTIONS}
           value={legend.position}
-          onChange={(v) => v && updateLegend({ position: v as LegendPosition })}
+          onChange={(v) => v && updateLegend({ position: v as FramePosition })}
           disabled={!frame.enabled || !legend.enabled}
-          data={[
-            { value: 'bottom-right', label: 'Bottom right' },
-            { value: 'bottom-left',  label: 'Bottom left' },
-            { value: 'top-right',    label: 'Top right' },
-            { value: 'top-left',     label: 'Top left' },
-          ]}
         />
         <Group gap="md" align="flex-end" grow>
+          <NumberInput
+            label="Columns"
+            size="xs"
+            value={legend.columns}
+            onChange={(v) => typeof v === 'number' && updateLegend({ columns: Math.max(1, Math.round(v)) })}
+            disabled={!frame.enabled || !legend.enabled}
+            min={1}
+            max={5}
+            step={1}
+          />
           <NumberInput
             label="Font size (px)"
             size="xs"

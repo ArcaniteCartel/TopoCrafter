@@ -1,4 +1,4 @@
-import type { FrameConfig, TitleConfig, CompassConfig, ContourStyle, LegendConfig } from '../types'
+import type { FrameConfig, TitleConfig, CompassConfig, ContourStyle, LegendConfig, FramePosition } from '../types'
 
 export interface ExportLayerConfig {
   baseImageUrl: string | null
@@ -36,6 +36,66 @@ export interface OverlayExportConfig {
   contourStyle?: ContourStyle
   hasElevationFlags?: boolean
   hasSlopeArrows?: boolean
+}
+
+// ---------------------------------------------------------------------------
+// Frame position helpers
+// ---------------------------------------------------------------------------
+
+// Returns center point for a symmetric element (compass) at the given position
+function getPositionCenter(
+  pos: FramePosition,
+  frame: FrameConfig,
+  totalW: number,
+  totalH: number,
+  edgeGap: number,
+): [number, number] {
+  const ml = frame.marginLeft, mr = frame.marginRight
+  const mt = frame.marginTop, mb = frame.marginBottom
+  const mapH = totalH - mt - mb
+  switch (pos) {
+    case 'top-left':     return [edgeGap,             mt / 2]
+    case 'top-center':   return [totalW / 2,           mt / 2]
+    case 'top-right':    return [totalW - edgeGap,     mt / 2]
+    case 'right-top':    return [totalW - mr / 2,      mt + edgeGap]
+    case 'right-middle': return [totalW - mr / 2,      mt + mapH / 2]
+    case 'right-bottom': return [totalW - mr / 2,      totalH - mb - edgeGap]
+    case 'bottom-right': return [totalW - edgeGap,     totalH - mb / 2]
+    case 'bottom-center':return [totalW / 2,           totalH - mb / 2]
+    case 'bottom-left':  return [edgeGap,              totalH - mb / 2]
+    case 'left-bottom':  return [ml / 2,               totalH - mb - edgeGap]
+    case 'left-middle':  return [ml / 2,               mt + mapH / 2]
+    case 'left-top':     return [ml / 2,               mt + edgeGap]
+  }
+}
+
+// Returns top-left corner for a rectangular element (legend box) at the given position
+function getBoxOrigin(
+  pos: FramePosition,
+  frame: FrameConfig,
+  totalW: number,
+  totalH: number,
+  boxW: number,
+  boxH: number,
+  edgeGap: number,
+): [number, number] {
+  const ml = frame.marginLeft, mr = frame.marginRight
+  const mt = frame.marginTop, mb = frame.marginBottom
+  const mapH = totalH - mt - mb
+  switch (pos) {
+    case 'top-left':     return [edgeGap,                   mt / 2 - boxH / 2]
+    case 'top-center':   return [totalW / 2 - boxW / 2,     mt / 2 - boxH / 2]
+    case 'top-right':    return [totalW - edgeGap - boxW,   mt / 2 - boxH / 2]
+    case 'right-top':    return [totalW - mr / 2 - boxW / 2, mt + edgeGap]
+    case 'right-middle': return [totalW - mr / 2 - boxW / 2, mt + mapH / 2 - boxH / 2]
+    case 'right-bottom': return [totalW - mr / 2 - boxW / 2, totalH - mb - edgeGap - boxH]
+    case 'bottom-right': return [totalW - edgeGap - boxW,   totalH - mb / 2 - boxH / 2]
+    case 'bottom-center':return [totalW / 2 - boxW / 2,     totalH - mb / 2 - boxH / 2]
+    case 'bottom-left':  return [edgeGap,                   totalH - mb / 2 - boxH / 2]
+    case 'left-bottom':  return [ml / 2 - boxW / 2,         totalH - mb - edgeGap - boxH]
+    case 'left-middle':  return [ml / 2 - boxW / 2,         mt + mapH / 2 - boxH / 2]
+    case 'left-top':     return [ml / 2 - boxW / 2,         mt + edgeGap]
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -113,8 +173,11 @@ function drawTitle(
   ctx: CanvasRenderingContext2D,
   title: TitleConfig,
   frame: FrameConfig,
+  totalW: number,
+  totalH: number,
 ): void {
   if (!title.enabled || !title.text.trim()) return
+  const edgeGap = 4
   const parts: string[] = []
   if (title.bold) parts.push('bold')
   if (title.italic) parts.push('italic')
@@ -122,9 +185,30 @@ function drawTitle(
   parts.push(title.font)
   ctx.font = parts.join(' ')
   ctx.fillStyle = title.color
-  ctx.textBaseline = 'middle'
-  ctx.textAlign = 'left'
-  ctx.fillText(title.text.trim(), frame.marginLeft, frame.marginTop / 2)
+
+  const pos = title.position
+  const text = title.text.trim()
+  const [cx, cy] = getPositionCenter(pos, frame, totalW, totalH, edgeGap)
+
+  const isLeft = pos.startsWith('left-')
+  const isRight = pos.startsWith('right-')
+
+  if (isLeft || isRight) {
+    const angle = isLeft ? -Math.PI / 2 : Math.PI / 2
+    ctx.save()
+    ctx.translate(cx, cy)
+    ctx.rotate(angle)
+    ctx.textAlign = 'center'
+    ctx.textBaseline = 'middle'
+    ctx.fillText(text, 0, 0)
+    ctx.restore()
+  } else {
+    ctx.textBaseline = 'middle'
+    if (pos === 'top-left' || pos === 'bottom-left')      ctx.textAlign = 'left'
+    else if (pos === 'top-right' || pos === 'bottom-right') ctx.textAlign = 'right'
+    else                                                    ctx.textAlign = 'center'
+    ctx.fillText(text, cx, cy)
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -406,17 +490,20 @@ function drawLegend(
   const sampW = fs * 3
   const gapX = fs * 0.6
   const pad = fs * 0.6
+  const colGap = pad
 
   ctx.font = `${fs}px serif`
   const maxLabelW = Math.max(...items.map(i => ctx.measureText(i.label).width))
-  const boxW = pad + sampW + gapX + maxLabelW + pad
-  const boxH = pad + items.length * rowH + pad
+  const colW = sampW + gapX + maxLabelW
 
-  const isRight  = legend.position.includes('right')
-  const isBottom = legend.position.includes('bottom')
-  const edgeGap  = Math.max(4, (frame.borderEnabled ? frame.borderWidth * 2 : 0) + 3)
-  const boxX = isRight ? totalW - edgeGap - boxW : edgeGap
-  const boxY = (isBottom ? totalH - frame.marginBottom / 2 : frame.marginTop / 2) - boxH / 2
+  const cols = Math.max(1, Math.min(legend.columns, items.length))
+  const rows = Math.ceil(items.length / cols)
+
+  const boxW = pad + cols * colW + (cols - 1) * colGap + pad
+  const boxH = pad + rows * rowH + pad
+  const edgeGap = Math.max(4, (frame.borderEnabled ? frame.borderWidth * 2 : 0) + 3)
+
+  const [boxX, boxY] = getBoxOrigin(legend.position, frame, totalW, totalH, boxW, boxH, edgeGap)
 
   ctx.fillStyle = frame.marginColor
   ctx.fillRect(boxX, boxY, boxW, boxH)
@@ -427,8 +514,11 @@ function drawLegend(
 
   for (let i = 0; i < items.length; i++) {
     const { type, label } = items[i]
-    const midY = boxY + pad + i * rowH + rowH / 2
-    const sx1 = boxX + pad, sx2 = sx1 + sampW
+    const col = Math.floor(i / rows)
+    const row = i % rows
+    const sx1 = boxX + pad + col * (colW + colGap)
+    const sx2 = sx1 + sampW
+    const midY = boxY + pad + row * rowH + rowH / 2
 
     if (type === 'minor') {
       ctx.strokeStyle = contourStyle.minorColor; ctx.lineWidth = contourStyle.minorWidth
@@ -642,10 +732,12 @@ export async function exportOverlayToBlob(config: OverlayExportConfig): Promise<
     drawFrameBorder(ctx, config.frame!, totalW, totalH)
   }
   if (withFrame && config.title) {
-    drawTitle(ctx, config.title, config.frame!)
+    drawTitle(ctx, config.title, config.frame!, totalW, totalH)
   }
   if (withFrame && config.compass) {
-    drawCompassRose(ctx, totalW / 2, totalH - config.frame!.marginBottom / 2, config.compass)
+    const edgeGap = 4
+    const [cx, cy] = getPositionCenter(config.compass.position, config.frame!, totalW, totalH, edgeGap)
+    drawCompassRose(ctx, cx, cy, config.compass)
   }
   if (withFrame && config.legend && config.contourStyle) {
     drawLegend(ctx, config.legend, config.frame!, config.contourStyle,
@@ -712,10 +804,12 @@ export async function exportToBlob(config: ExportLayerConfig): Promise<Blob> {
     drawFrameBorder(ctx, config.frame!, totalW, totalH)
   }
   if (withFrame && config.title) {
-    drawTitle(ctx, config.title, config.frame!)
+    drawTitle(ctx, config.title, config.frame!, totalW, totalH)
   }
   if (withFrame && config.compass) {
-    drawCompassRose(ctx, totalW / 2, totalH - config.frame!.marginBottom / 2, config.compass)
+    const edgeGap = 4
+    const [cx, cy] = getPositionCenter(config.compass.position, config.frame!, totalW, totalH, edgeGap)
+    drawCompassRose(ctx, cx, cy, config.compass)
   }
   if (withFrame && config.legend && config.contourStyle) {
     drawLegend(ctx, config.legend, config.frame!, config.contourStyle,
