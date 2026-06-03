@@ -41,6 +41,18 @@ function ArrowIcon(): JSX.Element {
   )
 }
 
+function AnchorIcon(): JSX.Element {
+  return (
+    <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round">
+      <circle cx="8" cy="8" r="3" />
+      <line x1="8" y1="1" x2="8" y2="5" />
+      <line x1="8" y1="11" x2="8" y2="15" />
+      <line x1="1" y1="8" x2="5" y2="8" />
+      <line x1="11" y1="8" x2="15" y2="8" />
+    </svg>
+  )
+}
+
 export function Toolbar(): JSX.Element {
   const heightmap = useStore((s) => s.heightmap)
   const mapZoom = useStore((s) => s.mapZoom)
@@ -57,6 +69,7 @@ export function Toolbar(): JSX.Element {
   const title = useStore((s) => s.title)
   const compass = useStore((s) => s.compass)
   const legend = useStore((s) => s.legend)
+  const measureBar = useStore((s) => s.measureBar)
   const elevationFlags = useStore((s) => s.elevationFlags)
   const slopeArrows = useStore((s) => s.slopeArrows)
   const { themeId, setTheme } = useThemeStore()
@@ -84,6 +97,7 @@ export function Toolbar(): JSX.Element {
       const frameOpts = {
         frame, includeFrame: frame.enabled && includeFrame, title, compass,
         legend, contourStyle: style, hasElevationFlags: elevationFlags.length > 0, hasSlopeArrows: slopeArrows.length > 0,
+        measureBar, calibration: elevationCalibration, heightmap: heightmap ?? undefined,
       }
       let blob: Blob
       switch (type) {
@@ -173,6 +187,17 @@ export function Toolbar(): JSX.Element {
                     aria-label="Slope arrow tool"
                   >
                     <ArrowIcon />
+                  </ActionIcon>
+                </Tooltip>
+                <Tooltip label="Set geo reference point for measure bars" position="bottom" withArrow>
+                  <ActionIcon
+                    variant={mapTool === 'measure-anchor' ? 'filled' : 'subtle'}
+                    size="md"
+                    disabled={!heightmap}
+                    onClick={() => setMapTool(mapTool === 'measure-anchor' ? 'none' : 'measure-anchor')}
+                    aria-label="Measure anchor tool"
+                  >
+                    <AnchorIcon />
                   </ActionIcon>
                 </Tooltip>
               </Group>
@@ -285,6 +310,8 @@ export function Toolbar(): JSX.Element {
           contourStyle={style}
           hasElevationFlags={elevationFlags.length > 0}
           hasSlopeArrows={slopeArrows.length > 0}
+          measureBar={measureBar}
+          heightmap={heightmap ?? undefined}
         />
       )}
 

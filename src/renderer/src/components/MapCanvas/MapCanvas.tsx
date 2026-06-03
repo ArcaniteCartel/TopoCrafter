@@ -4,7 +4,7 @@ import type { ContourMultiPolygon } from 'd3-contour'
 import { useStore } from '../../store/useStore'
 import { generateContours, contourToSvgPath } from '../../utils/contour'
 import type { ContourSet } from '../../utils/contour'
-import type { ElevationFlag, SlopeArrow, FrameConfig, CompassConfig, LegendConfig, ContourStyle, FramePosition } from '../../types'
+import type { ElevationFlag, SlopeArrow, FrameConfig, CompassConfig, LegendConfig, ContourStyle, FramePosition, MeasureBarConfig, ElevationCalibration, HeightmapInfo } from '../../types'
 
 function getLabelPoint(poly: ContourMultiPolygon): [number, number] | null {
   let best: [number, number][] | null = null
@@ -433,6 +433,199 @@ function LegendOverlay({ legend, frame, style, hasElevationFlags, hasSlopeArrows
   )
 }
 
+// ---------------------------------------------------------------------------
+// Measure bar overlay
+// ---------------------------------------------------------------------------
+
+function MeasureBarOverlay({
+  measureBar, frame, calibration, heightmap, outerW, outerH,
+}: {
+  measureBar: MeasureBarConfig
+  frame: FrameConfig
+  calibration: ElevationCalibration
+  heightmap: HeightmapInfo
+  outerW: number
+  outerH: number
+}): JSX.Element | null {
+  if (!calibration.mapWidth || calibration.mapWidth <= 0 || !calibration.unitType) return null
+
+  const { marginLeft: ml, marginRight: mr, marginTop: mt, marginBottom: mb } = frame
+  const mapW = outerW - ml - mr
+  const mapH = outerH - mt - mb
+  if (mapW <= 0 || mapH <= 0) return null
+
+  const pixelsPerUnit = mapW / calibration.mapWidth
+  const tickSpacing = measureBar.majorInterval * pixelsPerUnit
+  if (tickSpacing < 2) return null
+
+  const unitAbbr = calibration.unitType === 'feet' ? 'ft'
+    : calibration.unitType === 'meters' ? 'm'
+    : calibration.customAbbr || ''
+
+  const metersPerUnit = calibration.unitType === 'feet' ? 0.3048
+    : calibration.unitType === 'meters' ? 1
+    : calibration.customRatio * (calibration.customBase === 'feet' ? 0.3048 : 1)
+  const metersPerPixel = metersPerUnit * (calibration.mapWidth / mapW)
+
+  const anchorX_eff = measureBar.anchorX ?? 0
+  const anchorY_eff = measureBar.anchorY ?? (heightmap.height - 1)
+  const anchorScreenX = ml + anchorX_eff * (mapW / heightmap.width)
+  const anchorScreenY = mt + anchorY_eff * (mapH / heightmap.height)
+
+  const R_m = measureBar.planetRadius * 1000
+  const anchorLatRad = measureBar.anchorLat * Math.PI / 180
+  const cosLat = Math.max(0.001, Math.cos(anchorLatRad))
+
+  function toDMS(degrees: number, isLat: boolean): string {
+    const sign = degrees < 0 ? -1 : 1
+    const abs = Math.abs(degrees)
+    let d = Math.floor(abs)
+    const mFrac = (abs - d) * 60
+    let m = Math.floor(mFrac)
+    let s = Math.round((mFrac - m) * 60)
+    if (s >= 60) { s = 0; m += 1 }
+    if (m >= 60) { m = 0; d += 1 }
+    const dir = isLat ? (sign > 0 ? 'N' : 'S') : (sign > 0 ? 'E' : 'W')
+    return `${d}°${m}'${s}"${dir}`
+  }
+
+  function geoLabelH(screenX: number): string {
+    const dist_m = (screenX - anchorScreenX) * metersPerPixel
+    if (!measureBar.horizontalAxisIsLat) {
+      return toDMS(measureBar.anchorLon + (dist_m / (R_m * cosLat)) * (180 / Math.PI), false)
+    } else {
+      return toDMS(measureBar.anchorLat + (dist_m / R_m) * (180 / Math.PI), true)
+    }
+  }
+
+  function geoLabelV(screenY: number): string {
+    const dist_m = (anchorScreenY - screenY) * metersPerPixel
+    if (!measureBar.horizontalAxisIsLat) {
+      return toDMS(measureBar.anchorLat + (dist_m / R_m) * (180 / Math.PI), true)
+    } else {
+      return toDMS(measureBar.anchorLon + (dist_m / (R_m * cosLat)) * (180 / Math.PI), false)
+    }
+  }
+
+  const { color, lineWidth: lw, tickLength: tl, minorTickLength: mtl, fontSize: fs } = measureBar
+  const minorDiv = Math.max(1, Math.floor(measureBar.minorDivisions))
+  const geo = measureBar.geoEnabled
+
+  const els: JSX.Element[] = []
+  let k = 0
+  const K = () => k++
+
+  const labelH = (x: number, baseY: number, dir: 1 | -1, dist: number) => {
+    const distLabel = `${dist}${unitAbbr}`
+    const geoLabel = geo ? geoLabelH(x) : null
+    const db = dir > 0 ? 'hanging' : 'auto'
+    els.push(
+      <text key={K()} x={x} y={baseY} fontSize={fs} fontFamily="sans-serif" fill={color} textAnchor="middle" dominantBaseline={db}>
+        {distLabel}
+      </text>
+    )
+    if (geoLabel) {
+      const y2 = dir > 0 ? baseY + fs + 2 : baseY - fs * 0.85 - 2
+      els.push(
+        <text key={K()} x={x} y={y2} fontSize={fs * 0.85} fontFamily="sans-serif" fill={color} textAnchor="middle" dominantBaseline={db}>
+          {geoLabel}
+        </text>
+      )
+    }
+  }
+
+  const labelV = (baseX: number, y: number, dir: 1 | -1, dist: number) => {
+    const distLabel = `${dist}${unitAbbr}`
+    const geoLabel = geo ? geoLabelV(y) : null
+    const anchor = dir < 0 ? 'end' : 'start'
+    if (!geoLabel) {
+      els.push(
+        <text key={K()} x={baseX} y={y} fontSize={fs} fontFamily="sans-serif" fill={color} textAnchor={anchor} dominantBaseline="middle">
+          {distLabel}
+        </text>
+      )
+    } else {
+      els.push(
+        <text key={K()} x={baseX} y={y - fs * 0.6} fontSize={fs} fontFamily="sans-serif" fill={color} textAnchor={anchor} dominantBaseline="auto">
+          {distLabel}
+        </text>,
+        <text key={K()} x={baseX} y={y + fs * 0.5} fontSize={fs * 0.85} fontFamily="sans-serif" fill={color} textAnchor={anchor} dominantBaseline="hanging">
+          {geoLabel}
+        </text>
+      )
+    }
+  }
+
+  if (measureBar.showBottom) {
+    const y0 = outerH - mb
+    els.push(<line key={K()} x1={ml} y1={y0} x2={ml + mapW} y2={y0} stroke={color} strokeWidth={lw} />)
+    for (let i = 0; i * tickSpacing <= mapW + 0.5; i++) {
+      const x = Math.min(ml + i * tickSpacing, ml + mapW)
+      els.push(<line key={K()} x1={x} y1={y0} x2={x} y2={y0 + tl} stroke={color} strokeWidth={lw} strokeLinecap="square" />)
+      labelH(x, y0 + tl + 2, 1, i * measureBar.majorInterval)
+      if (minorDiv > 1) for (let j = 1; j < minorDiv; j++) {
+        const mx = ml + i * tickSpacing + j * tickSpacing / minorDiv
+        if (mx > ml + mapW) break
+        els.push(<line key={K()} x1={mx} y1={y0} x2={mx} y2={y0 + mtl} stroke={color} strokeWidth={lw * 0.7} strokeLinecap="square" />)
+      }
+    }
+  }
+
+  if (measureBar.showTop) {
+    const y0 = mt
+    els.push(<line key={K()} x1={ml} y1={y0} x2={ml + mapW} y2={y0} stroke={color} strokeWidth={lw} />)
+    for (let i = 0; i * tickSpacing <= mapW + 0.5; i++) {
+      const x = Math.min(ml + i * tickSpacing, ml + mapW)
+      els.push(<line key={K()} x1={x} y1={y0} x2={x} y2={y0 - tl} stroke={color} strokeWidth={lw} strokeLinecap="square" />)
+      labelH(x, y0 - tl - 2, -1, i * measureBar.majorInterval)
+      if (minorDiv > 1) for (let j = 1; j < minorDiv; j++) {
+        const mx = ml + i * tickSpacing + j * tickSpacing / minorDiv
+        if (mx > ml + mapW) break
+        els.push(<line key={K()} x1={mx} y1={y0} x2={mx} y2={y0 - mtl} stroke={color} strokeWidth={lw * 0.7} strokeLinecap="square" />)
+      }
+    }
+  }
+
+  if (measureBar.showLeft) {
+    const x0 = ml
+    els.push(<line key={K()} x1={x0} y1={mt} x2={x0} y2={mt + mapH} stroke={color} strokeWidth={lw} />)
+    for (let i = 0; i * tickSpacing <= mapH + 0.5; i++) {
+      const y = Math.max((outerH - mb) - i * tickSpacing, mt)
+      els.push(<line key={K()} x1={x0} y1={y} x2={x0 - tl} y2={y} stroke={color} strokeWidth={lw} strokeLinecap="square" />)
+      labelV(x0 - tl - 2, y, -1, i * measureBar.majorInterval)
+      if (minorDiv > 1) for (let j = 1; j < minorDiv; j++) {
+        const my = (outerH - mb) - (i * tickSpacing + j * tickSpacing / minorDiv)
+        if (my < mt) break
+        els.push(<line key={K()} x1={x0} y1={my} x2={x0 - mtl} y2={my} stroke={color} strokeWidth={lw * 0.7} strokeLinecap="square" />)
+      }
+    }
+  }
+
+  if (measureBar.showRight) {
+    const x0 = outerW - mr
+    els.push(<line key={K()} x1={x0} y1={mt} x2={x0} y2={mt + mapH} stroke={color} strokeWidth={lw} />)
+    for (let i = 0; i * tickSpacing <= mapH + 0.5; i++) {
+      const y = Math.max((outerH - mb) - i * tickSpacing, mt)
+      els.push(<line key={K()} x1={x0} y1={y} x2={x0 + tl} y2={y} stroke={color} strokeWidth={lw} strokeLinecap="square" />)
+      labelV(x0 + tl + 2, y, 1, i * measureBar.majorInterval)
+      if (minorDiv > 1) for (let j = 1; j < minorDiv; j++) {
+        const my = (outerH - mb) - (i * tickSpacing + j * tickSpacing / minorDiv)
+        if (my < mt) break
+        els.push(<line key={K()} x1={x0} y1={my} x2={x0 + mtl} y2={my} stroke={color} strokeWidth={lw * 0.7} strokeLinecap="square" />)
+      }
+    }
+  }
+
+  return (
+    <svg
+      style={{ position: 'absolute', inset: 0, pointerEvents: 'none', overflow: 'visible', width: '100%', height: '100%' }}
+      viewBox={`0 0 ${outerW} ${outerH}`}
+    >
+      {els}
+    </svg>
+  )
+}
+
 function FrameBorderOverlay({ frame }: { frame: FrameConfig }): JSX.Element {
   const { borderStyle, borderColor, borderWidth: bw } = frame
   const base: React.CSSProperties = {
@@ -530,6 +723,21 @@ export function MapCanvas(): JSX.Element {
   const updateSlopeArrow = useStore((s) => s.updateSlopeArrow)
   const removeSlopeArrow = useStore((s) => s.removeSlopeArrow)
   const setMapTool = useStore((s) => s.setMapTool)
+  const measureBar = useStore((s) => s.measureBar)
+  const updateMeasureBar = useStore((s) => s.updateMeasureBar)
+
+  // Track outer composition div dimensions for measure bar overlay
+  const outerDivRef = useRef<HTMLDivElement>(null)
+  const [outerSize, setOuterSize] = useState<{ w: number; h: number } | null>(null)
+  useEffect(() => {
+    const div = outerDivRef.current
+    if (!div) return
+    const update = () => setOuterSize({ w: div.clientWidth, h: div.clientHeight })
+    update()
+    const obs = new ResizeObserver(update)
+    obs.observe(div)
+    return () => obs.disconnect()
+  }, [])
 
   // Refs so effects and stable callbacks always read the latest values
   const parametersRef = useRef(parameters)
@@ -713,6 +921,8 @@ export function MapCanvas(): JSX.Element {
     } else if (mapTool === 'slope-arrow') {
       const slope = computeSlopeAt(pt.x, pt.y)
       setHoverPos(slope ? { x: pt.x, y: pt.y, ...slope } : null)
+    } else if (mapTool === 'measure-anchor') {
+      setHoverPos({ x: pt.x, y: pt.y })
     }
   }
 
@@ -747,6 +957,8 @@ export function MapCanvas(): JSX.Element {
       if (slope) {
         addSlopeArrow({ id: crypto.randomUUID(), x: pt.x, y: pt.y, ...slope } as SlopeArrow)
       }
+    } else if (mapTool === 'measure-anchor') {
+      updateMeasureBar({ anchorX: Math.round(pt.x), anchorY: Math.round(pt.y) })
     }
   }
 
@@ -772,7 +984,7 @@ export function MapCanvas(): JSX.Element {
     ? getLabelPoint(contourState.contourSet.seaLevelPath)
     : null
 
-  const toolActive = mapTool === 'elevation-flag' || mapTool === 'slope-arrow'
+  const toolActive = mapTool === 'elevation-flag' || mapTool === 'slope-arrow' || mapTool === 'measure-anchor'
   const flagSvgInteractive = toolActive || elevationFlags.length > 0 || slopeArrows.length > 0
 
   return (
@@ -784,7 +996,7 @@ export function MapCanvas(): JSX.Element {
       )}
 
       {/* Outer composition div — establishes total width, includes frame margins */}
-      <div style={{
+      <div ref={outerDivRef} style={{
         position: 'relative',
         display: 'inline-block',
         width: `${mapZoom}%`,
@@ -1088,9 +1300,38 @@ export function MapCanvas(): JSX.Element {
               </g>
             )
           })}
+          {/* Measure anchor crosshair */}
+          {(() => {
+            const showAnchor = mapTool === 'measure-anchor'
+              || (measureBar.enabled && measureBar.geoEnabled && measureBar.anchorX !== null)
+            if (!showAnchor) return null
+            const ax = measureBar.anchorX ?? 0
+            const ay = measureBar.anchorY ?? (heightmap!.height - 1)
+            const r = labelFontSize * 0.8
+            const ext = r * 2.5
+            return (
+              <g style={{ pointerEvents: 'none' }}>
+                <line x1={ax - ext} y1={ay} x2={ax + ext} y2={ay} stroke={measureBar.color} strokeWidth={1} vectorEffect="non-scaling-stroke" />
+                <line x1={ax} y1={ay - ext} x2={ax} y2={ay + ext} stroke={measureBar.color} strokeWidth={1} vectorEffect="non-scaling-stroke" />
+                <circle cx={ax} cy={ay} r={r} fill="none" stroke={measureBar.color} strokeWidth={1} vectorEffect="non-scaling-stroke" />
+              </g>
+            )
+          })()}
+
           {/* Hover preview — live readout while tool is active, no drag in progress */}
           {toolActive && hoverPos && !dragPos && (() => {
             const s = labelFontSize
+            if (mapTool === 'measure-anchor') {
+              const r = s * 0.8
+              const ext = r * 2.5
+              return (
+                <g opacity={0.6} style={{ pointerEvents: 'none' }}>
+                  <line x1={hoverPos.x - ext} y1={hoverPos.y} x2={hoverPos.x + ext} y2={hoverPos.y} stroke={measureBar.color} strokeWidth={1} vectorEffect="non-scaling-stroke" />
+                  <line x1={hoverPos.x} y1={hoverPos.y - ext} x2={hoverPos.x} y2={hoverPos.y + ext} stroke={measureBar.color} strokeWidth={1} vectorEffect="non-scaling-stroke" />
+                  <circle cx={hoverPos.x} cy={hoverPos.y} r={r} fill="none" stroke={measureBar.color} strokeWidth={1} vectorEffect="non-scaling-stroke" />
+                </g>
+              )
+            }
             if (mapTool === 'elevation-flag' && hoverPos.elevation !== undefined) {
               return (
                 <text
@@ -1169,6 +1410,18 @@ export function MapCanvas(): JSX.Element {
           style={style}
           hasElevationFlags={elevationFlags.length > 0}
           hasSlopeArrows={slopeArrows.length > 0}
+        />
+      )}
+
+      {/* Measure bar overlay — ticks along map edges into margin area */}
+      {frame.enabled && measureBar.enabled && heightmap && outerSize && (
+        <MeasureBarOverlay
+          measureBar={measureBar}
+          frame={frame}
+          calibration={elevationCalibration}
+          heightmap={heightmap}
+          outerW={outerSize.w}
+          outerH={outerSize.h}
         />
       )}
 

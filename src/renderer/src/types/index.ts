@@ -85,7 +85,7 @@ export interface SlopeArrow {
   slopeDeg: number  // slope angle from horizontal in degrees (label value)
 }
 
-export type MapTool = 'none' | 'elevation-flag' | 'slope-arrow'
+export type MapTool = 'none' | 'elevation-flag' | 'slope-arrow' | 'measure-anchor'
 
 export type FrameBorderStyle = 'single' | 'double' | 'cartographic' | 'shadow' | 'ornate'
 
@@ -215,6 +215,50 @@ export const defaultCompassConfig: CompassConfig = {
   leftArrow: true,
 }
 
+export interface MeasureBarConfig {
+  enabled: boolean
+  showTop: boolean
+  showBottom: boolean
+  showLeft: boolean
+  showRight: boolean
+  majorInterval: number        // spacing between major ticks in calibration units
+  minorDivisions: number       // subdivisions per major interval (1 = no minor ticks)
+  tickLength: number           // major tick length in screen px
+  minorTickLength: number
+  lineWidth: number
+  color: string
+  fontSize: number
+  geoEnabled: boolean
+  anchorLat: number            // lat at reference point (degrees)
+  anchorLon: number            // lon at reference point
+  anchorX: number | null       // heightmap px X; null = left edge (0)
+  anchorY: number | null       // heightmap px Y; null = bottom edge (mapH - 1)
+  planetRadius: number         // km — Earth = 6371
+  horizontalAxisIsLat: boolean // if true, H ticks = latitude axis, V ticks = longitude
+}
+
+export const defaultMeasureBarConfig: MeasureBarConfig = {
+  enabled: false,
+  showTop: false,
+  showBottom: true,
+  showLeft: true,
+  showRight: false,
+  majorInterval: 100,
+  minorDivisions: 4,
+  tickLength: 8,
+  minorTickLength: 4,
+  lineWidth: 1,
+  color: '#2E2412',
+  fontSize: 9,
+  geoEnabled: false,
+  anchorLat: 0,
+  anchorLon: 0,
+  anchorX: null,
+  anchorY: null,
+  planetRadius: 6371,
+  horizontalAxisIsLat: false,
+}
+
 export interface ProjectState {
   terrainImagePath: string | null
   heightmapPath: string | null
@@ -248,6 +292,7 @@ export interface ProjectState {
   title: TitleConfig
   compass: CompassConfig
   legend: LegendConfig
+  measureBar: MeasureBarConfig
 }
 
 export const defaultParameters: ContourParameters = {

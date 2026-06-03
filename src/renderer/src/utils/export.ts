@@ -1,4 +1,4 @@
-import type { FrameConfig, TitleConfig, CompassConfig, ContourStyle, LegendConfig, FramePosition } from '../types'
+import type { FrameConfig, TitleConfig, CompassConfig, ContourStyle, LegendConfig, FramePosition, MeasureBarConfig, ElevationCalibration, HeightmapInfo } from '../types'
 
 export interface ExportLayerConfig {
   baseImageUrl: string | null
@@ -13,6 +13,9 @@ export interface ExportLayerConfig {
   contourStyle?: ContourStyle
   hasElevationFlags?: boolean
   hasSlopeArrows?: boolean
+  measureBar?: MeasureBarConfig
+  calibration?: ElevationCalibration
+  heightmap?: HeightmapInfo
 }
 
 export type OverlayBackgroundMode = 'transparent' | 'white' | 'colored' | 'grid'
@@ -36,6 +39,9 @@ export interface OverlayExportConfig {
   contourStyle?: ContourStyle
   hasElevationFlags?: boolean
   hasSlopeArrows?: boolean
+  measureBar?: MeasureBarConfig
+  calibration?: ElevationCalibration
+  heightmap?: HeightmapInfo
 }
 
 // ---------------------------------------------------------------------------
@@ -96,6 +102,192 @@ function getBoxOrigin(
     case 'left-middle':  return [ml / 2 - boxW / 2,         mt + mapH / 2 - boxH / 2]
     case 'left-top':     return [ml / 2 - boxW / 2,         mt + edgeGap]
   }
+}
+
+// ---------------------------------------------------------------------------
+// Measure bar drawing on canvas
+// ---------------------------------------------------------------------------
+
+function drawMeasureBars(
+  ctx: CanvasRenderingContext2D,
+  measureBar: MeasureBarConfig,
+  calibration: ElevationCalibration,
+  heightmap: HeightmapInfo,
+  frame: FrameConfig,
+  totalW: number,
+  totalH: number,
+): void {
+  if (!calibration.mapWidth || calibration.mapWidth <= 0 || !calibration.unitType) return
+
+  const ml = frame.marginLeft, mr = frame.marginRight
+  const mt = frame.marginTop, mb = frame.marginBottom
+  const mapW = totalW - ml - mr
+  const mapH = totalH - mt - mb
+  if (mapW <= 0 || mapH <= 0) return
+
+  const pixelsPerUnit = mapW / calibration.mapWidth
+  const tickSpacing = measureBar.majorInterval * pixelsPerUnit
+  if (tickSpacing < 2) return
+
+  const unitAbbr = calibration.unitType === 'feet' ? 'ft'
+    : calibration.unitType === 'meters' ? 'm'
+    : calibration.customAbbr || ''
+
+  const metersPerUnit = calibration.unitType === 'feet' ? 0.3048
+    : calibration.unitType === 'meters' ? 1
+    : calibration.customRatio * (calibration.customBase === 'feet' ? 0.3048 : 1)
+  const metersPerPixel = metersPerUnit * (calibration.mapWidth / mapW)
+
+  const anchorX_eff = measureBar.anchorX ?? 0
+  const anchorY_eff = measureBar.anchorY ?? (heightmap.height - 1)
+  const anchorScreenX = ml + anchorX_eff * (mapW / heightmap.width)
+  const anchorScreenY = mt + anchorY_eff * (mapH / heightmap.height)
+
+  const R_m = measureBar.planetRadius * 1000
+  const anchorLatRad = measureBar.anchorLat * Math.PI / 180
+  const cosLat = Math.max(0.001, Math.cos(anchorLatRad))
+
+  function toDMS(degrees: number, isLat: boolean): string {
+    const sign = degrees < 0 ? -1 : 1
+    const abs = Math.abs(degrees)
+    let d = Math.floor(abs)
+    const mFrac = (abs - d) * 60
+    let m = Math.floor(mFrac)
+    let s = Math.round((mFrac - m) * 60)
+    if (s >= 60) { s = 0; m += 1 }
+    if (m >= 60) { m = 0; d += 1 }
+    const dir = isLat ? (sign > 0 ? 'N' : 'S') : (sign > 0 ? 'E' : 'W')
+    return `${d}°${m}'${s}"${dir}`
+  }
+
+  function geoLabelH(screenX: number): string {
+    const dist_m = (screenX - anchorScreenX) * metersPerPixel
+    if (!measureBar.horizontalAxisIsLat) {
+      return toDMS(measureBar.anchorLon + (dist_m / (R_m * cosLat)) * (180 / Math.PI), false)
+    } else {
+      return toDMS(measureBar.anchorLat + (dist_m / R_m) * (180 / Math.PI), true)
+    }
+  }
+
+  function geoLabelV(screenY: number): string {
+    const dist_m = (anchorScreenY - screenY) * metersPerPixel
+    if (!measureBar.horizontalAxisIsLat) {
+      return toDMS(measureBar.anchorLat + (dist_m / R_m) * (180 / Math.PI), true)
+    } else {
+      return toDMS(measureBar.anchorLon + (dist_m / (R_m * cosLat)) * (180 / Math.PI), false)
+    }
+  }
+
+  const { color, lineWidth: lw, tickLength: tl, minorTickLength: mtl, fontSize: fs } = measureBar
+  const minorDiv = Math.max(1, Math.floor(measureBar.minorDivisions))
+  const geo = measureBar.geoEnabled
+
+  ctx.save()
+  ctx.strokeStyle = color
+  ctx.fillStyle = color
+  ctx.lineWidth = lw
+
+  const drawTickLabelH = (x: number, baseY: number, dir: 1 | -1, dist: number) => {
+    const distLabel = `${dist}${unitAbbr}`
+    ctx.font = `${fs}px sans-serif`
+    ctx.textAlign = 'center'
+    ctx.textBaseline = dir > 0 ? 'top' : 'alphabetic'
+    ctx.fillText(distLabel, x, baseY)
+    if (geo) {
+      ctx.font = `${fs * 0.85}px sans-serif`
+      ctx.fillText(geoLabelH(x), x, dir > 0 ? baseY + fs + 2 : baseY - fs - 2)
+    }
+  }
+
+  const drawTickLabelV = (baseX: number, y: number, dir: 1 | -1, dist: number) => {
+    const distLabel = `${dist}${unitAbbr}`
+    ctx.font = `${fs}px sans-serif`
+    ctx.textAlign = dir < 0 ? 'right' : 'left'
+    if (!geo) {
+      ctx.textBaseline = 'middle'
+      ctx.fillText(distLabel, baseX, y)
+    } else {
+      ctx.textBaseline = 'alphabetic'
+      ctx.fillText(distLabel, baseX, y - fs * 0.15)
+      ctx.font = `${fs * 0.85}px sans-serif`
+      ctx.textBaseline = 'top'
+      ctx.fillText(geoLabelV(y), baseX, y + fs * 0.2)
+    }
+  }
+
+  const drawMinorH = (x: number, y0: number, dir: 1 | -1) => {
+    ctx.lineWidth = lw * 0.7
+    ctx.beginPath(); ctx.moveTo(x, y0); ctx.lineTo(x, y0 + dir * mtl); ctx.stroke()
+    ctx.lineWidth = lw
+  }
+
+  const drawMinorV = (y: number, x0: number, dir: 1 | -1) => {
+    ctx.lineWidth = lw * 0.7
+    ctx.beginPath(); ctx.moveTo(x0, y); ctx.lineTo(x0 + dir * mtl, y); ctx.stroke()
+    ctx.lineWidth = lw
+  }
+
+  if (measureBar.showBottom) {
+    const y0 = totalH - mb
+    ctx.beginPath(); ctx.moveTo(ml, y0); ctx.lineTo(ml + mapW, y0); ctx.stroke()
+    for (let i = 0; i * tickSpacing <= mapW + 0.5; i++) {
+      const x = Math.min(ml + i * tickSpacing, ml + mapW)
+      ctx.beginPath(); ctx.moveTo(x, y0); ctx.lineTo(x, y0 + tl); ctx.stroke()
+      drawTickLabelH(x, y0 + tl + 2, 1, i * measureBar.majorInterval)
+      if (minorDiv > 1) for (let j = 1; j < minorDiv; j++) {
+        const mx = ml + i * tickSpacing + j * tickSpacing / minorDiv
+        if (mx > ml + mapW) break
+        drawMinorH(mx, y0, 1)
+      }
+    }
+  }
+
+  if (measureBar.showTop) {
+    const y0 = mt
+    ctx.beginPath(); ctx.moveTo(ml, y0); ctx.lineTo(ml + mapW, y0); ctx.stroke()
+    for (let i = 0; i * tickSpacing <= mapW + 0.5; i++) {
+      const x = Math.min(ml + i * tickSpacing, ml + mapW)
+      ctx.beginPath(); ctx.moveTo(x, y0); ctx.lineTo(x, y0 - tl); ctx.stroke()
+      drawTickLabelH(x, y0 - tl - 2, -1, i * measureBar.majorInterval)
+      if (minorDiv > 1) for (let j = 1; j < minorDiv; j++) {
+        const mx = ml + i * tickSpacing + j * tickSpacing / minorDiv
+        if (mx > ml + mapW) break
+        drawMinorH(mx, y0, -1)
+      }
+    }
+  }
+
+  if (measureBar.showLeft) {
+    const x0 = ml
+    ctx.beginPath(); ctx.moveTo(x0, mt); ctx.lineTo(x0, mt + mapH); ctx.stroke()
+    for (let i = 0; i * tickSpacing <= mapH + 0.5; i++) {
+      const y = Math.max((totalH - mb) - i * tickSpacing, mt)
+      ctx.beginPath(); ctx.moveTo(x0, y); ctx.lineTo(x0 - tl, y); ctx.stroke()
+      drawTickLabelV(x0 - tl - 2, y, -1, i * measureBar.majorInterval)
+      if (minorDiv > 1) for (let j = 1; j < minorDiv; j++) {
+        const my = (totalH - mb) - (i * tickSpacing + j * tickSpacing / minorDiv)
+        if (my < mt) break
+        drawMinorV(my, x0, -1)
+      }
+    }
+  }
+
+  if (measureBar.showRight) {
+    const x0 = totalW - mr
+    ctx.beginPath(); ctx.moveTo(x0, mt); ctx.lineTo(x0, mt + mapH); ctx.stroke()
+    for (let i = 0; i * tickSpacing <= mapH + 0.5; i++) {
+      const y = Math.max((totalH - mb) - i * tickSpacing, mt)
+      ctx.beginPath(); ctx.moveTo(x0, y); ctx.lineTo(x0 + tl, y); ctx.stroke()
+      drawTickLabelV(x0 + tl + 2, y, 1, i * measureBar.majorInterval)
+      if (minorDiv > 1) for (let j = 1; j < minorDiv; j++) {
+        const my = (totalH - mb) - (i * tickSpacing + j * tickSpacing / minorDiv)
+        if (my < mt) break
+        drawMinorV(my, x0, 1)
+      }
+    }
+  }
+
+  ctx.restore()
 }
 
 // ---------------------------------------------------------------------------
@@ -743,6 +935,9 @@ export async function exportOverlayToBlob(config: OverlayExportConfig): Promise<
     drawLegend(ctx, config.legend, config.frame!, config.contourStyle,
       config.hasElevationFlags ?? false, config.hasSlopeArrows ?? false, totalW, totalH)
   }
+  if (withFrame && config.measureBar?.enabled && config.calibration && config.heightmap) {
+    drawMeasureBars(ctx, config.measureBar, config.calibration, config.heightmap, config.frame!, totalW, totalH)
+  }
 
   return canvasToBlob(canvas)
 }
@@ -814,6 +1009,9 @@ export async function exportToBlob(config: ExportLayerConfig): Promise<Blob> {
   if (withFrame && config.legend && config.contourStyle) {
     drawLegend(ctx, config.legend, config.frame!, config.contourStyle,
       config.hasElevationFlags ?? false, config.hasSlopeArrows ?? false, totalW, totalH)
+  }
+  if (withFrame && config.measureBar?.enabled && config.calibration && config.heightmap) {
+    drawMeasureBars(ctx, config.measureBar, config.calibration, config.heightmap, config.frame!, totalW, totalH)
   }
 
   return canvasToBlob(canvas)

@@ -2,9 +2,9 @@ import { create } from 'zustand'
 import type {
   ProjectState, ContourParameters, ContourStyle,
   HeightmapInfo, HillshadeParameters, ElevationCalibration,
-  ElevationFlag, SlopeArrow, MapTool, FrameConfig, TitleConfig, CompassConfig, LegendConfig,
+  ElevationFlag, SlopeArrow, MapTool, FrameConfig, TitleConfig, CompassConfig, LegendConfig, MeasureBarConfig,
 } from '../types'
-import { defaultParameters, defaultStyle, defaultHillshadeParameters, defaultElevationCalibration, defaultFrameConfig, defaultTitleConfig, defaultCompassConfig, defaultLegendConfig } from '../types'
+import { defaultParameters, defaultStyle, defaultHillshadeParameters, defaultElevationCalibration, defaultFrameConfig, defaultTitleConfig, defaultCompassConfig, defaultLegendConfig, defaultMeasureBarConfig } from '../types'
 
 function calToMeters(value: number, cal: ElevationCalibration): number {
   if (cal.unitType === 'feet') return value * 0.3048
@@ -64,6 +64,7 @@ interface AppActions {
   updateTitle: (t: Partial<TitleConfig>) => void
   updateCompass: (c: Partial<CompassConfig>) => void
   updateLegend: (l: Partial<LegendConfig>) => void
+  updateMeasureBar: (m: Partial<MeasureBarConfig>) => void
   clearPendingChanges: () => void
   markClean: () => void
   reset: () => void
@@ -102,6 +103,7 @@ const initialState: ProjectState = {
   title: defaultTitleConfig,
   compass: defaultCompassConfig,
   legend: defaultLegendConfig,
+  measureBar: defaultMeasureBarConfig,
 }
 
 export const useStore = create<ProjectState & AppActions>((set, get) => ({
@@ -308,6 +310,9 @@ export const useStore = create<ProjectState & AppActions>((set, get) => ({
 
   updateLegend: (l) =>
     set((state) => ({ legend: { ...state.legend, ...l } })),
+
+  updateMeasureBar: (m) =>
+    set((state) => ({ measureBar: { ...state.measureBar, ...m } })),
 
   clearPendingChanges: () =>
     set((state) => ({

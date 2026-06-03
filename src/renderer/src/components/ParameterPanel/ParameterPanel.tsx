@@ -92,6 +92,8 @@ export function ParameterPanel(): JSX.Element {
   const updateCompass = useStore((s) => s.updateCompass)
   const legend = useStore((s) => s.legend)
   const updateLegend = useStore((s) => s.updateLegend)
+  const measureBar = useStore((s) => s.measureBar)
+  const updateMeasureBar = useStore((s) => s.updateMeasureBar)
   const elevationFlags = useStore((s) => s.elevationFlags)
   const slopeArrows = useStore((s) => s.slopeArrows)
   const overlayOnly = useStore((s) => s.overlayOnly)
@@ -1035,6 +1037,148 @@ export function ParameterPanel(): JSX.Element {
             />
           </Group>
         ))}
+          <Divider label="Measure bars" labelPosition="left" />
+          <Switch
+            label="Show measure bars"
+            size="sm"
+            description={!hasGroundResolution ? 'Set map width in calibration to enable' : undefined}
+            checked={measureBar.enabled}
+            onChange={(e) => updateMeasureBar({ enabled: e.currentTarget.checked })}
+            disabled={!frame.enabled || !hasGroundResolution}
+          />
+          <Text size="xs" fw={500} c={frame.enabled && measureBar.enabled ? undefined : 'dimmed'}>Edges</Text>
+          <Group gap="md">
+            <Switch size="xs" label="Top"    checked={measureBar.showTop}    onChange={(e) => updateMeasureBar({ showTop: e.currentTarget.checked })}    disabled={!frame.enabled || !measureBar.enabled} />
+            <Switch size="xs" label="Bottom" checked={measureBar.showBottom} onChange={(e) => updateMeasureBar({ showBottom: e.currentTarget.checked })} disabled={!frame.enabled || !measureBar.enabled} />
+            <Switch size="xs" label="Left"   checked={measureBar.showLeft}   onChange={(e) => updateMeasureBar({ showLeft: e.currentTarget.checked })}   disabled={!frame.enabled || !measureBar.enabled} />
+            <Switch size="xs" label="Right"  checked={measureBar.showRight}  onChange={(e) => updateMeasureBar({ showRight: e.currentTarget.checked })}  disabled={!frame.enabled || !measureBar.enabled} />
+          </Group>
+          <NumberInput
+            label={`Major tick interval${abbr ? ` (${abbr})` : ''}`}
+            size="xs"
+            value={measureBar.majorInterval}
+            onChange={(v) => typeof v === 'number' && v > 0 && updateMeasureBar({ majorInterval: v })}
+            min={1}
+            step={10}
+            disabled={!frame.enabled || !measureBar.enabled}
+          />
+          <Group grow>
+            <NumberInput
+              label="Minor divisions"
+              size="xs"
+              value={measureBar.minorDivisions}
+              onChange={(v) => typeof v === 'number' && updateMeasureBar({ minorDivisions: Math.max(1, Math.round(v)) })}
+              min={1}
+              max={10}
+              step={1}
+              disabled={!frame.enabled || !measureBar.enabled}
+            />
+            <NumberInput
+              label="Tick (px)"
+              size="xs"
+              value={measureBar.tickLength}
+              onChange={(v) => typeof v === 'number' && updateMeasureBar({ tickLength: v })}
+              min={2}
+              max={30}
+              step={1}
+              disabled={!frame.enabled || !measureBar.enabled}
+            />
+            <NumberInput
+              label="Minor tick (px)"
+              size="xs"
+              value={measureBar.minorTickLength}
+              onChange={(v) => typeof v === 'number' && updateMeasureBar({ minorTickLength: v })}
+              min={1}
+              max={20}
+              step={1}
+              disabled={!frame.enabled || !measureBar.enabled}
+            />
+          </Group>
+          <Group grow>
+            <NumberInput
+              label="Line width (px)"
+              size="xs"
+              value={measureBar.lineWidth}
+              onChange={(v) => typeof v === 'number' && updateMeasureBar({ lineWidth: v })}
+              min={0.5}
+              max={5}
+              step={0.5}
+              decimalScale={1}
+              disabled={!frame.enabled || !measureBar.enabled}
+            />
+            <NumberInput
+              label="Font size (px)"
+              size="xs"
+              value={measureBar.fontSize}
+              onChange={(v) => typeof v === 'number' && updateMeasureBar({ fontSize: v })}
+              min={6}
+              max={24}
+              step={1}
+              disabled={!frame.enabled || !measureBar.enabled}
+            />
+            <ColorInput
+              label="Color"
+              size="xs"
+              value={measureBar.color}
+              onChange={(v) => updateMeasureBar({ color: v })}
+              disabled={!frame.enabled || !measureBar.enabled}
+              format="hex"
+            />
+          </Group>
+          <Switch
+            label="Show geo coordinates"
+            size="sm"
+            description={!hasGroundResolution ? 'Set map width in calibration to enable' : 'Use anchor tool in toolbar to set reference point'}
+            checked={measureBar.geoEnabled}
+            onChange={(e) => updateMeasureBar({ geoEnabled: e.currentTarget.checked })}
+            disabled={!frame.enabled || !measureBar.enabled || !hasGroundResolution}
+          />
+          {measureBar.geoEnabled && hasGroundResolution && (
+            <>
+              <Group grow>
+                <NumberInput
+                  label="Anchor latitude (°)"
+                  size="xs"
+                  value={measureBar.anchorLat}
+                  onChange={(v) => typeof v === 'number' && updateMeasureBar({ anchorLat: v })}
+                  min={-90}
+                  max={90}
+                  step={0.001}
+                  decimalScale={6}
+                  disabled={!frame.enabled || !measureBar.enabled}
+                />
+                <NumberInput
+                  label="Anchor longitude (°)"
+                  size="xs"
+                  value={measureBar.anchorLon}
+                  onChange={(v) => typeof v === 'number' && updateMeasureBar({ anchorLon: v })}
+                  min={-180}
+                  max={180}
+                  step={0.001}
+                  decimalScale={6}
+                  disabled={!frame.enabled || !measureBar.enabled}
+                />
+              </Group>
+              <NumberInput
+                label="Planet radius (km)"
+                size="xs"
+                value={measureBar.planetRadius}
+                onChange={(v) => typeof v === 'number' && updateMeasureBar({ planetRadius: v })}
+                min={100}
+                max={100000}
+                step={100}
+                disabled={!frame.enabled || !measureBar.enabled}
+              />
+              <Switch
+                label="Horizontal axis = latitude"
+                description="Swap which axis shows lat vs lon"
+                size="sm"
+                checked={measureBar.horizontalAxisIsLat}
+                onChange={(e) => updateMeasureBar({ horizontalAxisIsLat: e.currentTarget.checked })}
+                disabled={!frame.enabled || !measureBar.enabled}
+              />
+            </>
+          )}
         </Stack>
       </Collapse>
     </Stack>
