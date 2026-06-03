@@ -156,11 +156,13 @@ export interface LegendConfig {
   showSeaLevel: boolean
   showElevationFlags: boolean
   showSlopeArrows: boolean
+  showGeoAnchor: boolean
   minorLabel: string
   majorLabel: string
   seaLevelLabel: string
   flagLabel: string
   arrowLabel: string
+  geoAnchorLabel: string
 }
 
 export const defaultLegendConfig: LegendConfig = {
@@ -174,11 +176,13 @@ export const defaultLegendConfig: LegendConfig = {
   showSeaLevel: true,
   showElevationFlags: true,
   showSlopeArrows: true,
+  showGeoAnchor: true,
   minorLabel: 'Minor contour',
   majorLabel: 'Major contour',
   seaLevelLabel: 'Sea level',
   flagLabel: 'Elevation flag',
   arrowLabel: 'Slope angle',
+  geoAnchorLabel: 'Geo reference',
 }
 
 export interface CompassConfig {

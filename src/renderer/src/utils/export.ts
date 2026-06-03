@@ -147,19 +147,6 @@ function drawMeasureBars(
   const anchorLatRad = measureBar.anchorLat * Math.PI / 180
   const cosLat = Math.max(0.001, Math.cos(anchorLatRad))
 
-  function toDMS(degrees: number, isLat: boolean): string {
-    const sign = degrees < 0 ? -1 : 1
-    const abs = Math.abs(degrees)
-    let d = Math.floor(abs)
-    const mFrac = (abs - d) * 60
-    let m = Math.floor(mFrac)
-    let s = Math.round((mFrac - m) * 60)
-    if (s >= 60) { s = 0; m += 1 }
-    if (m >= 60) { m = 0; d += 1 }
-    const dir = isLat ? (sign > 0 ? 'N' : 'S') : (sign > 0 ? 'E' : 'W')
-    return `${d}°${m}'${s}"${dir}`
-  }
-
   function geoLabelH(screenX: number): string {
     const dist_m = (screenX - anchorScreenX) * metersPerPixel
     if (!measureBar.horizontalAxisIsLat) {
@@ -654,6 +641,23 @@ function drawCompassRose(
 }
 
 // ---------------------------------------------------------------------------
+// Coordinate format helper
+// ---------------------------------------------------------------------------
+
+function toDMS(degrees: number, isLat: boolean): string {
+  const sign = degrees < 0 ? -1 : 1
+  const abs = Math.abs(degrees)
+  let d = Math.floor(abs)
+  const mFrac = (abs - d) * 60
+  let m = Math.floor(mFrac)
+  let s = Math.round((mFrac - m) * 60)
+  if (s >= 60) { s = 0; m += 1 }
+  if (m >= 60) { m = 0; d += 1 }
+  const dir = isLat ? (sign > 0 ? 'N' : 'S') : (sign > 0 ? 'E' : 'W')
+  return `${d}°${m}'${s}"${dir}`
+}
+
+// ---------------------------------------------------------------------------
 // Legend drawing
 // ---------------------------------------------------------------------------
 
@@ -666,13 +670,16 @@ function drawLegend(
   hasSlopeArrows: boolean,
   totalW: number,
   totalH: number,
+  measureBar?: MeasureBarConfig,
 ): void {
+  const hasGeoAnchor = legend.showGeoAnchor && !!measureBar?.enabled && !!measureBar?.geoEnabled
   const items = [
-    legend.showMinorContour                             ? { type: 'minor',     label: legend.minorLabel    } : null,
-    legend.showMajorContour                             ? { type: 'major',     label: legend.majorLabel    } : null,
-    legend.showSeaLevel && contourStyle.showSeaLevel    ? { type: 'sea-level', label: legend.seaLevelLabel } : null,
-    legend.showElevationFlags && hasElevationFlags      ? { type: 'flag',      label: legend.flagLabel     } : null,
-    legend.showSlopeArrows && hasSlopeArrows            ? { type: 'arrow',     label: legend.arrowLabel    } : null,
+    legend.showMinorContour                             ? { type: 'minor',      label: legend.minorLabel    } : null,
+    legend.showMajorContour                             ? { type: 'major',      label: legend.majorLabel    } : null,
+    legend.showSeaLevel && contourStyle.showSeaLevel    ? { type: 'sea-level',  label: legend.seaLevelLabel } : null,
+    legend.showElevationFlags && hasElevationFlags      ? { type: 'flag',       label: legend.flagLabel     } : null,
+    legend.showSlopeArrows && hasSlopeArrows            ? { type: 'arrow',      label: legend.arrowLabel    } : null,
+    hasGeoAnchor ? { type: 'geo-anchor', label: `${legend.geoAnchorLabel}: ${toDMS(measureBar!.anchorLat, true)}, ${toDMS(measureBar!.anchorLon, false)}` } : null,
   ].filter(Boolean) as { type: string; label: string }[]
 
   if (items.length === 0) return
@@ -730,6 +737,13 @@ function drawLegend(
       ctx.fillStyle = contourStyle.labelColor; ctx.beginPath()
       ctx.moveTo(fx, fy); ctx.lineTo(fx + h*0.5, fy + h*0.22); ctx.lineTo(fx, fy + h*0.43)
       ctx.closePath(); ctx.fill()
+    } else if (type === 'geo-anchor') {
+      const cx_icon = sx1 + sampW / 2
+      const r_icon = rowH * 0.3
+      ctx.strokeStyle = legend.color; ctx.lineWidth = 0.8
+      ctx.beginPath(); ctx.moveTo(cx_icon - r_icon * 1.3, midY); ctx.lineTo(cx_icon + r_icon * 1.3, midY); ctx.stroke()
+      ctx.beginPath(); ctx.moveTo(cx_icon, midY - r_icon * 1.3); ctx.lineTo(cx_icon, midY + r_icon * 1.3); ctx.stroke()
+      ctx.beginPath(); ctx.arc(cx_icon, midY, r_icon, 0, Math.PI * 2); ctx.stroke()
     } else {
       const w = sampW * 0.6, hw = w * 0.28, hl = w * 0.3
       const ax1 = sx1 + (sampW - w) / 2, ax2 = ax1 + w, ab = ax2 - hl
@@ -933,7 +947,7 @@ export async function exportOverlayToBlob(config: OverlayExportConfig): Promise<
   }
   if (withFrame && config.legend && config.contourStyle) {
     drawLegend(ctx, config.legend, config.frame!, config.contourStyle,
-      config.hasElevationFlags ?? false, config.hasSlopeArrows ?? false, totalW, totalH)
+      config.hasElevationFlags ?? false, config.hasSlopeArrows ?? false, totalW, totalH, config.measureBar)
   }
   if (withFrame && config.measureBar?.enabled && config.calibration && config.heightmap) {
     drawMeasureBars(ctx, config.measureBar, config.calibration, config.heightmap, config.frame!, totalW, totalH)
@@ -1008,7 +1022,7 @@ export async function exportToBlob(config: ExportLayerConfig): Promise<Blob> {
   }
   if (withFrame && config.legend && config.contourStyle) {
     drawLegend(ctx, config.legend, config.frame!, config.contourStyle,
-      config.hasElevationFlags ?? false, config.hasSlopeArrows ?? false, totalW, totalH)
+      config.hasElevationFlags ?? false, config.hasSlopeArrows ?? false, totalW, totalH, config.measureBar)
   }
   if (withFrame && config.measureBar?.enabled && config.calibration && config.heightmap) {
     drawMeasureBars(ctx, config.measureBar, config.calibration, config.heightmap, config.frame!, totalW, totalH)

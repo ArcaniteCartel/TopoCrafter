@@ -346,19 +346,41 @@ function getTitleWrapperStyle(pos: FramePosition, frame: FrameConfig, edgeGap: n
 }
 
 // ---------------------------------------------------------------------------
+// Coordinate format helper (shared by LegendOverlay and MeasureBarOverlay)
+// ---------------------------------------------------------------------------
+
+function toDMS(degrees: number, isLat: boolean): string {
+  const sign = degrees < 0 ? -1 : 1
+  const abs = Math.abs(degrees)
+  let d = Math.floor(abs)
+  const mFrac = (abs - d) * 60
+  let m = Math.floor(mFrac)
+  let s = Math.round((mFrac - m) * 60)
+  if (s >= 60) { s = 0; m += 1 }
+  if (m >= 60) { m = 0; d += 1 }
+  const dir = isLat ? (sign > 0 ? 'N' : 'S') : (sign > 0 ? 'E' : 'W')
+  return `${d}°${m}'${s}"${dir}`
+}
+
+// ---------------------------------------------------------------------------
 // Legend overlay
 // ---------------------------------------------------------------------------
 
-function LegendOverlay({ legend, frame, style, hasElevationFlags, hasSlopeArrows }: {
+function LegendOverlay({ legend, frame, style, hasElevationFlags, hasSlopeArrows, measureBar }: {
   legend: LegendConfig; frame: FrameConfig; style: ContourStyle
-  hasElevationFlags: boolean; hasSlopeArrows: boolean
+  hasElevationFlags: boolean; hasSlopeArrows: boolean; measureBar?: MeasureBarConfig
 }): JSX.Element | null {
+  const hasGeoAnchor = legend.showGeoAnchor && !!measureBar?.enabled && !!measureBar?.geoEnabled
+  const geoAnchorLabel = hasGeoAnchor
+    ? `${legend.geoAnchorLabel}: ${toDMS(measureBar!.anchorLat, true)}, ${toDMS(measureBar!.anchorLon, false)}`
+    : ''
   const items = [
-    legend.showMinorContour                           ? { type: 'minor',     label: legend.minorLabel    } : null,
-    legend.showMajorContour                           ? { type: 'major',     label: legend.majorLabel    } : null,
-    legend.showSeaLevel && style.showSeaLevel         ? { type: 'sea-level', label: legend.seaLevelLabel } : null,
-    legend.showElevationFlags && hasElevationFlags    ? { type: 'flag',      label: legend.flagLabel     } : null,
-    legend.showSlopeArrows && hasSlopeArrows          ? { type: 'arrow',     label: legend.arrowLabel    } : null,
+    legend.showMinorContour                           ? { type: 'minor',      label: legend.minorLabel    } : null,
+    legend.showMajorContour                           ? { type: 'major',      label: legend.majorLabel    } : null,
+    legend.showSeaLevel && style.showSeaLevel         ? { type: 'sea-level',  label: legend.seaLevelLabel } : null,
+    legend.showElevationFlags && hasElevationFlags    ? { type: 'flag',       label: legend.flagLabel     } : null,
+    legend.showSlopeArrows && hasSlopeArrows          ? { type: 'arrow',      label: legend.arrowLabel    } : null,
+    hasGeoAnchor                                      ? { type: 'geo-anchor', label: geoAnchorLabel       } : null,
   ].filter(Boolean) as { type: string; label: string }[]
 
   if (items.length === 0) return null
@@ -407,6 +429,18 @@ function LegendOverlay({ legend, frame, style, hasElevationFlags, hasSlopeArrows
             <g>
               <line x1={fx} y1={fy} x2={fx} y2={fy+h} stroke={style.labelColor} strokeWidth={1} />
               <polygon points={`${fx},${fy} ${fx+h*0.5},${fy+h*0.22} ${fx},${fy+h*0.43}`} fill={style.labelColor} />
+            </g>
+          )
+        } else if (type === 'geo-anchor') {
+          const cx_icon = sx1 + sampW / 2
+          const r_icon = rowH * 0.3
+          sample = (
+            <g>
+              <line x1={cx_icon - r_icon * 1.3} y1={midY} x2={cx_icon + r_icon * 1.3} y2={midY}
+                stroke={legend.color} strokeWidth={0.8} />
+              <line x1={cx_icon} y1={midY - r_icon * 1.3} x2={cx_icon} y2={midY + r_icon * 1.3}
+                stroke={legend.color} strokeWidth={0.8} />
+              <circle cx={cx_icon} cy={midY} r={r_icon} fill="none" stroke={legend.color} strokeWidth={0.8} />
             </g>
           )
         } else {
@@ -475,19 +509,6 @@ function MeasureBarOverlay({
   const R_m = measureBar.planetRadius * 1000
   const anchorLatRad = measureBar.anchorLat * Math.PI / 180
   const cosLat = Math.max(0.001, Math.cos(anchorLatRad))
-
-  function toDMS(degrees: number, isLat: boolean): string {
-    const sign = degrees < 0 ? -1 : 1
-    const abs = Math.abs(degrees)
-    let d = Math.floor(abs)
-    const mFrac = (abs - d) * 60
-    let m = Math.floor(mFrac)
-    let s = Math.round((mFrac - m) * 60)
-    if (s >= 60) { s = 0; m += 1 }
-    if (m >= 60) { m = 0; d += 1 }
-    const dir = isLat ? (sign > 0 ? 'N' : 'S') : (sign > 0 ? 'E' : 'W')
-    return `${d}°${m}'${s}"${dir}`
-  }
 
   function geoLabelH(screenX: number): string {
     const dist_m = (screenX - anchorScreenX) * metersPerPixel
@@ -1410,6 +1431,7 @@ export function MapCanvas(): JSX.Element {
           style={style}
           hasElevationFlags={elevationFlags.length > 0}
           hasSlopeArrows={slopeArrows.length > 0}
+          measureBar={measureBar}
         />
       )}
 
