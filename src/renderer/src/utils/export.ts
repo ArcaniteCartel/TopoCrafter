@@ -1,4 +1,5 @@
 import type { FrameConfig, TitleConfig, CompassConfig, ContourStyle, LegendConfig, FramePosition, MeasureBarConfig, ElevationCalibration, HeightmapInfo } from '../types'
+import { TRI_COLORS, TRI_LABELS } from '../types'
 
 export interface ExportLayerConfig {
   baseImageUrl: string | null
@@ -13,6 +14,7 @@ export interface ExportLayerConfig {
   contourStyle?: ContourStyle
   hasElevationFlags?: boolean
   hasSlopeArrows?: boolean
+  hasRuggednessFlags?: boolean
   measureBar?: MeasureBarConfig
   calibration?: ElevationCalibration
   heightmap?: HeightmapInfo
@@ -39,6 +41,7 @@ export interface OverlayExportConfig {
   contourStyle?: ContourStyle
   hasElevationFlags?: boolean
   hasSlopeArrows?: boolean
+  hasRuggednessFlags?: boolean
   measureBar?: MeasureBarConfig
   calibration?: ElevationCalibration
   heightmap?: HeightmapInfo
@@ -671,15 +674,18 @@ function drawLegend(
   totalW: number,
   totalH: number,
   measureBar?: MeasureBarConfig,
+  hasRuggednessFlags?: boolean,
 ): void {
   const hasGeoAnchor = legend.showGeoAnchor && !!measureBar?.enabled && !!measureBar?.geoEnabled
+  const showColorBar = legend.showRuggednessFlags && !!hasRuggednessFlags
   const items = [
-    legend.showMinorContour                             ? { type: 'minor',      label: legend.minorLabel    } : null,
-    legend.showMajorContour                             ? { type: 'major',      label: legend.majorLabel    } : null,
-    legend.showSeaLevel && contourStyle.showSeaLevel    ? { type: 'sea-level',  label: legend.seaLevelLabel } : null,
-    legend.showElevationFlags && hasElevationFlags      ? { type: 'flag',       label: legend.flagLabel     } : null,
-    legend.showSlopeArrows && hasSlopeArrows            ? { type: 'arrow',      label: legend.arrowLabel    } : null,
+    legend.showMinorContour                             ? { type: 'minor',      label: legend.minorLabel         } : null,
+    legend.showMajorContour                             ? { type: 'major',      label: legend.majorLabel         } : null,
+    legend.showSeaLevel && contourStyle.showSeaLevel    ? { type: 'sea-level',  label: legend.seaLevelLabel      } : null,
+    legend.showElevationFlags && hasElevationFlags      ? { type: 'flag',       label: legend.flagLabel          } : null,
+    legend.showSlopeArrows && hasSlopeArrows            ? { type: 'arrow',      label: legend.arrowLabel         } : null,
     hasGeoAnchor ? { type: 'geo-anchor', label: `${legend.geoAnchorLabel}: ${toDMS(measureBar!.anchorLat, true)}, ${toDMS(measureBar!.anchorLon, false)}` } : null,
+    showColorBar  ? { type: 'ruggedness', label: legend.ruggednessFlagLabel } : null,
   ].filter(Boolean) as { type: string; label: string }[]
 
   if (items.length === 0) return
@@ -690,6 +696,9 @@ function drawLegend(
   const gapX = fs * 0.6
   const pad = fs * 0.6
   const colGap = pad
+  const barH = fs * 1.2
+  const barLabelH = fs * 1.1
+  const barSectionH = showColorBar ? (pad + barH + barLabelH) : 0
 
   ctx.font = `${fs}px serif`
   const maxLabelW = Math.max(...items.map(i => ctx.measureText(i.label).width))
@@ -698,8 +707,10 @@ function drawLegend(
   const cols = Math.max(1, Math.min(legend.columns, items.length))
   const rows = Math.ceil(items.length / cols)
 
-  const boxW = pad + cols * colW + (cols - 1) * colGap + pad
-  const boxH = pad + rows * rowH + pad
+  const minBarW = showColorBar ? 5 * fs * 3.2 : 0
+  const boxW = Math.max(pad + cols * colW + (cols - 1) * colGap + pad, minBarW + 2 * pad)
+  const boxH_items = pad + rows * rowH + pad
+  const boxH = boxH_items + barSectionH
   const edgeGap = Math.max(4, (frame.borderEnabled ? frame.borderWidth * 2 : 0) + 3)
 
   const [boxX, boxY] = getBoxOrigin(legend.position, frame, totalW, totalH, boxW, boxH, edgeGap)
@@ -744,6 +755,24 @@ function drawLegend(
       ctx.beginPath(); ctx.moveTo(cx_icon - r_icon * 1.3, midY); ctx.lineTo(cx_icon + r_icon * 1.3, midY); ctx.stroke()
       ctx.beginPath(); ctx.moveTo(cx_icon, midY - r_icon * 1.3); ctx.lineTo(cx_icon, midY + r_icon * 1.3); ctx.stroke()
       ctx.beginPath(); ctx.arc(cx_icon, midY, r_icon, 0, Math.PI * 2); ctx.stroke()
+    } else if (type === 'ruggedness') {
+      const h = rowH * 0.65
+      const fx = sx1 + sampW * 0.38
+      const fy_top = midY - h * 0.55
+      const fy_base = midY + h * 0.45
+      ctx.strokeStyle = TRI_COLORS[2]; ctx.lineWidth = 0.8; ctx.lineCap = 'round'; ctx.lineJoin = 'round'
+      ctx.beginPath(); ctx.moveTo(fx, fy_base); ctx.lineTo(fx, fy_top); ctx.stroke()
+      ctx.lineWidth = 0.7
+      ctx.beginPath()
+      ctx.moveTo(fx, fy_top)
+      ctx.lineTo(fx+h*0.18, fy_top-h*0.2); ctx.lineTo(fx+h*0.33, fy_top-h*0.07)
+      ctx.lineTo(fx+h*0.48, fy_top-h*0.26); ctx.lineTo(fx+h*0.6, fy_top-h*0.12)
+      ctx.stroke()
+      ctx.beginPath()
+      ctx.moveTo(fx, fy_top)
+      ctx.lineTo(fx+h*0.18, fy_top-h*0.06); ctx.lineTo(fx+h*0.33, fy_top+h*0.05)
+      ctx.lineTo(fx+h*0.48, fy_top-h*0.1); ctx.lineTo(fx+h*0.6, fy_top+h*0.01)
+      ctx.stroke()
     } else {
       const w = sampW * 0.6, hw = w * 0.28, hl = w * 0.3
       const ax1 = sx1 + (sampW - w) / 2, ax2 = ax1 + w, ab = ax2 - hl
@@ -758,7 +787,31 @@ function drawLegend(
     ctx.textAlign = 'left'; ctx.textBaseline = 'middle'
     ctx.fillText(label, sx2 + gapX, midY)
   }
+
+  // TRI severity color bar
+  if (showColorBar) {
+    const barY = boxY + boxH_items
+    const barX = boxX + pad
+    const barInnerW = boxW - 2 * pad
+    const tierW = barInnerW / 5
+
+    ctx.strokeStyle = legend.color; ctx.lineWidth = 0.3; ctx.globalAlpha = 0.4
+    ctx.beginPath(); ctx.moveTo(boxX + pad, barY); ctx.lineTo(boxX + boxW - pad, barY); ctx.stroke()
+    ctx.globalAlpha = 1
+
+    TRI_COLORS.forEach((color, i) => {
+      ctx.fillStyle = color
+      ctx.fillRect(barX + i * tierW, barY + pad * 0.5, tierW, barH)
+    })
+
+    ctx.fillStyle = legend.color; ctx.font = `${fs * 0.75}px sans-serif`
+    ctx.textBaseline = 'top'; ctx.textAlign = 'center'
+    TRI_LABELS.forEach((label, i) => {
+      ctx.fillText(label, barX + i * tierW + tierW / 2, barY + pad * 0.5 + barH + fs * 0.15)
+    })
+  }
 }
+
 
 // ---------------------------------------------------------------------------
 // Grid helpers — draw into offset region of the destination canvas
@@ -947,7 +1000,7 @@ export async function exportOverlayToBlob(config: OverlayExportConfig): Promise<
   }
   if (withFrame && config.legend && config.contourStyle) {
     drawLegend(ctx, config.legend, config.frame!, config.contourStyle,
-      config.hasElevationFlags ?? false, config.hasSlopeArrows ?? false, totalW, totalH, config.measureBar)
+      config.hasElevationFlags ?? false, config.hasSlopeArrows ?? false, totalW, totalH, config.measureBar, config.hasRuggednessFlags)
   }
   if (withFrame && config.measureBar?.enabled && config.calibration && config.heightmap) {
     drawMeasureBars(ctx, config.measureBar, config.calibration, config.heightmap, config.frame!, totalW, totalH)
@@ -1022,7 +1075,7 @@ export async function exportToBlob(config: ExportLayerConfig): Promise<Blob> {
   }
   if (withFrame && config.legend && config.contourStyle) {
     drawLegend(ctx, config.legend, config.frame!, config.contourStyle,
-      config.hasElevationFlags ?? false, config.hasSlopeArrows ?? false, totalW, totalH, config.measureBar)
+      config.hasElevationFlags ?? false, config.hasSlopeArrows ?? false, totalW, totalH, config.measureBar, config.hasRuggednessFlags)
   }
   if (withFrame && config.measureBar?.enabled && config.calibration && config.heightmap) {
     drawMeasureBars(ctx, config.measureBar, config.calibration, config.heightmap, config.frame!, totalW, totalH)

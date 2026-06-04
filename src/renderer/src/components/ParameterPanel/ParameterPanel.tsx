@@ -96,6 +96,9 @@ export function ParameterPanel(): JSX.Element {
   const updateMeasureBar = useStore((s) => s.updateMeasureBar)
   const elevationFlags = useStore((s) => s.elevationFlags)
   const slopeArrows = useStore((s) => s.slopeArrows)
+  const ruggednessFlags = useStore((s) => s.ruggednessFlags)
+  const ruggednessColorBySeverity = useStore((s) => s.ruggednessColorBySeverity)
+  const setRuggednessColorBySeverity = useStore((s) => s.setRuggednessColorBySeverity)
   const overlayOnly = useStore((s) => s.overlayOnly)
   const setOverlayOnly = useStore((s) => s.setOverlayOnly)
   const overlayBrightness = useStore((s) => s.overlayBrightness)
@@ -125,8 +128,12 @@ export function ParameterPanel(): JSX.Element {
   const [intervalStr, setIntervalStr] = useState<string>(
     realInterval !== null ? String(realInterval) : ''
   )
+  const [hillshadeOpen, setHillshadeOpen] = useState(true)
+  const [contoursOpen, setContoursOpen] = useState(true)
+  const [styleOpen, setStyleOpen] = useState(true)
   const [labelStylingOpen, setLabelStylingOpen] = useState(true)
   const [seaLevelOpen, setSeaLevelOpen] = useState(true)
+  const [markersOpen, setMarkersOpen] = useState(true)
   const [framingOpen, setFramingOpen] = useState(true)
 
   // Refs for latest values — safe to read inside event handlers and effects
@@ -201,18 +208,25 @@ export function ParameterPanel(): JSX.Element {
 
       {!!heightmap && (
         <>
-          <Group justify="space-between" align="center">
-            <Text fw={600} size="sm" c="dimmed" tt="uppercase" style={{ letterSpacing: 1 }}>
-              Hillshade
-            </Text>
-            <Switch
-              size="xs"
-              label="Overlay only"
-              checked={overlayOnly}
-              onChange={(e) => setOverlayOnly(e.currentTarget.checked)}
-            />
+          <Group justify="space-between" style={{ cursor: 'pointer', userSelect: 'none' }}
+            onClick={() => setHillshadeOpen((o) => !o)}>
+            <Group gap="xs" align="center">
+              <Text fw={600} size="sm" c="dimmed" tt="uppercase" style={{ letterSpacing: 1 }}>
+                Hillshade
+              </Text>
+              <Switch
+                size="xs"
+                label="Overlay only"
+                checked={overlayOnly}
+                onClick={(e) => e.stopPropagation()}
+                onChange={(e) => setOverlayOnly(e.currentTarget.checked)}
+              />
+            </Group>
+            <Text size="lg" c="dimmed">{hillshadeOpen ? '▾' : '▸'}</Text>
           </Group>
 
+          <Collapse in={hillshadeOpen}>
+          <Stack gap="md">
           <Stack gap={4}>
             <Text size="xs" fw={500}>Sun Azimuth</Text>
             <Slider
@@ -303,13 +317,22 @@ export function ParameterPanel(): JSX.Element {
             />
           </Stack>
 
+          </Stack>
+          </Collapse>
           <Divider />
         </>
       )}
 
-      <Text fw={600} size="sm" c="dimmed" tt="uppercase" style={{ letterSpacing: 1 }}>
-        Contour Parameters
-      </Text>
+      <Group justify="space-between" style={{ cursor: 'pointer', userSelect: 'none' }}
+        onClick={() => setContoursOpen((o) => !o)}>
+        <Text fw={600} size="sm" c="dimmed" tt="uppercase" style={{ letterSpacing: 1 }}>
+          Contour Parameters
+        </Text>
+        <Text size="lg" c="dimmed">{contoursOpen ? '▾' : '▸'}</Text>
+      </Group>
+
+      <Collapse in={contoursOpen}>
+      <Stack gap="md">
 
       <Select
         label="Elevation Units"
@@ -472,12 +495,21 @@ export function ParameterPanel(): JSX.Element {
         />
       </Stack>
 
+      </Stack>
+      </Collapse>
+
       <Divider />
 
-      <Text fw={600} size="sm" c="dimmed" tt="uppercase" style={{ letterSpacing: 1 }}>
-        Style
-      </Text>
+      <Group justify="space-between" style={{ cursor: 'pointer', userSelect: 'none' }}
+        onClick={() => setStyleOpen((o) => !o)}>
+        <Text fw={600} size="sm" c="dimmed" tt="uppercase" style={{ letterSpacing: 1 }}>
+          Style
+        </Text>
+        <Text size="lg" c="dimmed">{styleOpen ? '▾' : '▸'}</Text>
+      </Group>
 
+      <Collapse in={styleOpen}>
+      <Stack gap="md">
       <ColorInput
         label="Minor Contour Color"
         size="xs"
@@ -671,6 +703,34 @@ export function ParameterPanel(): JSX.Element {
               label={(v) => `${v}`}
             />
           </Stack>
+        </Stack>
+      </Collapse>
+
+      </Stack>
+      </Collapse>
+
+      <Divider />
+
+      <Group
+        justify="space-between"
+        style={{ cursor: 'pointer', userSelect: 'none' }}
+        onClick={() => setMarkersOpen((o) => !o)}
+      >
+        <Text fw={600} size="sm" c="dimmed" tt="uppercase" style={{ letterSpacing: 1 }}>
+          Markers &amp; Annotations
+        </Text>
+        <Text size="lg" c="dimmed">{markersOpen ? '▾' : '▸'}</Text>
+      </Group>
+
+      <Collapse in={markersOpen}>
+        <Stack gap="md">
+          <Switch
+            label="Color ruggedness flags by severity"
+            description="Green = very low, red = extreme"
+            size="sm"
+            checked={ruggednessColorBySeverity}
+            onChange={(e) => setRuggednessColorBySeverity(e.currentTarget.checked)}
+          />
         </Stack>
       </Collapse>
 
@@ -1017,7 +1077,8 @@ export function ParameterPanel(): JSX.Element {
           { key: 'showSeaLevel',     labelKey: 'seaLevelLabel', label: 'Sea level' },
           { key: 'showElevationFlags', labelKey: 'flagLabel', label: 'Elevation flags', requiresData: elevationFlags.length > 0 },
           { key: 'showSlopeArrows',  labelKey: 'arrowLabel',    label: 'Slope arrows',  requiresData: slopeArrows.length > 0 },
-          { key: 'showGeoAnchor',    labelKey: 'geoAnchorLabel', label: 'Geo reference', requiresData: measureBar.enabled && measureBar.geoEnabled },
+          { key: 'showGeoAnchor',    labelKey: 'geoAnchorLabel',      label: 'Geo reference',    requiresData: measureBar.enabled && measureBar.geoEnabled },
+          { key: 'showRuggednessFlags', labelKey: 'ruggednessFlagLabel', label: 'Ruggedness index', requiresData: ruggednessFlags.length > 0 },
         ] as { key: keyof typeof legend; labelKey: keyof typeof legend; label: string; requiresData?: boolean }[]).map(({ key, labelKey, label, requiresData }) => (
           <Group key={key as string} gap="xs" align="center" wrap="nowrap">
             <Switch

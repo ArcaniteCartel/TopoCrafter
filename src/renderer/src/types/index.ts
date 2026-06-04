@@ -85,7 +85,26 @@ export interface SlopeArrow {
   slopeDeg: number  // slope angle from horizontal in degrees (label value)
 }
 
-export type MapTool = 'none' | 'elevation-flag' | 'slope-arrow' | 'measure-anchor'
+export interface RuggednessFlag {
+  id: string
+  x: number
+  y: number
+  triNorm: number  // normalized TRI value (0 to ~0.3); dimensionless
+}
+
+export const TRI_THRESHOLDS = [0.004, 0.015, 0.04, 0.1] as const
+export const TRI_COLORS = ['#4CAF50', '#8BC34A', '#FFC107', '#FF5722', '#8B0000'] as const
+export const TRI_LABELS = ['Very Low', 'Low', 'Moderate', 'High', 'Extreme'] as const
+
+export function getTriSeverity(triNorm: number): 0 | 1 | 2 | 3 | 4 {
+  if (triNorm < TRI_THRESHOLDS[0]) return 0
+  if (triNorm < TRI_THRESHOLDS[1]) return 1
+  if (triNorm < TRI_THRESHOLDS[2]) return 2
+  if (triNorm < TRI_THRESHOLDS[3]) return 3
+  return 4
+}
+
+export type MapTool = 'none' | 'elevation-flag' | 'slope-arrow' | 'measure-anchor' | 'ruggedness-flag'
 
 export type FrameBorderStyle = 'single' | 'double' | 'cartographic' | 'shadow' | 'ornate'
 
@@ -157,12 +176,14 @@ export interface LegendConfig {
   showElevationFlags: boolean
   showSlopeArrows: boolean
   showGeoAnchor: boolean
+  showRuggednessFlags: boolean
   minorLabel: string
   majorLabel: string
   seaLevelLabel: string
   flagLabel: string
   arrowLabel: string
   geoAnchorLabel: string
+  ruggednessFlagLabel: string
 }
 
 export const defaultLegendConfig: LegendConfig = {
@@ -177,12 +198,14 @@ export const defaultLegendConfig: LegendConfig = {
   showElevationFlags: true,
   showSlopeArrows: true,
   showGeoAnchor: true,
+  showRuggednessFlags: true,
   minorLabel: 'Minor contour',
   majorLabel: 'Major contour',
   seaLevelLabel: 'Sea level',
   flagLabel: 'Elevation flag',
   arrowLabel: 'Slope angle',
   geoAnchorLabel: 'Geo reference',
+  ruggednessFlagLabel: 'Ruggedness index',
 }
 
 export interface CompassConfig {
@@ -284,6 +307,8 @@ export interface ProjectState {
   contoursGenerating: boolean
   elevationFlags: ElevationFlag[]
   slopeArrows: SlopeArrow[]
+  ruggednessFlags: RuggednessFlag[]
+  ruggednessColorBySeverity: boolean
   mapTool: MapTool
   snapshotParams: ContourParameters | null
   snapshotStyle: ContourStyle | null

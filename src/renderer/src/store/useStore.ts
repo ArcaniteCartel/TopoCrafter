@@ -2,7 +2,7 @@ import { create } from 'zustand'
 import type {
   ProjectState, ContourParameters, ContourStyle,
   HeightmapInfo, HillshadeParameters, ElevationCalibration,
-  ElevationFlag, SlopeArrow, MapTool, FrameConfig, TitleConfig, CompassConfig, LegendConfig, MeasureBarConfig,
+  ElevationFlag, SlopeArrow, RuggednessFlag, MapTool, FrameConfig, TitleConfig, CompassConfig, LegendConfig, MeasureBarConfig,
 } from '../types'
 import { defaultParameters, defaultStyle, defaultHillshadeParameters, defaultElevationCalibration, defaultFrameConfig, defaultTitleConfig, defaultCompassConfig, defaultLegendConfig, defaultMeasureBarConfig } from '../types'
 
@@ -55,6 +55,10 @@ interface AppActions {
   addSlopeArrow: (arrow: SlopeArrow) => void
   updateSlopeArrow: (id: string, updates: Partial<Omit<SlopeArrow, 'id'>>) => void
   removeSlopeArrow: (id: string) => void
+  addRuggednessFlag: (flag: RuggednessFlag) => void
+  updateRuggednessFlag: (id: string, updates: Partial<Omit<RuggednessFlag, 'id'>>) => void
+  removeRuggednessFlag: (id: string) => void
+  setRuggednessColorBySeverity: (val: boolean) => void
   setMapTool: (tool: MapTool) => void
   setActiveTab: (tab: 'terrain' | 'hillshade') => void
   setMapZoom: (zoom: number) => void
@@ -91,6 +95,8 @@ const initialState: ProjectState = {
   contoursGenerating: false,
   elevationFlags: [],
   slopeArrows: [],
+  ruggednessFlags: [],
+  ruggednessColorBySeverity: true,
   mapTool: 'none',
   snapshotParams: null,
   snapshotStyle: null,
@@ -288,6 +294,23 @@ export const useStore = create<ProjectState & AppActions>((set, get) => ({
       slopeArrows: state.slopeArrows.filter((a) => a.id !== id),
       isDirty: true,
     })),
+
+  addRuggednessFlag: (flag) =>
+    set((state) => ({ ruggednessFlags: [...state.ruggednessFlags, flag], isDirty: true })),
+
+  updateRuggednessFlag: (id, updates) =>
+    set((state) => ({
+      ruggednessFlags: state.ruggednessFlags.map((f) => f.id === id ? { ...f, ...updates } : f),
+      isDirty: true,
+    })),
+
+  removeRuggednessFlag: (id) =>
+    set((state) => ({
+      ruggednessFlags: state.ruggednessFlags.filter((f) => f.id !== id),
+      isDirty: true,
+    })),
+
+  setRuggednessColorBySeverity: (val) => set({ ruggednessColorBySeverity: val }),
 
   setMapTool: (tool) => set({ mapTool: tool }),
 

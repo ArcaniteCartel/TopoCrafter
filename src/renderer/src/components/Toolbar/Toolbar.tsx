@@ -53,6 +53,16 @@ function AnchorIcon(): JSX.Element {
   )
 }
 
+function RuggednessIcon(): JSX.Element {
+  return (
+    <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+      <line x1="4" y1="14" x2="4" y2="5" />
+      <polyline points="4,5 6.5,2 8.5,4.5 11,1 13,2.5" />
+      <polyline points="4,5 6.5,5.5 8.5,7.5 11,5 13,6" strokeWidth="1" />
+    </svg>
+  )
+}
+
 export function Toolbar(): JSX.Element {
   const heightmap = useStore((s) => s.heightmap)
   const mapZoom = useStore((s) => s.mapZoom)
@@ -72,6 +82,7 @@ export function Toolbar(): JSX.Element {
   const measureBar = useStore((s) => s.measureBar)
   const elevationFlags = useStore((s) => s.elevationFlags)
   const slopeArrows = useStore((s) => s.slopeArrows)
+  const ruggednessFlags = useStore((s) => s.ruggednessFlags)
   const { themeId, setTheme } = useThemeStore()
   const [themeModalOpen, setThemeModalOpen] = useState(false)
   const [toolPanelOpen, setToolPanelOpen] = useState(false)
@@ -97,6 +108,7 @@ export function Toolbar(): JSX.Element {
       const frameOpts = {
         frame, includeFrame: frame.enabled && includeFrame, title, compass,
         legend, contourStyle: style, hasElevationFlags: elevationFlags.length > 0, hasSlopeArrows: slopeArrows.length > 0,
+        hasRuggednessFlags: ruggednessFlags.length > 0,
         measureBar, calibration: elevationCalibration, heightmap: heightmap ?? undefined,
       }
       let blob: Blob
@@ -167,6 +179,17 @@ export function Toolbar(): JSX.Element {
             </Popover.Target>
             <Popover.Dropdown p="xs">
               <Group gap="xs">
+                <Tooltip label="Add a terrain ruggedness index marker" position="bottom" withArrow>
+                  <ActionIcon
+                    variant={mapTool === 'ruggedness-flag' ? 'filled' : 'subtle'}
+                    size="md"
+                    disabled={!heightmap}
+                    onClick={() => setMapTool(mapTool === 'ruggedness-flag' ? 'none' : 'ruggedness-flag')}
+                    aria-label="Ruggedness flag tool"
+                  >
+                    <RuggednessIcon />
+                  </ActionIcon>
+                </Tooltip>
                 <Tooltip label="Add an elevation flag to the map" position="bottom" withArrow>
                   <ActionIcon
                     variant={mapTool === 'elevation-flag' ? 'filled' : 'subtle'}
@@ -310,6 +333,7 @@ export function Toolbar(): JSX.Element {
           contourStyle={style}
           hasElevationFlags={elevationFlags.length > 0}
           hasSlopeArrows={slopeArrows.length > 0}
+          hasRuggednessFlags={ruggednessFlags.length > 0}
           measureBar={measureBar}
           heightmap={heightmap ?? undefined}
         />

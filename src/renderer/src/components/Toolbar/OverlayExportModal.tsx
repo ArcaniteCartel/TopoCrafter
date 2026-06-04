@@ -19,6 +19,7 @@ interface Props {
   contourStyle: ContourStyle
   hasElevationFlags: boolean
   hasSlopeArrows: boolean
+  hasRuggednessFlags?: boolean
   measureBar?: MeasureBarConfig
   heightmap?: HeightmapInfo
 }
@@ -36,6 +37,7 @@ export function OverlayExportModal({
   contourStyle,
   hasElevationFlags,
   hasSlopeArrows,
+  hasRuggednessFlags,
   measureBar,
   heightmap,
 }: Props): JSX.Element {
@@ -97,6 +99,7 @@ export function OverlayExportModal({
         contourStyle,
         hasElevationFlags,
         hasSlopeArrows,
+        hasRuggednessFlags,
         measureBar,
         calibration: elevationCalibration,
         heightmap,
