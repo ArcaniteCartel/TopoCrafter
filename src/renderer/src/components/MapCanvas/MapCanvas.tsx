@@ -472,20 +472,20 @@ function LegendOverlay({ legend, frame, style, hasElevationFlags, hasSlopeArrows
 // ---------------------------------------------------------------------------
 
 function MeasureBarOverlay({
-  measureBar, frame, calibration, heightmap, outerW, outerH,
+  measureBar, frame, calibration, heightmap, mapW, mapH,
 }: {
   measureBar: MeasureBarConfig
   frame: FrameConfig
   calibration: ElevationCalibration
   heightmap: HeightmapInfo
-  outerW: number
-  outerH: number
+  mapW: number
+  mapH: number
 }): JSX.Element | null {
   if (!calibration.mapWidth || calibration.mapWidth <= 0 || !calibration.unitType) return null
 
   const { marginLeft: ml, marginRight: mr, marginTop: mt, marginBottom: mb } = frame
-  const mapW = outerW - ml - mr
-  const mapH = outerH - mt - mb
+  const outerW = mapW + ml + mr
+  const outerH = mapH + mt + mb
   if (mapW <= 0 || mapH <= 0) return null
 
   const pixelsPerUnit = mapW / calibration.mapWidth
@@ -747,13 +747,16 @@ export function MapCanvas(): JSX.Element {
   const measureBar = useStore((s) => s.measureBar)
   const updateMeasureBar = useStore((s) => s.updateMeasureBar)
 
-  // Track outer composition div dimensions for measure bar overlay
-  const outerDivRef = useRef<HTMLDivElement>(null)
-  const [outerSize, setOuterSize] = useState<{ w: number; h: number } | null>(null)
+  // Track inner map area dimensions for measure bar overlay.
+  // We observe the inner map div (not the outer composition div) so that ResizeObserver
+  // fires on image-load / zoom changes. Frame margins are added inside MeasureBarOverlay
+  // from live React state, avoiding stale values when only padding changes.
+  const innerMapRef = useRef<HTMLDivElement>(null)
+  const [innerMapSize, setInnerMapSize] = useState<{ w: number; h: number } | null>(null)
   useEffect(() => {
-    const div = outerDivRef.current
+    const div = innerMapRef.current
     if (!div) return
-    const update = () => setOuterSize({ w: div.clientWidth, h: div.clientHeight })
+    const update = () => setInnerMapSize({ w: div.clientWidth, h: div.clientHeight })
     update()
     const obs = new ResizeObserver(update)
     obs.observe(div)
@@ -1017,7 +1020,7 @@ export function MapCanvas(): JSX.Element {
       )}
 
       {/* Outer composition div — establishes total width, includes frame margins */}
-      <div ref={outerDivRef} style={{
+      <div style={{
         position: 'relative',
         display: 'inline-block',
         width: `${mapZoom}%`,
@@ -1047,7 +1050,7 @@ export function MapCanvas(): JSX.Element {
       })()}
 
       {/* Inner map area — position relative so SVG overlays stack correctly */}
-      <div style={{
+      <div ref={innerMapRef} style={{
         position: 'relative',
         backgroundColor: overlayOnly
           ? `rgb(${Math.round(255 * (0.85 + 0.15 * overlayBrightness))},` +
@@ -1436,14 +1439,14 @@ export function MapCanvas(): JSX.Element {
       )}
 
       {/* Measure bar overlay — ticks along map edges into margin area */}
-      {frame.enabled && measureBar.enabled && heightmap && outerSize && (
+      {frame.enabled && measureBar.enabled && heightmap && innerMapSize && (
         <MeasureBarOverlay
           measureBar={measureBar}
           frame={frame}
           calibration={elevationCalibration}
           heightmap={heightmap}
-          outerW={outerSize.w}
-          outerH={outerSize.h}
+          mapW={innerMapSize.w}
+          mapH={innerMapSize.h}
         />
       )}
 
