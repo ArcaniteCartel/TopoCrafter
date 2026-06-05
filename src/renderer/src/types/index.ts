@@ -315,6 +315,7 @@ export interface ProjectState {
   snapshotHillshadeParams: HillshadeParameters | null
   snapshotElevationCalibration: ElevationCalibration | null
   mapZoom: number
+  mapDisplaySize: { w: number; h: number } | null
   overlayOnly: boolean
   overlayBrightness: number
   frame: FrameConfig

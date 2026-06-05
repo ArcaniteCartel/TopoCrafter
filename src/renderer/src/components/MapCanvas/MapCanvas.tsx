@@ -804,6 +804,7 @@ export function MapCanvas(): JSX.Element {
   const setMapTool = useStore((s) => s.setMapTool)
   const measureBar = useStore((s) => s.measureBar)
   const updateMeasureBar = useStore((s) => s.updateMeasureBar)
+  const setMapDisplaySize = useStore((s) => s.setMapDisplaySize)
 
   // Track inner map area dimensions for measure bar overlay.
   // We observe the inner map div (not the outer composition div) so that ResizeObserver
@@ -814,11 +815,15 @@ export function MapCanvas(): JSX.Element {
   useEffect(() => {
     const div = innerMapRef.current
     if (!div) return
-    const update = () => setInnerMapSize({ w: div.clientWidth, h: div.clientHeight })
+    const update = () => {
+      const size = { w: div.clientWidth, h: div.clientHeight }
+      setInnerMapSize(size)
+      setMapDisplaySize(size)
+    }
     update()
     const obs = new ResizeObserver(update)
     obs.observe(div)
-    return () => obs.disconnect()
+    return () => { obs.disconnect(); setMapDisplaySize(null) }
   }, [])
 
   // Refs so effects and stable callbacks always read the latest values
@@ -1080,6 +1085,7 @@ export function MapCanvas(): JSX.Element {
   }
 
   const mapZoom = useStore((s) => s.mapZoom)
+  const setMapZoom = useStore((s) => s.setMapZoom)
   const overlayOnly = useStore((s) => s.overlayOnly)
   const overlayBrightness = useStore((s) => s.overlayBrightness)
   const frame = useStore((s) => s.frame)
@@ -1104,8 +1110,64 @@ export function MapCanvas(): JSX.Element {
   const toolActive = mapTool === 'elevation-flag' || mapTool === 'slope-arrow' || mapTool === 'measure-anchor' || mapTool === 'ruggedness-flag'
   const flagSvgInteractive = toolActive || elevationFlags.length > 0 || slopeArrows.length > 0 || ruggednessFlags.length > 0
 
+  // Pan-drag and wheel-zoom for default (no-tool) mode
+  const scrollContainerRef = useRef<HTMLDivElement>(null)
+  const mapZoomRef = useRef(mapZoom)
+  mapZoomRef.current = mapZoom
+  const panRef = useRef<{ startX: number; startY: number; scrollLeft: number; scrollTop: number } | null>(null)
+  const [isPanning, setIsPanning] = useState(false)
+
+  useEffect(() => {
+    const el = scrollContainerRef.current
+    if (!el) return
+    const onWheel = (e: WheelEvent) => {
+      e.preventDefault()
+      const v = 50 * Math.log2(mapZoomRef.current / 100)
+      const step = e.deltaY > 0 ? -5 : 5
+      const newV = Math.max(-100, Math.min(100, v + step))
+      setMapZoom(Math.round(100 * Math.pow(2, newV / 50)))
+    }
+    el.addEventListener('wheel', onWheel, { passive: false })
+    return () => el.removeEventListener('wheel', onWheel)
+  }, [setMapZoom])
+
+  const canPan = mapTool === 'none' && !!(baseImageUrl || heightmap)
+
+  function handleScrollMouseDown(e: React.MouseEvent<HTMLDivElement>) {
+    if (!canPan || e.button !== 0) return
+    const el = scrollContainerRef.current
+    if (!el) return
+    panRef.current = { startX: e.clientX, startY: e.clientY, scrollLeft: el.scrollLeft, scrollTop: el.scrollTop }
+    setIsPanning(true)
+    e.preventDefault()
+  }
+
+  function handleScrollMouseMove(e: React.MouseEvent<HTMLDivElement>) {
+    if (!panRef.current) return
+    const el = scrollContainerRef.current
+    if (!el) return
+    el.scrollLeft = panRef.current.scrollLeft - (e.clientX - panRef.current.startX)
+    el.scrollTop = panRef.current.scrollTop - (e.clientY - panRef.current.startY)
+  }
+
+  function handleScrollMouseUp() {
+    panRef.current = null
+    setIsPanning(false)
+  }
+
   return (
-    <div style={{ position: 'relative', width: '100%', flex: 1, minHeight: 0, overflow: 'auto' }}>
+    <div
+      ref={scrollContainerRef}
+      style={{
+        position: 'relative', width: '100%', flex: 1, minHeight: 0, overflow: 'auto',
+        cursor: canPan ? (isPanning ? 'grabbing' : 'grab') : undefined,
+        userSelect: isPanning ? 'none' : undefined,
+      }}
+      onMouseDown={handleScrollMouseDown}
+      onMouseMove={handleScrollMouseMove}
+      onMouseUp={handleScrollMouseUp}
+      onMouseLeave={handleScrollMouseUp}
+    >
       {showPlaceholder && (
         <Center style={{ height: '100%', minHeight: 200 }}>
           <Text c="dimmed" size="sm">Load a terrain image and heightmap to get started</Text>
@@ -1275,7 +1337,7 @@ export function MapCanvas(): JSX.Element {
             width: '100%',
             height: '100%',
             pointerEvents: flagSvgInteractive ? 'auto' : 'none',
-            cursor: toolActive ? 'crosshair' : 'default',
+            cursor: toolActive ? 'crosshair' : 'inherit',
           }}
           onMouseDown={handleSvgMouseDown}
           onMouseUp={handleSvgMouseUp}

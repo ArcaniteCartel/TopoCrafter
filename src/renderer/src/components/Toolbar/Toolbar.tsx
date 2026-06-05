@@ -83,6 +83,7 @@ export function Toolbar(): JSX.Element {
   const elevationFlags = useStore((s) => s.elevationFlags)
   const slopeArrows = useStore((s) => s.slopeArrows)
   const ruggednessFlags = useStore((s) => s.ruggednessFlags)
+  const mapDisplaySize = useStore((s) => s.mapDisplaySize)
   const { themeId, setTheme } = useThemeStore()
   const [themeModalOpen, setThemeModalOpen] = useState(false)
   const [toolPanelOpen, setToolPanelOpen] = useState(false)
@@ -267,6 +268,11 @@ export function Toolbar(): JSX.Element {
             >
               {mapZoom}%
             </Text>
+            {mapDisplaySize && (
+              <Text size="xs" c="dimmed" style={{ fontVariantNumeric: 'tabular-nums', cursor: 'default', whiteSpace: 'nowrap' }}>
+                {mapDisplaySize.w}×{mapDisplaySize.h}
+              </Text>
+            )}
           </Group>
 
           <Menu shadow="md" width={220} disabled={!canExport}>
