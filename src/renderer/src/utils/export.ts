@@ -1,5 +1,5 @@
 import type { FrameConfig, TitleConfig, CompassConfig, ContourStyle, LegendConfig, FramePosition, MeasureBarConfig, ElevationCalibration, HeightmapInfo } from '../types'
-import { TRI_COLORS, TRI_LABELS } from '../types'
+import { TRI_COLORS, TRI_LABELS, triRangeLabel } from '../types'
 
 export interface ExportLayerConfig {
   baseImageUrl: string | null
@@ -17,6 +17,7 @@ export interface ExportLayerConfig {
   hasRuggednessFlags?: boolean
   hasSwampMarkers?: boolean
   swampMarkerColor?: string
+  ruggednessSeverityColors?: string[]
   measureBar?: MeasureBarConfig
   calibration?: ElevationCalibration
   heightmap?: HeightmapInfo
@@ -46,6 +47,7 @@ export interface OverlayExportConfig {
   hasRuggednessFlags?: boolean
   hasSwampMarkers?: boolean
   swampMarkerColor?: string
+  ruggednessSeverityColors?: string[]
   measureBar?: MeasureBarConfig
   calibration?: ElevationCalibration
   heightmap?: HeightmapInfo
@@ -681,9 +683,16 @@ function drawLegend(
   hasRuggednessFlags?: boolean,
   hasSwampMarkers?: boolean,
   swampMarkerColor?: string,
+  ruggednessSeverityColors?: string[],
+  calibration?: ElevationCalibration,
 ): void {
   const hasGeoAnchor = legend.showGeoAnchor && !!measureBar?.enabled && !!measureBar?.geoEnabled
   const showColorBar = legend.showRuggednessFlags && !!hasRuggednessFlags
+  const elevRange = calibration && calibration.realMin !== null && calibration.realMax !== null
+    ? Math.abs(calibration.realMax - calibration.realMin) : undefined
+  const unitAbbr = calibration?.unitType === 'feet' ? 'ft'
+    : calibration?.unitType === 'meters' ? 'm'
+    : calibration?.unitType === 'custom' ? (calibration.customAbbr || '') : undefined
   const items = [
     legend.showMinorContour                             ? { type: 'minor',      label: legend.minorLabel         } : null,
     legend.showMajorContour                             ? { type: 'major',      label: legend.majorLabel         } : null,
@@ -704,8 +713,9 @@ function drawLegend(
   const pad = fs * 0.6
   const colGap = pad
   const barH = fs * 1.2
-  const barLabelH = fs * 1.1
-  const barSectionH = showColorBar ? (pad + barH + barLabelH) : 0
+  const barLabelH = fs * 2.1
+  const barTitleH = fs * 0.9
+  const barSectionH = showColorBar ? (pad + barTitleH + barH + barLabelH) : 0
 
   ctx.font = `${fs}px serif`
   const maxLabelW = Math.max(...items.map(i => ctx.measureText(i.label).width))
@@ -763,22 +773,21 @@ function drawLegend(
       ctx.beginPath(); ctx.moveTo(cx_icon, midY - r_icon * 1.3); ctx.lineTo(cx_icon, midY + r_icon * 1.3); ctx.stroke()
       ctx.beginPath(); ctx.arc(cx_icon, midY, r_icon, 0, Math.PI * 2); ctx.stroke()
     } else if (type === 'ruggedness') {
-      const h = rowH * 0.65
-      const fx = sx1 + sampW * 0.38
-      const fy_top = midY - h * 0.55
-      const fy_base = midY + h * 0.45
-      ctx.strokeStyle = TRI_COLORS[2]; ctx.lineWidth = 0.8; ctx.lineCap = 'round'; ctx.lineJoin = 'round'
-      ctx.beginPath(); ctx.moveTo(fx, fy_base); ctx.lineTo(fx, fy_top); ctx.stroke()
-      ctx.lineWidth = 0.7
+      const sc = rowH * 0.45
+      const cx = sx1 + sampW / 2
+      const cy_tip = midY + sc * 0.825
       ctx.beginPath()
-      ctx.moveTo(fx, fy_top)
-      ctx.lineTo(fx+h*0.18, fy_top-h*0.2); ctx.lineTo(fx+h*0.33, fy_top-h*0.07)
-      ctx.lineTo(fx+h*0.48, fy_top-h*0.26); ctx.lineTo(fx+h*0.6, fy_top-h*0.12)
-      ctx.stroke()
-      ctx.beginPath()
-      ctx.moveTo(fx, fy_top)
-      ctx.lineTo(fx+h*0.18, fy_top-h*0.06); ctx.lineTo(fx+h*0.33, fy_top+h*0.05)
-      ctx.lineTo(fx+h*0.48, fy_top-h*0.1); ctx.lineTo(fx+h*0.6, fy_top+h*0.01)
+      ctx.moveTo(cx, cy_tip)
+      ctx.lineTo(cx - sc*0.48, cy_tip - sc*0.8)
+      ctx.lineTo(cx - sc*0.32, cy_tip - sc*1.5)
+      ctx.lineTo(cx - sc*0.1,  cy_tip - sc*0.95)
+      ctx.lineTo(cx + sc*0.05, cy_tip - sc*1.65)
+      ctx.lineTo(cx + sc*0.22, cy_tip - sc*1.05)
+      ctx.lineTo(cx + sc*0.38, cy_tip - sc*1.35)
+      ctx.lineTo(cx + sc*0.48, cy_tip - sc*0.8)
+      ctx.closePath()
+      ctx.fillStyle = TRI_COLORS[2]; ctx.fill()
+      ctx.strokeStyle = 'rgba(0,0,0,0.4)'; ctx.lineWidth = 0.7; ctx.lineJoin = 'round'
       ctx.stroke()
     } else if (type === 'swamp') {
       const color = swampMarkerColor ?? '#388E3C'
@@ -817,15 +826,22 @@ function drawLegend(
     ctx.beginPath(); ctx.moveTo(boxX + pad, barY); ctx.lineTo(boxX + boxW - pad, barY); ctx.stroke()
     ctx.globalAlpha = 1
 
-    TRI_COLORS.forEach((color, i) => {
+    ctx.fillStyle = legend.color; ctx.textBaseline = 'top'; ctx.textAlign = 'left'
+    ctx.font = `${fs * 0.75}px sans-serif`
+    ctx.fillText(legend.ruggednessFlagLabel, barX, barY + fs * 0.1)
+
+    const triColors = ruggednessSeverityColors ?? [...TRI_COLORS]
+    triColors.forEach((color, i) => {
       ctx.fillStyle = color
-      ctx.fillRect(barX + i * tierW, barY + pad * 0.5, tierW, barH)
+      ctx.fillRect(barX + i * tierW, barY + pad * 0.5 + barTitleH, tierW, barH)
     })
 
-    ctx.fillStyle = legend.color; ctx.font = `${fs * 0.75}px sans-serif`
-    ctx.textBaseline = 'top'; ctx.textAlign = 'center'
+    ctx.fillStyle = legend.color; ctx.textBaseline = 'top'; ctx.textAlign = 'center'
     TRI_LABELS.forEach((label, i) => {
-      ctx.fillText(label, barX + i * tierW + tierW / 2, barY + pad * 0.5 + barH + fs * 0.15)
+      ctx.font = `${fs * 0.75}px sans-serif`
+      ctx.fillText(label, barX + i * tierW + tierW / 2, barY + pad * 0.5 + barTitleH + barH + fs * 0.15)
+      ctx.font = `${fs * 0.6}px sans-serif`
+      ctx.fillText(triRangeLabel(i, elevRange, unitAbbr), barX + i * tierW + tierW / 2, barY + pad * 0.5 + barTitleH + barH + fs * 1.05)
     })
   }
 }
@@ -1018,7 +1034,7 @@ export async function exportOverlayToBlob(config: OverlayExportConfig): Promise<
   }
   if (withFrame && config.legend && config.contourStyle) {
     drawLegend(ctx, config.legend, config.frame!, config.contourStyle,
-      config.hasElevationFlags ?? false, config.hasSlopeArrows ?? false, totalW, totalH, config.measureBar, config.hasRuggednessFlags, config.hasSwampMarkers, config.swampMarkerColor)
+      config.hasElevationFlags ?? false, config.hasSlopeArrows ?? false, totalW, totalH, config.measureBar, config.hasRuggednessFlags, config.hasSwampMarkers, config.swampMarkerColor, config.ruggednessSeverityColors, config.calibration)
   }
   if (withFrame && config.measureBar?.enabled && config.calibration && config.heightmap) {
     drawMeasureBars(ctx, config.measureBar, config.calibration, config.heightmap, config.frame!, totalW, totalH)
@@ -1093,7 +1109,7 @@ export async function exportToBlob(config: ExportLayerConfig): Promise<Blob> {
   }
   if (withFrame && config.legend && config.contourStyle) {
     drawLegend(ctx, config.legend, config.frame!, config.contourStyle,
-      config.hasElevationFlags ?? false, config.hasSlopeArrows ?? false, totalW, totalH, config.measureBar, config.hasRuggednessFlags, config.hasSwampMarkers, config.swampMarkerColor)
+      config.hasElevationFlags ?? false, config.hasSlopeArrows ?? false, totalW, totalH, config.measureBar, config.hasRuggednessFlags, config.hasSwampMarkers, config.swampMarkerColor, config.ruggednessSeverityColors, config.calibration)
   }
   if (withFrame && config.measureBar?.enabled && config.calibration && config.heightmap) {
     drawMeasureBars(ctx, config.measureBar, config.calibration, config.heightmap, config.frame!, totalW, totalH)

@@ -5,7 +5,7 @@ import { useStore } from '../../store/useStore'
 import { generateContours, contourToSvgPath } from '../../utils/contour'
 import type { ContourSet } from '../../utils/contour'
 import type { ElevationFlag, SlopeArrow, RuggednessFlag, SwampMarker, FrameConfig, CompassConfig, LegendConfig, ContourStyle, FramePosition, MeasureBarConfig, ElevationCalibration, HeightmapInfo } from '../../types'
-import { TRI_THRESHOLDS, TRI_COLORS, TRI_LABELS, getTriSeverity } from '../../types'
+import { TRI_THRESHOLDS, TRI_COLORS, TRI_LABELS, getTriSeverity, triRangeLabel } from '../../types'
 
 function getLabelPoint(poly: ContourMultiPolygon): [number, number] | null {
   let best: [number, number][] | null = null
@@ -367,17 +367,23 @@ function toDMS(degrees: number, isLat: boolean): string {
 // Legend overlay
 // ---------------------------------------------------------------------------
 
-function LegendOverlay({ legend, frame, style, hasElevationFlags, hasSlopeArrows, measureBar, hasRuggednessFlags, ruggednessColorBySeverity, hasSwampMarkers, swampMarkerDefaults }: {
+function LegendOverlay({ legend, frame, style, hasElevationFlags, hasSlopeArrows, measureBar, hasRuggednessFlags, ruggednessColorBySeverity, ruggednessSeverityColors, hasSwampMarkers, swampMarkerDefaults, elevationCalibration }: {
   legend: LegendConfig; frame: FrameConfig; style: ContourStyle
   hasElevationFlags: boolean; hasSlopeArrows: boolean; measureBar?: MeasureBarConfig
-  hasRuggednessFlags: boolean; ruggednessColorBySeverity: boolean
+  hasRuggednessFlags: boolean; ruggednessColorBySeverity: boolean; ruggednessSeverityColors: string[]
   hasSwampMarkers: boolean; swampMarkerDefaults: { color: string; boldness: 1|2|3 }
+  elevationCalibration: ElevationCalibration
 }): JSX.Element | null {
   const hasGeoAnchor = legend.showGeoAnchor && !!measureBar?.enabled && !!measureBar?.geoEnabled
   const geoAnchorLabel = hasGeoAnchor
     ? `${legend.geoAnchorLabel}: ${toDMS(measureBar!.anchorLat, true)}, ${toDMS(measureBar!.anchorLon, false)}`
     : ''
   const showColorBar = legend.showRuggednessFlags && hasRuggednessFlags
+  const elevRange = (elevationCalibration.realMin !== null && elevationCalibration.realMax !== null)
+    ? Math.abs(elevationCalibration.realMax - elevationCalibration.realMin) : undefined
+  const unitAbbr = elevationCalibration.unitType === 'feet' ? 'ft'
+    : elevationCalibration.unitType === 'meters' ? 'm'
+    : elevationCalibration.unitType === 'custom' ? (elevationCalibration.customAbbr || '') : undefined
   const items = [
     legend.showMinorContour                           ? { type: 'minor',      label: legend.minorLabel         } : null,
     legend.showMajorContour                           ? { type: 'major',      label: legend.majorLabel         } : null,
@@ -404,8 +410,9 @@ function LegendOverlay({ legend, frame, style, hasElevationFlags, hasSlopeArrows
   const rows = Math.ceil(items.length / cols)
 
   const barH = fs * 1.2
-  const barLabelH = fs * 1.1
-  const barSectionH = showColorBar ? (pad + barH + barLabelH) : 0
+  const barLabelH = fs * 2.1
+  const barTitleH = fs * 0.9
+  const barSectionH = showColorBar ? (pad + barTitleH + barH + barLabelH) : 0
 
   const minBarW = showColorBar ? 5 * fs * 3.2 : 0
   const boxW = Math.max(pad + cols * colW + (cols - 1) * colGap + pad, minBarW + 2 * pad)
@@ -456,21 +463,15 @@ function LegendOverlay({ legend, frame, style, hasElevationFlags, hasSlopeArrows
             </g>
           )
         } else if (type === 'ruggedness') {
-          const h = rowH * 0.65
-          const fx = sx1 + sampW * 0.38
-          const fy_top = midY - h * 0.55
-          const fy_base = midY + h * 0.45
+          const sc = rowH * 0.45
+          const cx = sx1 + sampW / 2
+          const cy_tip = midY + sc * 0.825
           const iconColor = ruggednessColorBySeverity ? TRI_COLORS[2] : legend.color
           sample = (
-            <g>
-              <line x1={fx} y1={fy_base} x2={fx} y2={fy_top} stroke={iconColor} strokeWidth={0.8} />
-              <polyline
-                points={`${fx},${fy_top} ${fx+h*0.18},${fy_top-h*0.2} ${fx+h*0.33},${fy_top-h*0.07} ${fx+h*0.48},${fy_top-h*0.26} ${fx+h*0.6},${fy_top-h*0.12}`}
-                fill="none" stroke={iconColor} strokeWidth={0.7} strokeLinejoin="round" />
-              <polyline
-                points={`${fx},${fy_top} ${fx+h*0.18},${fy_top-h*0.06} ${fx+h*0.33},${fy_top+h*0.05} ${fx+h*0.48},${fy_top-h*0.1} ${fx+h*0.6},${fy_top+h*0.01}`}
-                fill="none" stroke={iconColor} strokeWidth={0.7} strokeLinejoin="round" />
-            </g>
+            <polygon
+              points={`${cx},${cy_tip} ${cx-sc*0.48},${cy_tip-sc*0.8} ${cx-sc*0.32},${cy_tip-sc*1.5} ${cx-sc*0.1},${cy_tip-sc*0.95} ${cx+sc*0.05},${cy_tip-sc*1.65} ${cx+sc*0.22},${cy_tip-sc*1.05} ${cx+sc*0.38},${cy_tip-sc*1.35} ${cx+sc*0.48},${cy_tip-sc*0.8}`}
+              fill={iconColor} stroke="rgba(0,0,0,0.3)" strokeWidth={0.7} strokeLinejoin="round"
+            />
           )
         } else if (type === 'swamp') {
           const h = rowH * 0.7
@@ -519,18 +520,29 @@ function LegendOverlay({ legend, frame, style, hasElevationFlags, hasSlopeArrows
         return (
           <g>
             <line x1={pad} y1={barY} x2={boxW - pad} y2={barY} stroke={legend.color} strokeWidth={0.3} strokeOpacity={0.4} />
-            {TRI_COLORS.map((color, i) => (
-              <rect key={i} x={barX + i * tierW} y={barY + pad * 0.5} width={tierW} height={barH}
+            <text x={barX} y={barY + fs * 0.1} fontSize={fs * 0.75} fontFamily="sans-serif"
+              fill={legend.color} dominantBaseline="hanging">{legend.ruggednessFlagLabel}</text>
+            {ruggednessSeverityColors.map((color, i) => (
+              <rect key={i} x={barX + i * tierW} y={barY + pad * 0.5 + barTitleH} width={tierW} height={barH}
                 fill={color} />
             ))}
             {TRI_LABELS.map((label, i) => (
-              <text key={i}
-                x={barX + i * tierW + tierW / 2}
-                y={barY + pad * 0.5 + barH + fs * 0.15}
-                fontSize={fs * 0.75} fontFamily="sans-serif" fill={legend.color}
-                textAnchor="middle" dominantBaseline="hanging">
-                {label}
-              </text>
+              <g key={i}>
+                <text
+                  x={barX + i * tierW + tierW / 2}
+                  y={barY + pad * 0.5 + barTitleH + barH + fs * 0.15}
+                  fontSize={fs * 0.75} fontFamily="sans-serif" fill={legend.color}
+                  textAnchor="middle" dominantBaseline="hanging">
+                  {label}
+                </text>
+                <text
+                  x={barX + i * tierW + tierW / 2}
+                  y={barY + pad * 0.5 + barTitleH + barH + fs * 1.05}
+                  fontSize={fs * 0.6} fontFamily="sans-serif" fill={legend.color}
+                  textAnchor="middle" dominantBaseline="hanging">
+                  {triRangeLabel(i, elevRange, unitAbbr)}
+                </text>
+              </g>
             ))}
           </g>
         )
@@ -832,6 +844,11 @@ export function MapCanvas(): JSX.Element {
   const elevationFlagDefaults = useStore((s) => s.elevationFlagDefaults)
   const slopeArrowDefaults = useStore((s) => s.slopeArrowDefaults)
   const ruggednessFlagDefaults = useStore((s) => s.ruggednessFlagDefaults)
+  const elevationFlagsVisible = useStore((s) => s.elevationFlagsVisible)
+  const slopeArrowsVisible = useStore((s) => s.slopeArrowsVisible)
+  const ruggednessFlagsVisible = useStore((s) => s.ruggednessFlagsVisible)
+  const swampMarkersVisible = useStore((s) => s.swampMarkersVisible)
+  const ruggednessSeverityColors = useStore((s) => s.ruggednessSeverityColors)
 
   // Track inner map area dimensions for measure bar overlay.
   // We observe the inner map div (not the outer composition div) so that ResizeObserver
@@ -1399,7 +1416,7 @@ export function MapCanvas(): JSX.Element {
           )}
 
           {/* Elevation flags */}
-          {elevationFlags.map((flag) => {
+          {elevationFlagsVisible && elevationFlags.map((flag) => {
             const isDragging = dragPos !== null && dragRef.current?.itemId === flag.id && dragRef.current.type === 'flag'
             const fx = isDragging ? dragPos!.x : flag.x
             const fy = isDragging ? dragPos!.y : flag.y
@@ -1452,7 +1469,7 @@ export function MapCanvas(): JSX.Element {
           })}
 
           {/* Slope arrows */}
-          {slopeArrows.map((arrow) => {
+          {slopeArrowsVisible && slopeArrows.map((arrow) => {
             const isDragging = dragPos !== null && dragRef.current?.itemId === arrow.id && dragRef.current.type === 'slope-arrow'
             const fx = isDragging ? dragPos!.x : arrow.x
             const fy = isDragging ? dragPos!.y : arrow.y
@@ -1529,7 +1546,7 @@ export function MapCanvas(): JSX.Element {
             )
           })}
           {/* Ruggedness flags */}
-          {ruggednessFlags.map((flag) => {
+          {ruggednessFlagsVisible && ruggednessFlags.map((flag) => {
             const isDragging = dragPos !== null && dragRef.current?.itemId === flag.id && dragRef.current.type === 'ruggedness-flag'
             const fx = isDragging ? dragPos!.x : flag.x
             const fy = isDragging ? dragPos!.y : flag.y
@@ -1537,7 +1554,7 @@ export function MapCanvas(): JSX.Element {
             const isSelected = selectedItem?.type === 'ruggedness-flag' && selectedItem.id === flag.id
             const s = labelFontSize
             const severity = getTriSeverity(displayTri)
-            const flagColor = ruggednessColorBySeverity ? TRI_COLORS[severity] : style.labelColor
+            const flagColor = ruggednessColorBySeverity ? (ruggednessSeverityColors[severity] ?? TRI_COLORS[severity]) : style.labelColor
             const strokeW = bw(isSelected ? 2 : 1.5, flag.boldness)
 
             const triDisplay = (elevationCalibration.realMin !== null && elevationCalibration.realMax !== null)
@@ -1555,24 +1572,17 @@ export function MapCanvas(): JSX.Element {
                 onMouseDown={(e) => handleItemMouseDown(e, 'ruggedness-flag', flag.id)}
                 style={{ cursor: isSelected ? 'grab' : 'pointer' }}
               >
-                {/* Pole */}
-                <line x1={fx} y1={fy} x2={fx} y2={fy - s}
-                  stroke={flagColor} strokeWidth={strokeW} vectorEffect="non-scaling-stroke" />
-                {/* Upper jagged ridge */}
-                <polyline
-                  points={`${fx},${fy-s} ${fx+s*0.2},${fy-s-s*0.22} ${fx+s*0.36},${fy-s-s*0.07} ${fx+s*0.52},${fy-s-s*0.28} ${fx+s*0.65},${fy-s-s*0.13}`}
-                  fill="none" stroke={flagColor} strokeWidth={bw(isSelected ? 1.5 : 1, flag.boldness)}
+                {/* Mountain silhouette: elongated V tip + jagged ridgeline */}
+                <polygon
+                  points={`${fx},${fy} ${fx-s*0.48},${fy-s*0.8} ${fx-s*0.32},${fy-s*1.5} ${fx-s*0.1},${fy-s*0.95} ${fx+s*0.05},${fy-s*1.65} ${fx+s*0.22},${fy-s*1.05} ${fx+s*0.38},${fy-s*1.35} ${fx+s*0.48},${fy-s*0.8}`}
+                  fill={flagColor} stroke="rgba(0,0,0,0.4)"
+                  strokeWidth={bw(isSelected ? 1.2 : 0.8, flag.boldness)}
                   strokeLinejoin="round" vectorEffect="non-scaling-stroke" />
-                {/* Lower jagged ridge */}
-                <polyline
-                  points={`${fx},${fy-s} ${fx+s*0.2},${fy-s-s*0.06} ${fx+s*0.36},${fy-s+s*0.05} ${fx+s*0.52},${fy-s-s*0.1} ${fx+s*0.65},${fy-s+s*0.01}`}
-                  fill="none" stroke={flagColor} strokeWidth={bw(isSelected ? 1.5 : 1, flag.boldness)}
-                  strokeLinejoin="round" vectorEffect="non-scaling-stroke" />
-                <text x={fx + s * 0.7} y={fy - s * 0.55}
+                <text x={fx + s * 0.6} y={fy - s * 0.9}
                   fontSize={labelFontSize} fontFamily={style.labelFont}
                   fontWeight={style.labelBold ? 'bold' : 'normal'}
                   fontStyle={style.labelItalic ? 'italic' : 'normal'}
-                  fill={style.labelColor} dominantBaseline="middle"
+                  fill={flagColor} dominantBaseline="middle"
                 >{triDisplay}</text>
                 {isSelected && (
                   <circle cx={fx} cy={fy} r={s * 0.12}
@@ -1583,7 +1593,7 @@ export function MapCanvas(): JSX.Element {
           })}
 
           {/* Swamp markers */}
-          {swampMarkers.map((marker) => {
+          {swampMarkersVisible && swampMarkers.map((marker) => {
             const isDragging = dragPos !== null && dragRef.current?.itemId === marker.id && dragRef.current.type === 'swamp-marker'
             const fx = isDragging ? dragPos!.x : marker.x
             const fy = isDragging ? dragPos!.y : marker.y
@@ -1676,17 +1686,13 @@ export function MapCanvas(): JSX.Element {
                 : triNorm.toFixed(3)
               return (
                 <g opacity={0.75} style={{ pointerEvents: 'none' }}>
-                  <line x1={hoverPos.x} y1={hoverPos.y} x2={hoverPos.x} y2={hoverPos.y - s}
-                    stroke={hoverColor} strokeWidth={1.5} vectorEffect="non-scaling-stroke" />
-                  <polyline
-                    points={`${hoverPos.x},${hoverPos.y-s} ${hoverPos.x+s*0.2},${hoverPos.y-s-s*0.22} ${hoverPos.x+s*0.36},${hoverPos.y-s-s*0.07} ${hoverPos.x+s*0.52},${hoverPos.y-s-s*0.28} ${hoverPos.x+s*0.65},${hoverPos.y-s-s*0.13}`}
-                    fill="none" stroke={hoverColor} strokeWidth={1} strokeLinejoin="round" vectorEffect="non-scaling-stroke" />
-                  <polyline
-                    points={`${hoverPos.x},${hoverPos.y-s} ${hoverPos.x+s*0.2},${hoverPos.y-s-s*0.06} ${hoverPos.x+s*0.36},${hoverPos.y-s+s*0.05} ${hoverPos.x+s*0.52},${hoverPos.y-s-s*0.1} ${hoverPos.x+s*0.65},${hoverPos.y-s+s*0.01}`}
-                    fill="none" stroke={hoverColor} strokeWidth={1} strokeLinejoin="round" vectorEffect="non-scaling-stroke" />
-                  <text x={hoverPos.x + s * 0.7} y={hoverPos.y - s * 0.55}
+                  <polygon
+                    points={`${hoverPos.x},${hoverPos.y} ${hoverPos.x-s*0.48},${hoverPos.y-s*0.8} ${hoverPos.x-s*0.32},${hoverPos.y-s*1.5} ${hoverPos.x-s*0.1},${hoverPos.y-s*0.95} ${hoverPos.x+s*0.05},${hoverPos.y-s*1.65} ${hoverPos.x+s*0.22},${hoverPos.y-s*1.05} ${hoverPos.x+s*0.38},${hoverPos.y-s*1.35} ${hoverPos.x+s*0.48},${hoverPos.y-s*0.8}`}
+                    fill={hoverColor} stroke="rgba(0,0,0,0.3)" strokeWidth={1}
+                    strokeLinejoin="round" vectorEffect="non-scaling-stroke" />
+                  <text x={hoverPos.x + s * 0.6} y={hoverPos.y - s * 0.9}
                     fontSize={s} fontFamily={style.labelFont}
-                    fill={style.labelColor} dominantBaseline="middle"
+                    fill={hoverColor} dominantBaseline="middle"
                   >{triDisplay}</text>
                 </g>
               )
@@ -1772,8 +1778,10 @@ export function MapCanvas(): JSX.Element {
           measureBar={measureBar}
           hasRuggednessFlags={ruggednessFlags.length > 0}
           ruggednessColorBySeverity={ruggednessColorBySeverity}
+          ruggednessSeverityColors={ruggednessSeverityColors}
           hasSwampMarkers={swampMarkers.length > 0}
           swampMarkerDefaults={swampMarkerDefaults}
+          elevationCalibration={elevationCalibration}
         />
       )}
 

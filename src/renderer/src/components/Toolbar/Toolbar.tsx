@@ -67,10 +67,11 @@ function SwampIcon(): JSX.Element {
 
 function RuggednessIcon(): JSX.Element {
   return (
-    <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-      <line x1="4" y1="14" x2="4" y2="5" />
-      <polyline points="4,5 6.5,2 8.5,4.5 11,1 13,2.5" />
-      <polyline points="4,5 6.5,5.5 8.5,7.5 11,5 13,6" strokeWidth="1" />
+    <svg width="14" height="14" viewBox="0 0 16 16">
+      <polygon
+        points="8,14 4.2,7.6 5.4,2 7.2,6.4 8.4,0.8 9.8,5.6 11,3.2 11.8,7.6"
+        fill="currentColor"
+      />
     </svg>
   )
 }
@@ -97,6 +98,7 @@ export function Toolbar(): JSX.Element {
   const ruggednessFlags = useStore((s) => s.ruggednessFlags)
   const swampMarkers = useStore((s) => s.swampMarkers)
   const swampMarkerDefaults = useStore((s) => s.swampMarkerDefaults)
+  const ruggednessSeverityColors = useStore((s) => s.ruggednessSeverityColors)
   const mapDisplaySize = useStore((s) => s.mapDisplaySize)
   const { themeId, setTheme } = useThemeStore()
   const [themeModalOpen, setThemeModalOpen] = useState(false)
@@ -125,6 +127,7 @@ export function Toolbar(): JSX.Element {
         legend, contourStyle: style, hasElevationFlags: elevationFlags.length > 0, hasSlopeArrows: slopeArrows.length > 0,
         hasRuggednessFlags: ruggednessFlags.length > 0, hasSwampMarkers: swampMarkers.length > 0,
         swampMarkerColor: swampMarkerDefaults.color,
+        ruggednessSeverityColors,
         measureBar, calibration: elevationCalibration, heightmap: heightmap ?? undefined,
       }
       let blob: Blob
@@ -368,6 +371,7 @@ export function Toolbar(): JSX.Element {
           hasRuggednessFlags={ruggednessFlags.length > 0}
           hasSwampMarkers={swampMarkers.length > 0}
           swampMarkerColor={swampMarkerDefaults.color}
+          ruggednessSeverityColors={ruggednessSeverityColors}
           measureBar={measureBar}
           heightmap={heightmap ?? undefined}
         />

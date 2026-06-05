@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState } from 'react'
-import { Stack, Text, Slider, NumberInput, ColorInput, Switch, Divider, Group, Select, TextInput, Collapse, Checkbox, SegmentedControl, Box } from '@mantine/core'
+import { Stack, Text, Slider, NumberInput, ColorInput, Switch, Divider, Group, Select, TextInput, Collapse, Checkbox, SegmentedControl, Box, Button } from '@mantine/core'
 import { useStore } from '../../store/useStore'
 import type { FrameBorderStyle, TitleConfig, CompassConfig, FramePosition } from '../../types'
+import { TRI_LABELS, TRI_THRESHOLDS, triRangeLabel } from '../../types'
 
 const DASH_OPTIONS = [
   { value: 'solid', label: 'Solid' },
@@ -108,6 +109,16 @@ export function ParameterPanel(): JSX.Element {
   const updateRuggednessFlagDefaults = useStore((s) => s.updateRuggednessFlagDefaults)
   const swampMarkerDefaults = useStore((s) => s.swampMarkerDefaults)
   const updateSwampMarkerDefaults = useStore((s) => s.updateSwampMarkerDefaults)
+  const elevationFlagsVisible = useStore((s) => s.elevationFlagsVisible)
+  const setElevationFlagsVisible = useStore((s) => s.setElevationFlagsVisible)
+  const slopeArrowsVisible = useStore((s) => s.slopeArrowsVisible)
+  const setSlopeArrowsVisible = useStore((s) => s.setSlopeArrowsVisible)
+  const ruggednessFlagsVisible = useStore((s) => s.ruggednessFlagsVisible)
+  const setRuggednessFlagsVisible = useStore((s) => s.setRuggednessFlagsVisible)
+  const swampMarkersVisible = useStore((s) => s.swampMarkersVisible)
+  const setSwampMarkersVisible = useStore((s) => s.setSwampMarkersVisible)
+  const ruggednessSeverityColors = useStore((s) => s.ruggednessSeverityColors)
+  const setRuggednessSeverityColor = useStore((s) => s.setRuggednessSeverityColor)
   const overlayOnly = useStore((s) => s.overlayOnly)
   const setOverlayOnly = useStore((s) => s.setOverlayOnly)
   const overlayBrightness = useStore((s) => s.overlayBrightness)
@@ -144,6 +155,13 @@ export function ParameterPanel(): JSX.Element {
   const [seaLevelOpen, setSeaLevelOpen] = useState(true)
   const [markersOpen, setMarkersOpen] = useState(true)
   const [framingOpen, setFramingOpen] = useState(true)
+
+  const allOpen = hillshadeOpen && contoursOpen && styleOpen && labelStylingOpen && seaLevelOpen && markersOpen && framingOpen
+  const toggleAll = () => {
+    const next = !allOpen
+    setHillshadeOpen(next); setContoursOpen(next); setStyleOpen(next)
+    setLabelStylingOpen(next); setSeaLevelOpen(next); setMarkersOpen(next); setFramingOpen(next)
+  }
 
   // Refs for latest values — safe to read inside event handlers and effects
   const normIntervalRef = useRef(parameters.interval)
@@ -214,6 +232,12 @@ export function ParameterPanel(): JSX.Element {
 
   return (
     <Stack gap="md">
+
+      <Group justify="flex-end">
+        <Button size="compact-xs" variant="subtle" c="dimmed" onClick={toggleAll}>
+          {allOpen ? 'Collapse all' : 'Expand all'}
+        </Button>
+      </Group>
 
       {!!heightmap && (
         <>
@@ -735,107 +759,111 @@ export function ParameterPanel(): JSX.Element {
         <Stack gap="md">
 
           <Divider label="Elevation Flags" labelPosition="left" />
+          <Switch size="sm" label="Show on map"
+            checked={elevationFlagsVisible}
+            onChange={(e) => setElevationFlagsVisible(e.currentTarget.checked)} />
           <Text size="xs" fw={500}>Stroke weight</Text>
-          <SegmentedControl
-            size="xs"
+          <SegmentedControl size="xs"
             value={String(elevationFlagDefaults.boldness)}
             onChange={(v) => updateElevationFlagDefaults({ boldness: Number(v) as 1 | 2 | 3 })}
             data={[{ value: '1', label: 'Thin' }, { value: '2', label: 'Normal' }, { value: '3', label: 'Bold' }]}
           />
           <Stack gap={4}>
             <Text size="xs" fw={500}>Opacity</Text>
-            <Slider
-              min={0} max={1} step={0.05}
-              value={elevationFlagDefaults.opacity}
+            <Slider min={0} max={1} step={0.05} value={elevationFlagDefaults.opacity}
               onChange={(v) => updateElevationFlagDefaults({ opacity: v })}
-              label={(v) => `${Math.round(v * 100)}%`}
-            />
+              label={(v) => `${Math.round(v * 100)}%`} />
           </Stack>
 
           <Divider label="Slope Arrows" labelPosition="left" />
+          <Switch size="sm" label="Show on map"
+            checked={slopeArrowsVisible}
+            onChange={(e) => setSlopeArrowsVisible(e.currentTarget.checked)} />
           <Text size="xs" fw={500}>Stroke weight</Text>
-          <SegmentedControl
-            size="xs"
+          <SegmentedControl size="xs"
             value={String(slopeArrowDefaults.boldness)}
             onChange={(v) => updateSlopeArrowDefaults({ boldness: Number(v) as 1 | 2 | 3 })}
             data={[{ value: '1', label: 'Thin' }, { value: '2', label: 'Normal' }, { value: '3', label: 'Bold' }]}
           />
           <Stack gap={4}>
             <Text size="xs" fw={500}>Opacity</Text>
-            <Slider
-              min={0} max={1} step={0.05}
-              value={slopeArrowDefaults.opacity}
+            <Slider min={0} max={1} step={0.05} value={slopeArrowDefaults.opacity}
               onChange={(v) => updateSlopeArrowDefaults({ opacity: v })}
-              label={(v) => `${Math.round(v * 100)}%`}
-            />
+              label={(v) => `${Math.round(v * 100)}%`} />
           </Stack>
 
           <Divider label="Ruggedness Flags" labelPosition="left" />
-          <Switch
-            label="Color by severity"
-            description="Green = very low, red = extreme"
-            size="sm"
+          <Switch size="sm" label="Show on map"
+            checked={ruggednessFlagsVisible}
+            onChange={(e) => setRuggednessFlagsVisible(e.currentTarget.checked)} />
+          <Switch size="sm" label="Color by severity"
             checked={ruggednessColorBySeverity}
-            onChange={(e) => setRuggednessColorBySeverity(e.currentTarget.checked)}
-          />
+            onChange={(e) => setRuggednessColorBySeverity(e.currentTarget.checked)} />
+          {ruggednessColorBySeverity && (
+            <Stack gap={6}>
+              <Text size="xs" fw={500}>Severity colors</Text>
+              {TRI_LABELS.map((label, i) => (
+                <Group key={i} gap="xs" align="center" wrap="nowrap">
+                  <Box style={{
+                    width: 14, height: 14, borderRadius: 2, flexShrink: 0,
+                    backgroundColor: ruggednessSeverityColors[i] ?? '#888',
+                    border: '1px solid rgba(0,0,0,0.2)',
+                  }} />
+                  <Text size="xs" style={{ width: 64, flexShrink: 0 }}>{label}</Text>
+                  <Text size="xs" c="dimmed" style={{ width: 76, flexShrink: 0, fontVariantNumeric: 'tabular-nums' }}>
+                    {triRangeLabel(i, realMin !== null && realMax !== null ? Math.abs(realMax - realMin) : undefined, abbr || undefined)}
+                  </Text>
+                  <ColorInput size="xs" format="hex" style={{ flex: 1 }}
+                    value={ruggednessSeverityColors[i] ?? '#888'}
+                    onChange={(v) => setRuggednessSeverityColor(i, v)} />
+                </Group>
+              ))}
+            </Stack>
+          )}
           <Text size="xs" fw={500}>Stroke weight</Text>
-          <SegmentedControl
-            size="xs"
+          <SegmentedControl size="xs"
             value={String(ruggednessFlagDefaults.boldness)}
             onChange={(v) => updateRuggednessFlagDefaults({ boldness: Number(v) as 1 | 2 | 3 })}
             data={[{ value: '1', label: 'Thin' }, { value: '2', label: 'Normal' }, { value: '3', label: 'Bold' }]}
           />
           <Stack gap={4}>
             <Text size="xs" fw={500}>Opacity</Text>
-            <Slider
-              min={0} max={1} step={0.05}
-              value={ruggednessFlagDefaults.opacity}
+            <Slider min={0} max={1} step={0.05} value={ruggednessFlagDefaults.opacity}
               onChange={(v) => updateRuggednessFlagDefaults({ opacity: v })}
-              label={(v) => `${Math.round(v * 100)}%`}
-            />
+              label={(v) => `${Math.round(v * 100)}%`} />
           </Stack>
 
           <Divider label="Swamp Markers" labelPosition="left" />
+          <Switch size="sm" label="Show on map"
+            checked={swampMarkersVisible}
+            onChange={(e) => setSwampMarkersVisible(e.currentTarget.checked)} />
           <Text size="xs" fw={500}>Color</Text>
           <Group gap="xs" align="center">
             {(['#1976D2', '#388E3C', '#212121'] as const).map((color) => (
-              <Box
-                key={color}
-                title={color}
-                style={{
-                  width: 22, height: 22, borderRadius: '50%', cursor: 'pointer', flexShrink: 0,
-                  backgroundColor: color,
-                  border: swampMarkerDefaults.color === color
-                    ? '2px solid var(--mantine-primary-color-filled)'
-                    : '2px solid transparent',
-                  boxSizing: 'border-box',
-                }}
-                onClick={() => updateSwampMarkerDefaults({ color })}
-              />
+              <Box key={color} title={color} style={{
+                width: 22, height: 22, borderRadius: '50%', cursor: 'pointer', flexShrink: 0,
+                backgroundColor: color,
+                border: swampMarkerDefaults.color === color
+                  ? '2px solid var(--mantine-primary-color-filled)'
+                  : '2px solid transparent',
+                boxSizing: 'border-box',
+              }} onClick={() => updateSwampMarkerDefaults({ color })} />
             ))}
-            <ColorInput
-              size="xs"
-              value={swampMarkerDefaults.color}
+            <ColorInput size="xs" value={swampMarkerDefaults.color}
               onChange={(v) => updateSwampMarkerDefaults({ color: v })}
-              format="hex"
-              style={{ flex: 1 }}
-            />
+              format="hex" style={{ flex: 1 }} />
           </Group>
           <Text size="xs" fw={500}>Stroke weight</Text>
-          <SegmentedControl
-            size="xs"
+          <SegmentedControl size="xs"
             value={String(swampMarkerDefaults.boldness)}
             onChange={(v) => updateSwampMarkerDefaults({ boldness: Number(v) as 1 | 2 | 3 })}
             data={[{ value: '1', label: 'Thin' }, { value: '2', label: 'Normal' }, { value: '3', label: 'Bold' }]}
           />
           <Stack gap={4}>
             <Text size="xs" fw={500}>Opacity</Text>
-            <Slider
-              min={0} max={1} step={0.05}
-              value={swampMarkerDefaults.opacity}
+            <Slider min={0} max={1} step={0.05} value={swampMarkerDefaults.opacity}
               onChange={(v) => updateSwampMarkerDefaults({ opacity: v })}
-              label={(v) => `${Math.round(v * 100)}%`}
-            />
+              label={(v) => `${Math.round(v * 100)}%`} />
           </Stack>
 
         </Stack>

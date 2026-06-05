@@ -6,7 +6,7 @@ import type {
   ElevationFlag, SlopeArrow, RuggednessFlag, SwampMarker, MarkerDefaults, SwampMarkerDefaults,
   MapTool, FrameConfig, TitleConfig, CompassConfig, LegendConfig, MeasureBarConfig,
 } from '../types'
-import { defaultParameters, defaultStyle, defaultHillshadeParameters, defaultElevationCalibration, defaultFrameConfig, defaultTitleConfig, defaultCompassConfig, defaultLegendConfig, defaultMeasureBarConfig } from '../types'
+import { defaultParameters, defaultStyle, defaultHillshadeParameters, defaultElevationCalibration, defaultFrameConfig, defaultTitleConfig, defaultCompassConfig, defaultLegendConfig, defaultMeasureBarConfig, TRI_COLORS } from '../types'
 
 function calToMeters(value: number, cal: ElevationCalibration): number {
   if (cal.unitType === 'feet') return value * 0.3048
@@ -69,6 +69,11 @@ interface AppActions {
   updateSlopeArrowDefaults: (d: Partial<MarkerDefaults>) => void
   updateRuggednessFlagDefaults: (d: Partial<MarkerDefaults>) => void
   updateSwampMarkerDefaults: (d: Partial<SwampMarkerDefaults>) => void
+  setElevationFlagsVisible: (v: boolean) => void
+  setSlopeArrowsVisible: (v: boolean) => void
+  setRuggednessFlagsVisible: (v: boolean) => void
+  setSwampMarkersVisible: (v: boolean) => void
+  setRuggednessSeverityColor: (index: number, color: string) => void
   setMapTool: (tool: MapTool) => void
   setActiveTab: (tab: 'terrain' | 'hillshade') => void
   setMapZoom: (zoom: number) => void
@@ -109,6 +114,11 @@ const initialState: ProjectState = {
   ruggednessFlags: [],
   swampMarkers: [],
   ruggednessColorBySeverity: true,
+  ruggednessSeverityColors: [...TRI_COLORS],
+  elevationFlagsVisible: true,
+  slopeArrowsVisible: true,
+  ruggednessFlagsVisible: true,
+  swampMarkersVisible: true,
   elevationFlagDefaults: { boldness: 2, opacity: 1 },
   slopeArrowDefaults: { boldness: 2, opacity: 1 },
   ruggednessFlagDefaults: { boldness: 2, opacity: 1 },
@@ -360,7 +370,21 @@ export const useStore = create<ProjectState & AppActions>()(
         set((state) => ({ ruggednessFlagDefaults: { ...state.ruggednessFlagDefaults, ...d } })),
 
       updateSwampMarkerDefaults: (d) =>
-        set((state) => ({ swampMarkerDefaults: { ...state.swampMarkerDefaults, ...d } })),
+        set((state) => ({
+          swampMarkerDefaults: { ...state.swampMarkerDefaults, ...d },
+          ...(d.color !== undefined
+            ? { swampMarkers: state.swampMarkers.map((m) => ({ ...m, color: d.color! })) }
+            : {}),
+        })),
+
+      setElevationFlagsVisible: (v) => set({ elevationFlagsVisible: v }),
+      setSlopeArrowsVisible: (v) => set({ slopeArrowsVisible: v }),
+      setRuggednessFlagsVisible: (v) => set({ ruggednessFlagsVisible: v }),
+      setSwampMarkersVisible: (v) => set({ swampMarkersVisible: v }),
+      setRuggednessSeverityColor: (index, color) =>
+        set((state) => ({
+          ruggednessSeverityColors: state.ruggednessSeverityColors.map((c, i) => i === index ? color : c),
+        })),
 
       setMapTool: (tool) => set({ mapTool: tool }),
 
@@ -409,6 +433,30 @@ export const useStore = create<ProjectState & AppActions>()(
     {
       name: 'topocrafter-state',
       storage: createJSONStorage(() => localStorage),
+      // Deep-merge so that new fields added to nested config objects (legend, frame, etc.)
+      // are backfilled from defaults when loading an older persisted state.
+      merge: (persisted, current) => {
+        const ps = persisted as Partial<ProjectState>
+        const merge = <T extends object>(def: T, stored: Partial<T> | undefined): T =>
+          stored ? { ...def, ...stored } : def
+        return {
+          ...current,
+          ...ps,
+          parameters:             merge(current.parameters,             ps.parameters),
+          style:                  merge(current.style,                  ps.style),
+          hillshadeParams:        merge(current.hillshadeParams,        ps.hillshadeParams),
+          elevationCalibration:   merge(current.elevationCalibration,   ps.elevationCalibration),
+          frame:                  merge(current.frame,                  ps.frame),
+          title:                  merge(current.title,                  ps.title),
+          compass:                merge(current.compass,                ps.compass),
+          legend:                 merge(current.legend,                 ps.legend),
+          measureBar:             merge(current.measureBar,             ps.measureBar),
+          elevationFlagDefaults:  merge(current.elevationFlagDefaults,  ps.elevationFlagDefaults),
+          slopeArrowDefaults:     merge(current.slopeArrowDefaults,     ps.slopeArrowDefaults),
+          ruggednessFlagDefaults: merge(current.ruggednessFlagDefaults, ps.ruggednessFlagDefaults),
+          swampMarkerDefaults:    merge(current.swampMarkerDefaults,    ps.swampMarkerDefaults),
+        }
+      },
       partialize: (state) => ({
         heightmapPath: state.heightmapPath,
         terrainImagePath: state.terrainImagePath,
@@ -430,6 +478,11 @@ export const useStore = create<ProjectState & AppActions>()(
         ruggednessFlags: state.ruggednessFlags,
         swampMarkers: state.swampMarkers,
         ruggednessColorBySeverity: state.ruggednessColorBySeverity,
+        ruggednessSeverityColors: state.ruggednessSeverityColors,
+        elevationFlagsVisible: state.elevationFlagsVisible,
+        slopeArrowsVisible: state.slopeArrowsVisible,
+        ruggednessFlagsVisible: state.ruggednessFlagsVisible,
+        swampMarkersVisible: state.swampMarkersVisible,
         elevationFlagDefaults: state.elevationFlagDefaults,
         slopeArrowDefaults: state.slopeArrowDefaults,
         ruggednessFlagDefaults: state.ruggednessFlagDefaults,

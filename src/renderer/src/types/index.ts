@@ -129,6 +129,18 @@ export function getTriSeverity(triNorm: number): 0 | 1 | 2 | 3 | 4 {
   return 4
 }
 
+export function triRangeLabel(i: number, elevRange?: number, unitAbbr?: string): string {
+  const lo = i === 0 ? 0 : TRI_THRESHOLDS[i - 1]
+  const hi = i < TRI_THRESHOLDS.length ? TRI_THRESHOLDS[i] : null
+  if (elevRange !== undefined && elevRange > 0) {
+    const loVal = Math.round(lo * elevRange)
+    const hiVal = hi !== null ? Math.round(hi * elevRange) : null
+    const suffix = unitAbbr ? ` ${unitAbbr}` : ''
+    return hiVal !== null ? `${loVal}–${hiVal}${suffix}` : `>${loVal}${suffix}`
+  }
+  return hi !== null ? `${lo}–${hi}` : `>${lo}`
+}
+
 export type MapTool = 'none' | 'elevation-flag' | 'slope-arrow' | 'measure-anchor' | 'ruggedness-flag' | 'swamp-marker'
 
 export type FrameBorderStyle = 'single' | 'double' | 'cartographic' | 'shadow' | 'ornate'
@@ -339,6 +351,11 @@ export interface ProjectState {
   ruggednessFlags: RuggednessFlag[]
   swampMarkers: SwampMarker[]
   ruggednessColorBySeverity: boolean
+  ruggednessSeverityColors: string[]
+  elevationFlagsVisible: boolean
+  slopeArrowsVisible: boolean
+  ruggednessFlagsVisible: boolean
+  swampMarkersVisible: boolean
   elevationFlagDefaults: MarkerDefaults
   slopeArrowDefaults: MarkerDefaults
   ruggednessFlagDefaults: MarkerDefaults
