@@ -6,6 +6,7 @@ import { ParameterPanel } from './components/ParameterPanel/ParameterPanel'
 import { MapCanvas } from './components/MapCanvas/MapCanvas'
 import { useHillshade } from './hooks/useHillshade'
 import { useStore } from './store/useStore'
+import { loadHeightmapFromPath, loadTerrainImageUrl } from './utils/heightmap'
 
 export function App(): JSX.Element {
   useHillshade()
@@ -25,6 +26,34 @@ export function App(): JSX.Element {
       setActiveTab('hillshade')
     }
   }, [activeTab, terrainImageUrl, setActiveTab])
+
+  // Auto-restore files from persisted paths on startup
+  useEffect(() => {
+    const { heightmapPath, terrainImagePath, setHeightmap, restoreTerrainImage } = useStore.getState()
+    if (!heightmapPath && !terrainImagePath) return
+
+    async function restore(): Promise<void> {
+      // Load terrain first so setHeightmap sees terrainImageUrl and preserves activeTab
+      if (terrainImagePath) {
+        try {
+          const url = await loadTerrainImageUrl(terrainImagePath)
+          restoreTerrainImage(terrainImagePath, url)
+        } catch {
+          useStore.setState({ terrainImagePath: null })
+        }
+      }
+      if (heightmapPath) {
+        try {
+          const info = await loadHeightmapFromPath(heightmapPath)
+          setHeightmap(heightmapPath, info)
+        } catch {
+          useStore.setState({ heightmapPath: null, heightmap: null })
+        }
+      }
+    }
+
+    restore()
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   return (
     <AppShell

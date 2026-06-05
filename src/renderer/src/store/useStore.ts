@@ -1,4 +1,5 @@
 import { create } from 'zustand'
+import { persist, createJSONStorage } from 'zustand/middleware'
 import type {
   ProjectState, ContourParameters, ContourStyle,
   HeightmapInfo, HillshadeParameters, ElevationCalibration,
@@ -34,6 +35,7 @@ function round1(n: number): number {
 
 interface AppActions {
   setTerrainImage: (path: string, url: string) => void
+  restoreTerrainImage: (path: string, url: string) => void
   setTerrainHillshade: (url: string) => void
   setHillshadeGenerating: (val: boolean) => void
   setFileLoading: (message: string | null) => void
@@ -112,242 +114,278 @@ const initialState: ProjectState = {
   measureBar: defaultMeasureBarConfig,
 }
 
-export const useStore = create<ProjectState & AppActions>((set, get) => ({
-  ...initialState,
+export const useStore = create<ProjectState & AppActions>()(
+  persist(
+    (set, get) => ({
+      ...initialState,
 
-  setTerrainImage: (path, url) =>
-    set({ terrainImagePath: path, terrainImageUrl: url, isDirty: true, activeTab: 'terrain' }),
+      setTerrainImage: (path, url) =>
+        set({ terrainImagePath: path, terrainImageUrl: url, isDirty: true, activeTab: 'terrain' }),
 
-  setTerrainHillshade: (url) =>
-    set({ hillshadeImageUrl: url, hillshadeGenerating: false, isDirty: true }),
+      // Restore path: sets URL without forcing activeTab to 'terrain'
+      restoreTerrainImage: (path, url) =>
+        set({ terrainImagePath: path, terrainImageUrl: url }),
 
-  setHillshadeGenerating: (val) =>
-    set({ hillshadeGenerating: val }),
+      setTerrainHillshade: (url) =>
+        set({ hillshadeImageUrl: url, hillshadeGenerating: false, isDirty: true }),
 
-  setFileLoading: (message) =>
-    set({ fileLoadingMessage: message }),
+      setHillshadeGenerating: (val) =>
+        set({ hillshadeGenerating: val }),
 
-  setHeightmap: (path, info) =>
-    set((state) => ({
-      heightmapPath: path,
-      heightmap: info,
-      isDirty: true,
-      contoursVersion: state.contoursVersion + 1,
-      hillshadeVersion: state.hillshadeVersion + 1,
-      hillshadeDirty: false,
-      contoursDirty: false,
-      activeTab: state.terrainImageUrl ? state.activeTab : 'hillshade',
-      snapshotParams: state.parameters,
-      snapshotStyle: state.style,
-      snapshotHillshadeParams: state.hillshadeParams,
-      snapshotElevationCalibration: state.elevationCalibration,
-    })),
+      setFileLoading: (message) =>
+        set({ fileLoadingMessage: message }),
 
-  updateParameters: (params) =>
-    set((state) => ({
-      parameters: { ...state.parameters, ...params },
-      isDirty: true,
-      contoursDirty: true,
-    })),
+      setHeightmap: (path, info) =>
+        set((state) => ({
+          heightmapPath: path,
+          heightmap: info,
+          isDirty: true,
+          contoursVersion: state.contoursVersion + 1,
+          hillshadeVersion: state.hillshadeVersion + 1,
+          hillshadeDirty: false,
+          contoursDirty: false,
+          activeTab: state.terrainImageUrl ? state.activeTab : 'hillshade',
+          snapshotParams: state.parameters,
+          snapshotStyle: state.style,
+          snapshotHillshadeParams: state.hillshadeParams,
+          snapshotElevationCalibration: state.elevationCalibration,
+        })),
 
-  updateStyle: (style) =>
-    set((state) => ({
-      style: { ...state.style, ...style },
-      isDirty: true,
-    })),
+      updateParameters: (params) =>
+        set((state) => ({
+          parameters: { ...state.parameters, ...params },
+          isDirty: true,
+          contoursDirty: true,
+        })),
 
-  updateHillshadeParams: (params) =>
-    set((state) => ({
-      hillshadeParams: { ...state.hillshadeParams, ...params },
-      ...(state.heightmap ? { hillshadeDirty: true } : {}),
-    })),
+      updateStyle: (style) =>
+        set((state) => ({
+          style: { ...state.style, ...style },
+          isDirty: true,
+        })),
 
-  updateElevationCalibration: (cal) =>
-    set((state) => {
-      const affectsHillshade = 'realMin' in cal || 'realMax' in cal || 'mapWidth' in cal
-      return {
-        elevationCalibration: { ...state.elevationCalibration, ...cal },
-        isDirty: true,
-        contoursDirty: true,
-        ...(state.heightmap && affectsHillshade ? { hillshadeDirty: true } : {}),
-      }
-    }),
+      updateHillshadeParams: (params) =>
+        set((state) => ({
+          hillshadeParams: { ...state.hillshadeParams, ...params },
+          ...(state.heightmap ? { hillshadeDirty: true } : {}),
+        })),
 
-  setElevationUnits: (newType, customData) => {
-    const { elevationCalibration: old, heightmap } = get()
-    const merged: ElevationCalibration = { ...old, ...customData, unitType: newType }
+      updateElevationCalibration: (cal) =>
+        set((state) => {
+          const affectsHillshade = 'realMin' in cal || 'realMax' in cal || 'mapWidth' in cal
+          return {
+            elevationCalibration: { ...state.elevationCalibration, ...cal },
+            isDirty: true,
+            contoursDirty: true,
+            ...(state.heightmap && affectsHillshade ? { hillshadeDirty: true } : {}),
+          }
+        }),
 
-    let newRealMin = old.realMin
-    let newRealMax = old.realMax
-    let newRealInterval = old.realInterval
-    let newMapWidth = old.mapWidth
+      setElevationUnits: (newType, customData) => {
+        const { elevationCalibration: old, heightmap } = get()
+        const merged: ElevationCalibration = { ...old, ...customData, unitType: newType }
 
-    if (newType === 'custom') {
-      merged.preCustomUnit = (old.unitType === 'feet' || old.unitType === 'meters')
-        ? old.unitType
-        : null
-    } else if (old.unitType && old.unitType !== newType) {
-      if (old.realMin !== null && old.realMax !== null) {
-        const minM = calToMeters(old.realMin, old)
-        const maxM = calToMeters(old.realMax, old)
-        newRealMin = round1(calFromMeters(minM, merged))
-        newRealMax = round1(calFromMeters(maxM, merged))
-      }
-      if (old.realInterval !== null) {
-        const intervalM = calToMeters(old.realInterval, old)
-        newRealInterval = Math.max(1, Math.round(calFromMeters(intervalM, merged)))
-      }
-      if (old.mapWidth !== null) {
-        const widthM = calToMeters(old.mapWidth, old)
-        newMapWidth = round1(calFromMeters(widthM, merged))
-      }
-    }
+        let newRealMin = old.realMin
+        let newRealMax = old.realMax
+        let newRealInterval = old.realInterval
+        let newMapWidth = old.mapWidth
 
-    const preCustomUnit = newType === 'custom' ? merged.preCustomUnit : null
+        if (newType === 'custom') {
+          merged.preCustomUnit = (old.unitType === 'feet' || old.unitType === 'meters')
+            ? old.unitType
+            : null
+        } else if (old.unitType && old.unitType !== newType) {
+          if (old.realMin !== null && old.realMax !== null) {
+            const minM = calToMeters(old.realMin, old)
+            const maxM = calToMeters(old.realMax, old)
+            newRealMin = round1(calFromMeters(minM, merged))
+            newRealMax = round1(calFromMeters(maxM, merged))
+          }
+          if (old.realInterval !== null) {
+            const intervalM = calToMeters(old.realInterval, old)
+            newRealInterval = Math.max(1, Math.round(calFromMeters(intervalM, merged)))
+          }
+          if (old.mapWidth !== null) {
+            const widthM = calToMeters(old.mapWidth, old)
+            newMapWidth = round1(calFromMeters(widthM, merged))
+          }
+        }
 
-    set({
-      elevationCalibration: { ...merged, realMin: newRealMin, realMax: newRealMax, realInterval: newRealInterval, mapWidth: newMapWidth, preCustomUnit },
-      isDirty: true,
-      contoursDirty: true,
-      ...(heightmap ? { hillshadeDirty: true } : {}),
-    })
-  },
+        const preCustomUnit = newType === 'custom' ? merged.preCustomUnit : null
 
-  setHillshadeDirty: (val) => set({ hillshadeDirty: val }),
-
-  setContoursDirty: (val) => set({ contoursDirty: val }),
-
-  setContoursGenerating: (val) => set({ contoursGenerating: val }),
-
-  triggerHillshade: () =>
-    set((state) => ({
-      hillshadeVersion: state.hillshadeVersion + 1,
-      hillshadeDirty: false,
-      snapshotParams: state.parameters,
-      snapshotStyle: state.style,
-      snapshotHillshadeParams: state.hillshadeParams,
-      snapshotElevationCalibration: state.elevationCalibration,
-    })),
-
-  triggerContours: () =>
-    set((state) => ({
-      contoursVersion: state.contoursVersion + 1,
-      contoursDirty: false,
-      contoursGenerating: true,
-      snapshotParams: state.parameters,
-      snapshotStyle: state.style,
-      snapshotHillshadeParams: state.hillshadeParams,
-      snapshotElevationCalibration: state.elevationCalibration,
-    })),
-
-  finalizeCustomConversion: () => {
-    const { elevationCalibration: cal, heightmap } = get()
-    if (cal.unitType !== 'custom' || cal.preCustomUnit === null || cal.customRatio <= 0) return
-
-    const src: ElevationCalibration = { ...cal, unitType: cal.preCustomUnit }
-    const conv = (v: number | null): number | null =>
-      v !== null ? round1(calFromMeters(calToMeters(v, src), cal)) : null
-    const convInterval = (v: number | null): number | null =>
-      v !== null ? Math.max(1, Math.round(calFromMeters(calToMeters(v, src), cal))) : null
-
-    set({
-      elevationCalibration: {
-        ...cal,
-        realMin: conv(cal.realMin),
-        realMax: conv(cal.realMax),
-        mapWidth: conv(cal.mapWidth),
-        realInterval: convInterval(cal.realInterval),
-        preCustomUnit: null,
+        set({
+          elevationCalibration: { ...merged, realMin: newRealMin, realMax: newRealMax, realInterval: newRealInterval, mapWidth: newMapWidth, preCustomUnit },
+          isDirty: true,
+          contoursDirty: true,
+          ...(heightmap ? { hillshadeDirty: true } : {}),
+        })
       },
-      isDirty: true,
-      contoursDirty: true,
-      ...(heightmap ? { hillshadeDirty: true } : {}),
-    })
-  },
 
-  addElevationFlag: (flag) =>
-    set((state) => ({ elevationFlags: [...state.elevationFlags, flag], isDirty: true })),
+      setHillshadeDirty: (val) => set({ hillshadeDirty: val }),
 
-  updateElevationFlag: (id, updates) =>
-    set((state) => ({
-      elevationFlags: state.elevationFlags.map((f) => f.id === id ? { ...f, ...updates } : f),
-      isDirty: true,
-    })),
+      setContoursDirty: (val) => set({ contoursDirty: val }),
 
-  removeElevationFlag: (id) =>
-    set((state) => ({
-      elevationFlags: state.elevationFlags.filter((f) => f.id !== id),
-      isDirty: true,
-    })),
+      setContoursGenerating: (val) => set({ contoursGenerating: val }),
 
-  addSlopeArrow: (arrow) =>
-    set((state) => ({ slopeArrows: [...state.slopeArrows, arrow], isDirty: true })),
+      triggerHillshade: () =>
+        set((state) => ({
+          hillshadeVersion: state.hillshadeVersion + 1,
+          hillshadeDirty: false,
+          snapshotParams: state.parameters,
+          snapshotStyle: state.style,
+          snapshotHillshadeParams: state.hillshadeParams,
+          snapshotElevationCalibration: state.elevationCalibration,
+        })),
 
-  updateSlopeArrow: (id, updates) =>
-    set((state) => ({
-      slopeArrows: state.slopeArrows.map((a) => a.id === id ? { ...a, ...updates } : a),
-      isDirty: true,
-    })),
+      triggerContours: () =>
+        set((state) => ({
+          contoursVersion: state.contoursVersion + 1,
+          contoursDirty: false,
+          contoursGenerating: true,
+          snapshotParams: state.parameters,
+          snapshotStyle: state.style,
+          snapshotHillshadeParams: state.hillshadeParams,
+          snapshotElevationCalibration: state.elevationCalibration,
+        })),
 
-  removeSlopeArrow: (id) =>
-    set((state) => ({
-      slopeArrows: state.slopeArrows.filter((a) => a.id !== id),
-      isDirty: true,
-    })),
+      finalizeCustomConversion: () => {
+        const { elevationCalibration: cal, heightmap } = get()
+        if (cal.unitType !== 'custom' || cal.preCustomUnit === null || cal.customRatio <= 0) return
 
-  addRuggednessFlag: (flag) =>
-    set((state) => ({ ruggednessFlags: [...state.ruggednessFlags, flag], isDirty: true })),
+        const src: ElevationCalibration = { ...cal, unitType: cal.preCustomUnit }
+        const conv = (v: number | null): number | null =>
+          v !== null ? round1(calFromMeters(calToMeters(v, src), cal)) : null
+        const convInterval = (v: number | null): number | null =>
+          v !== null ? Math.max(1, Math.round(calFromMeters(calToMeters(v, src), cal))) : null
 
-  updateRuggednessFlag: (id, updates) =>
-    set((state) => ({
-      ruggednessFlags: state.ruggednessFlags.map((f) => f.id === id ? { ...f, ...updates } : f),
-      isDirty: true,
-    })),
+        set({
+          elevationCalibration: {
+            ...cal,
+            realMin: conv(cal.realMin),
+            realMax: conv(cal.realMax),
+            mapWidth: conv(cal.mapWidth),
+            realInterval: convInterval(cal.realInterval),
+            preCustomUnit: null,
+          },
+          isDirty: true,
+          contoursDirty: true,
+          ...(heightmap ? { hillshadeDirty: true } : {}),
+        })
+      },
 
-  removeRuggednessFlag: (id) =>
-    set((state) => ({
-      ruggednessFlags: state.ruggednessFlags.filter((f) => f.id !== id),
-      isDirty: true,
-    })),
+      addElevationFlag: (flag) =>
+        set((state) => ({ elevationFlags: [...state.elevationFlags, flag], isDirty: true })),
 
-  setRuggednessColorBySeverity: (val) => set({ ruggednessColorBySeverity: val }),
+      updateElevationFlag: (id, updates) =>
+        set((state) => ({
+          elevationFlags: state.elevationFlags.map((f) => f.id === id ? { ...f, ...updates } : f),
+          isDirty: true,
+        })),
 
-  setMapTool: (tool) => set({ mapTool: tool }),
+      removeElevationFlag: (id) =>
+        set((state) => ({
+          elevationFlags: state.elevationFlags.filter((f) => f.id !== id),
+          isDirty: true,
+        })),
 
-  setActiveTab: (tab) => set({ activeTab: tab }),
+      addSlopeArrow: (arrow) =>
+        set((state) => ({ slopeArrows: [...state.slopeArrows, arrow], isDirty: true })),
 
-  setMapZoom: (zoom) => set({ mapZoom: zoom }),
+      updateSlopeArrow: (id, updates) =>
+        set((state) => ({
+          slopeArrows: state.slopeArrows.map((a) => a.id === id ? { ...a, ...updates } : a),
+          isDirty: true,
+        })),
 
-  setOverlayOnly: (val) => set({ overlayOnly: val }),
+      removeSlopeArrow: (id) =>
+        set((state) => ({
+          slopeArrows: state.slopeArrows.filter((a) => a.id !== id),
+          isDirty: true,
+        })),
 
-  setOverlayBrightness: (brightness) => set({ overlayBrightness: brightness }),
+      addRuggednessFlag: (flag) =>
+        set((state) => ({ ruggednessFlags: [...state.ruggednessFlags, flag], isDirty: true })),
 
-  updateFrame: (f) =>
-    set((state) => ({ frame: { ...state.frame, ...f } })),
+      updateRuggednessFlag: (id, updates) =>
+        set((state) => ({
+          ruggednessFlags: state.ruggednessFlags.map((f) => f.id === id ? { ...f, ...updates } : f),
+          isDirty: true,
+        })),
 
-  updateTitle: (t) =>
-    set((state) => ({ title: { ...state.title, ...t } })),
+      removeRuggednessFlag: (id) =>
+        set((state) => ({
+          ruggednessFlags: state.ruggednessFlags.filter((f) => f.id !== id),
+          isDirty: true,
+        })),
 
-  updateCompass: (c) =>
-    set((state) => ({ compass: { ...state.compass, ...c } })),
+      setRuggednessColorBySeverity: (val) => set({ ruggednessColorBySeverity: val }),
 
-  updateLegend: (l) =>
-    set((state) => ({ legend: { ...state.legend, ...l } })),
+      setMapTool: (tool) => set({ mapTool: tool }),
 
-  updateMeasureBar: (m) =>
-    set((state) => ({ measureBar: { ...state.measureBar, ...m } })),
+      setActiveTab: (tab) => set({ activeTab: tab }),
 
-  clearPendingChanges: () =>
-    set((state) => ({
-      parameters: state.snapshotParams ?? state.parameters,
-      style: state.snapshotStyle ?? state.style,
-      hillshadeParams: state.snapshotHillshadeParams ?? state.hillshadeParams,
-      elevationCalibration: state.snapshotElevationCalibration ?? state.elevationCalibration,
-      hillshadeDirty: false,
-      contoursDirty: false,
-    })),
+      setMapZoom: (zoom) => set({ mapZoom: zoom }),
 
-  markClean: () => set({ isDirty: false }),
+      setOverlayOnly: (val) => set({ overlayOnly: val }),
 
-  reset: () => set(initialState),
-}))
+      setOverlayBrightness: (brightness) => set({ overlayBrightness: brightness }),
+
+      updateFrame: (f) =>
+        set((state) => ({ frame: { ...state.frame, ...f } })),
+
+      updateTitle: (t) =>
+        set((state) => ({ title: { ...state.title, ...t } })),
+
+      updateCompass: (c) =>
+        set((state) => ({ compass: { ...state.compass, ...c } })),
+
+      updateLegend: (l) =>
+        set((state) => ({ legend: { ...state.legend, ...l } })),
+
+      updateMeasureBar: (m) =>
+        set((state) => ({ measureBar: { ...state.measureBar, ...m } })),
+
+      clearPendingChanges: () =>
+        set((state) => ({
+          parameters: state.snapshotParams ?? state.parameters,
+          style: state.snapshotStyle ?? state.style,
+          hillshadeParams: state.snapshotHillshadeParams ?? state.hillshadeParams,
+          elevationCalibration: state.snapshotElevationCalibration ?? state.elevationCalibration,
+          hillshadeDirty: false,
+          contoursDirty: false,
+        })),
+
+      markClean: () => set({ isDirty: false }),
+
+      reset: () => {
+        localStorage.removeItem('topocrafter-state')
+        set(initialState)
+      },
+    }),
+    {
+      name: 'topocrafter-state',
+      storage: createJSONStorage(() => localStorage),
+      partialize: (state) => ({
+        heightmapPath: state.heightmapPath,
+        terrainImagePath: state.terrainImagePath,
+        parameters: state.parameters,
+        style: state.style,
+        hillshadeParams: state.hillshadeParams,
+        elevationCalibration: state.elevationCalibration,
+        activeTab: state.activeTab,
+        mapZoom: state.mapZoom,
+        overlayOnly: state.overlayOnly,
+        overlayBrightness: state.overlayBrightness,
+        frame: state.frame,
+        title: state.title,
+        compass: state.compass,
+        legend: state.legend,
+        measureBar: state.measureBar,
+        elevationFlags: state.elevationFlags,
+        slopeArrows: state.slopeArrows,
+        ruggednessFlags: state.ruggednessFlags,
+        ruggednessColorBySeverity: state.ruggednessColorBySeverity,
+      }),
+    }
+  )
+)
