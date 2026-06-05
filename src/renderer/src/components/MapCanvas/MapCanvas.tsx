@@ -4,7 +4,7 @@ import type { ContourMultiPolygon } from 'd3-contour'
 import { useStore } from '../../store/useStore'
 import { generateContours, contourToSvgPath } from '../../utils/contour'
 import type { ContourSet } from '../../utils/contour'
-import type { ElevationFlag, SlopeArrow, RuggednessFlag, FrameConfig, CompassConfig, LegendConfig, ContourStyle, FramePosition, MeasureBarConfig, ElevationCalibration, HeightmapInfo } from '../../types'
+import type { ElevationFlag, SlopeArrow, RuggednessFlag, SwampMarker, FrameConfig, CompassConfig, LegendConfig, ContourStyle, FramePosition, MeasureBarConfig, ElevationCalibration, HeightmapInfo } from '../../types'
 import { TRI_THRESHOLDS, TRI_COLORS, TRI_LABELS, getTriSeverity } from '../../types'
 
 function getLabelPoint(poly: ContourMultiPolygon): [number, number] | null {
@@ -29,8 +29,8 @@ interface ContourState {
   maxElevation: number
 }
 
-type SelectedItem = { type: 'flag' | 'slope-arrow' | 'ruggedness-flag'; id: string }
-type DragRef = { type: 'flag' | 'slope-arrow' | 'ruggedness-flag'; itemId: string; startX: number; startY: number; moved: boolean }
+type SelectedItem = { type: 'flag' | 'slope-arrow' | 'ruggedness-flag' | 'swamp-marker'; id: string }
+type DragRef = { type: 'flag' | 'slope-arrow' | 'ruggedness-flag' | 'swamp-marker'; itemId: string; startX: number; startY: number; moved: boolean }
 type DragPos = { x: number; y: number; elevation?: number; angleDeg?: number; slopeDeg?: number; triNorm?: number }
 
 // ---------------------------------------------------------------------------
@@ -367,10 +367,11 @@ function toDMS(degrees: number, isLat: boolean): string {
 // Legend overlay
 // ---------------------------------------------------------------------------
 
-function LegendOverlay({ legend, frame, style, hasElevationFlags, hasSlopeArrows, measureBar, hasRuggednessFlags, ruggednessColorBySeverity }: {
+function LegendOverlay({ legend, frame, style, hasElevationFlags, hasSlopeArrows, measureBar, hasRuggednessFlags, ruggednessColorBySeverity, hasSwampMarkers, swampMarkerDefaults }: {
   legend: LegendConfig; frame: FrameConfig; style: ContourStyle
   hasElevationFlags: boolean; hasSlopeArrows: boolean; measureBar?: MeasureBarConfig
   hasRuggednessFlags: boolean; ruggednessColorBySeverity: boolean
+  hasSwampMarkers: boolean; swampMarkerDefaults: { color: string; boldness: 1|2|3 }
 }): JSX.Element | null {
   const hasGeoAnchor = legend.showGeoAnchor && !!measureBar?.enabled && !!measureBar?.geoEnabled
   const geoAnchorLabel = hasGeoAnchor
@@ -385,6 +386,7 @@ function LegendOverlay({ legend, frame, style, hasElevationFlags, hasSlopeArrows
     legend.showSlopeArrows && hasSlopeArrows          ? { type: 'arrow',      label: legend.arrowLabel         } : null,
     hasGeoAnchor                                      ? { type: 'geo-anchor', label: geoAnchorLabel            } : null,
     showColorBar                                      ? { type: 'ruggedness', label: legend.ruggednessFlagLabel} : null,
+    legend.showSwampMarkers && hasSwampMarkers         ? { type: 'swamp',      label: legend.swampMarkerLabel   } : null,
   ].filter(Boolean) as { type: string; label: string }[]
 
   if (items.length === 0) return null
@@ -468,6 +470,23 @@ function LegendOverlay({ legend, frame, style, hasElevationFlags, hasSlopeArrows
               <polyline
                 points={`${fx},${fy_top} ${fx+h*0.18},${fy_top-h*0.06} ${fx+h*0.33},${fy_top+h*0.05} ${fx+h*0.48},${fy_top-h*0.1} ${fx+h*0.6},${fy_top+h*0.01}`}
                 fill="none" stroke={iconColor} strokeWidth={0.7} strokeLinejoin="round" />
+            </g>
+          )
+        } else if (type === 'swamp') {
+          const h = rowH * 0.7
+          const cx = sx1 + sampW / 2
+          const base = midY + h * 0.3
+          const color = swampMarkerDefaults.color
+          const sw = 0.9
+          sample = (
+            <g>
+              <line x1={cx} y1={base} x2={cx} y2={base-h} stroke={color} strokeWidth={sw} strokeLinecap="round" />
+              <line x1={cx} y1={base} x2={cx-h*0.22} y2={base-h*0.88} stroke={color} strokeWidth={sw} strokeLinecap="round" />
+              <line x1={cx} y1={base} x2={cx+h*0.22} y2={base-h*0.88} stroke={color} strokeWidth={sw} strokeLinecap="round" />
+              <path d={`M ${cx} ${base} Q ${cx-h*0.52} ${base-h*0.62} ${cx-h*0.64} ${base-h*0.18}`}
+                fill="none" stroke={color} strokeWidth={sw} strokeLinecap="round" />
+              <path d={`M ${cx} ${base} Q ${cx+h*0.52} ${base-h*0.62} ${cx+h*0.64} ${base-h*0.18}`}
+                fill="none" stroke={color} strokeWidth={sw} strokeLinecap="round" />
             </g>
           )
         } else {
@@ -805,6 +824,14 @@ export function MapCanvas(): JSX.Element {
   const measureBar = useStore((s) => s.measureBar)
   const updateMeasureBar = useStore((s) => s.updateMeasureBar)
   const setMapDisplaySize = useStore((s) => s.setMapDisplaySize)
+  const swampMarkers = useStore((s) => s.swampMarkers)
+  const addSwampMarker = useStore((s) => s.addSwampMarker)
+  const updateSwampMarker = useStore((s) => s.updateSwampMarker)
+  const removeSwampMarker = useStore((s) => s.removeSwampMarker)
+  const swampMarkerDefaults = useStore((s) => s.swampMarkerDefaults)
+  const elevationFlagDefaults = useStore((s) => s.elevationFlagDefaults)
+  const slopeArrowDefaults = useStore((s) => s.slopeArrowDefaults)
+  const ruggednessFlagDefaults = useStore((s) => s.ruggednessFlagDefaults)
 
   // Track inner map area dimensions for measure bar overlay.
   // We observe the inner map div (not the outer composition div) so that ResizeObserver
@@ -958,13 +985,14 @@ export function MapCanvas(): JSX.Element {
         const { type, id } = selectedItemRef.current
         if (type === 'flag') removeElevationFlag(id)
         else if (type === 'slope-arrow') removeSlopeArrow(id)
-        else removeRuggednessFlag(id)
+        else if (type === 'ruggedness-flag') removeRuggednessFlag(id)
+        else if (type === 'swamp-marker') removeSwampMarker(id)
         setSelectedItem(null)
       }
     }
     document.addEventListener('keydown', handleKeyDown)
     return () => document.removeEventListener('keydown', handleKeyDown)
-  }, [setMapTool, removeElevationFlag, removeSlopeArrow, removeRuggednessFlag])
+  }, [setMapTool, removeElevationFlag, removeSlopeArrow, removeRuggednessFlag, removeSwampMarker])
 
   // Document-level drag handlers so drag works even when cursor leaves the SVG
   useEffect(() => {
@@ -984,9 +1012,11 @@ export function MapCanvas(): JSX.Element {
       } else if (dragRef.current.type === 'slope-arrow') {
         const slope = computeSlopeAt(pt.x, pt.y)
         setDragPos({ x: pt.x, y: pt.y, angleDeg: slope?.angleDeg ?? 0, slopeDeg: slope?.slopeDeg ?? 0 })
-      } else {
+      } else if (dragRef.current.type === 'ruggedness-flag') {
         const triNorm = computeTriAt(pt.x, pt.y) ?? 0
         setDragPos({ x: pt.x, y: pt.y, triNorm })
+      } else {
+        setDragPos({ x: pt.x, y: pt.y })
       }
     }
     const onUp = (e: MouseEvent) => {
@@ -1001,9 +1031,11 @@ export function MapCanvas(): JSX.Element {
           } else if (type === 'slope-arrow') {
             const slope = computeSlopeAt(pt.x, pt.y)
             if (slope) updateSlopeArrow(itemId, { x: pt.x, y: pt.y, ...slope })
-          } else {
+          } else if (type === 'ruggedness-flag') {
             const triNorm = computeTriAt(pt.x, pt.y) ?? 0
             updateRuggednessFlag(itemId, { x: pt.x, y: pt.y, triNorm })
+          } else {
+            updateSwampMarker(itemId, { x: pt.x, y: pt.y })
           }
         }
       } else {
@@ -1018,7 +1050,7 @@ export function MapCanvas(): JSX.Element {
       document.removeEventListener('mousemove', onMove)
       document.removeEventListener('mouseup', onUp)
     }
-  }, [getSvgPoint, computeElevationAt, computeSlopeAt, computeTriAt, updateElevationFlag, updateSlopeArrow, updateRuggednessFlag])
+  }, [getSvgPoint, computeElevationAt, computeSlopeAt, computeTriAt, updateElevationFlag, updateSlopeArrow, updateRuggednessFlag, updateSwampMarker])
 
   // Clear hover preview whenever the tool mode is turned off
   useEffect(() => {
@@ -1040,6 +1072,8 @@ export function MapCanvas(): JSX.Element {
     } else if (mapTool === 'ruggedness-flag') {
       const triNorm = computeTriAt(pt.x, pt.y)
       setHoverPos(triNorm !== null ? { x: pt.x, y: pt.y, triNorm } : null)
+    } else if (mapTool === 'swamp-marker') {
+      setHoverPos({ x: pt.x, y: pt.y })
     }
   }
 
@@ -1047,7 +1081,7 @@ export function MapCanvas(): JSX.Element {
     setHoverPos(null)
   }
 
-  function handleItemMouseDown(e: React.MouseEvent, type: 'flag' | 'slope-arrow' | 'ruggedness-flag', itemId: string) {
+  function handleItemMouseDown(e: React.MouseEvent, type: 'flag' | 'slope-arrow' | 'ruggedness-flag' | 'swamp-marker', itemId: string) {
     e.stopPropagation()
     const pt = getSvgPoint(e.clientX, e.clientY)
     if (!pt) return
@@ -1067,20 +1101,27 @@ export function MapCanvas(): JSX.Element {
     if (mapTool === 'elevation-flag') {
       const elev = computeElevationAt(pt.x, pt.y)
       if (elev !== null) {
-        addElevationFlag({ id: crypto.randomUUID(), x: pt.x, y: pt.y, elevation: elev } as ElevationFlag)
+        addElevationFlag({ id: crypto.randomUUID(), x: pt.x, y: pt.y, elevation: elev,
+          boldness: elevationFlagDefaults.boldness, opacity: elevationFlagDefaults.opacity } as ElevationFlag)
       }
     } else if (mapTool === 'slope-arrow') {
       const slope = computeSlopeAt(pt.x, pt.y)
       if (slope) {
-        addSlopeArrow({ id: crypto.randomUUID(), x: pt.x, y: pt.y, ...slope } as SlopeArrow)
+        addSlopeArrow({ id: crypto.randomUUID(), x: pt.x, y: pt.y, ...slope,
+          boldness: slopeArrowDefaults.boldness, opacity: slopeArrowDefaults.opacity } as SlopeArrow)
       }
     } else if (mapTool === 'measure-anchor') {
       updateMeasureBar({ anchorX: Math.round(pt.x), anchorY: Math.round(pt.y) })
     } else if (mapTool === 'ruggedness-flag') {
       const triNorm = computeTriAt(pt.x, pt.y)
       if (triNorm !== null) {
-        addRuggednessFlag({ id: crypto.randomUUID(), x: pt.x, y: pt.y, triNorm } as RuggednessFlag)
+        addRuggednessFlag({ id: crypto.randomUUID(), x: pt.x, y: pt.y, triNorm,
+          boldness: ruggednessFlagDefaults.boldness, opacity: ruggednessFlagDefaults.opacity } as RuggednessFlag)
       }
+    } else if (mapTool === 'swamp-marker') {
+      const sizeFactor = 0.75 + Math.random() * 0.5
+      addSwampMarker({ id: crypto.randomUUID(), x: pt.x, y: pt.y, sizeFactor,
+        boldness: swampMarkerDefaults.boldness, opacity: swampMarkerDefaults.opacity, color: swampMarkerDefaults.color })
     }
   }
 
@@ -1107,8 +1148,8 @@ export function MapCanvas(): JSX.Element {
     ? getLabelPoint(contourState.contourSet.seaLevelPath)
     : null
 
-  const toolActive = mapTool === 'elevation-flag' || mapTool === 'slope-arrow' || mapTool === 'measure-anchor' || mapTool === 'ruggedness-flag'
-  const flagSvgInteractive = toolActive || elevationFlags.length > 0 || slopeArrows.length > 0 || ruggednessFlags.length > 0
+  const toolActive = mapTool === 'elevation-flag' || mapTool === 'slope-arrow' || mapTool === 'measure-anchor' || mapTool === 'ruggedness-flag' || mapTool === 'swamp-marker'
+  const flagSvgInteractive = toolActive || elevationFlags.length > 0 || slopeArrows.length > 0 || ruggednessFlags.length > 0 || swampMarkers.length > 0
 
   // Pan-drag and wheel-zoom for default (no-tool) mode
   const scrollContainerRef = useRef<HTMLDivElement>(null)
@@ -1132,6 +1173,10 @@ export function MapCanvas(): JSX.Element {
   }, [setMapZoom])
 
   const canPan = mapTool === 'none' && !!(baseImageUrl || heightmap)
+
+  function bw(base: number, boldness?: 1 | 2 | 3): number {
+    return base * (boldness === 1 ? 0.6 : boldness === 3 ? 1.8 : 1.0)
+  }
 
   function handleScrollMouseDown(e: React.MouseEvent<HTMLDivElement>) {
     if (!canPan || e.button !== 0) return
@@ -1362,10 +1407,12 @@ export function MapCanvas(): JSX.Element {
             const isSelected = selectedItem?.type === 'flag' && selectedItem.id === flag.id
             const s = labelFontSize
             const flagColor = isSelected ? style.majorColor : style.labelColor
+            const strokeW = bw(isSelected ? 2 : 1.5, flag.boldness)
 
             return (
               <g
                 key={flag.id}
+                opacity={flag.opacity ?? 1}
                 onMouseDown={(e) => handleItemMouseDown(e, 'flag', flag.id)}
                 style={{ cursor: isSelected ? 'grab' : 'pointer' }}
               >
@@ -1373,7 +1420,7 @@ export function MapCanvas(): JSX.Element {
                   x1={fx} y1={fy}
                   x2={fx} y2={fy - s}
                   stroke={flagColor}
-                  strokeWidth={isSelected ? 2 : 1.5}
+                  strokeWidth={strokeW}
                   vectorEffect="non-scaling-stroke"
                 />
                 <polygon
@@ -1414,6 +1461,7 @@ export function MapCanvas(): JSX.Element {
             const isSelected = selectedItem?.type === 'slope-arrow' && selectedItem.id === arrow.id
             const s = labelFontSize
             const arrowColor = isSelected ? style.majorColor : style.labelColor
+            const strokeW = bw(isSelected ? 2 : 1.5, arrow.boldness)
 
             // Compute arrow geometry in SVG coordinates
             const angleRad = (displayAngle * Math.PI) / 180
@@ -1440,6 +1488,7 @@ export function MapCanvas(): JSX.Element {
             return (
               <g
                 key={arrow.id}
+                opacity={arrow.opacity ?? 1}
                 onMouseDown={(e) => handleItemMouseDown(e, 'slope-arrow', arrow.id)}
                 style={{ cursor: isSelected ? 'grab' : 'pointer' }}
               >
@@ -1448,7 +1497,7 @@ export function MapCanvas(): JSX.Element {
                   x1={tailX} y1={tailY}
                   x2={headBaseX} y2={headBaseY}
                   stroke={arrowColor}
-                  strokeWidth={isSelected ? 2 : 1.5}
+                  strokeWidth={strokeW}
                   vectorEffect="non-scaling-stroke"
                 />
                 {/* Arrowhead */}
@@ -1489,7 +1538,7 @@ export function MapCanvas(): JSX.Element {
             const s = labelFontSize
             const severity = getTriSeverity(displayTri)
             const flagColor = ruggednessColorBySeverity ? TRI_COLORS[severity] : style.labelColor
-            const strokeW = isSelected ? 2 : 1.5
+            const strokeW = bw(isSelected ? 2 : 1.5, flag.boldness)
 
             const triDisplay = (elevationCalibration.realMin !== null && elevationCalibration.realMax !== null)
               ? `${Math.round(displayTri * Math.abs(elevationCalibration.realMax - elevationCalibration.realMin) * 10) / 10}${
@@ -1502,6 +1551,7 @@ export function MapCanvas(): JSX.Element {
             return (
               <g
                 key={flag.id}
+                opacity={flag.opacity ?? 1}
                 onMouseDown={(e) => handleItemMouseDown(e, 'ruggedness-flag', flag.id)}
                 style={{ cursor: isSelected ? 'grab' : 'pointer' }}
               >
@@ -1511,12 +1561,12 @@ export function MapCanvas(): JSX.Element {
                 {/* Upper jagged ridge */}
                 <polyline
                   points={`${fx},${fy-s} ${fx+s*0.2},${fy-s-s*0.22} ${fx+s*0.36},${fy-s-s*0.07} ${fx+s*0.52},${fy-s-s*0.28} ${fx+s*0.65},${fy-s-s*0.13}`}
-                  fill="none" stroke={flagColor} strokeWidth={isSelected ? 1.5 : 1}
+                  fill="none" stroke={flagColor} strokeWidth={bw(isSelected ? 1.5 : 1, flag.boldness)}
                   strokeLinejoin="round" vectorEffect="non-scaling-stroke" />
                 {/* Lower jagged ridge */}
                 <polyline
                   points={`${fx},${fy-s} ${fx+s*0.2},${fy-s-s*0.06} ${fx+s*0.36},${fy-s+s*0.05} ${fx+s*0.52},${fy-s-s*0.1} ${fx+s*0.65},${fy-s+s*0.01}`}
-                  fill="none" stroke={flagColor} strokeWidth={isSelected ? 1.5 : 1}
+                  fill="none" stroke={flagColor} strokeWidth={bw(isSelected ? 1.5 : 1, flag.boldness)}
                   strokeLinejoin="round" vectorEffect="non-scaling-stroke" />
                 <text x={fx + s * 0.7} y={fy - s * 0.55}
                   fontSize={labelFontSize} fontFamily={style.labelFont}
@@ -1527,6 +1577,39 @@ export function MapCanvas(): JSX.Element {
                 {isSelected && (
                   <circle cx={fx} cy={fy} r={s * 0.12}
                     fill="none" stroke={flagColor} strokeWidth={2} vectorEffect="non-scaling-stroke" />
+                )}
+              </g>
+            )
+          })}
+
+          {/* Swamp markers */}
+          {swampMarkers.map((marker) => {
+            const isDragging = dragPos !== null && dragRef.current?.itemId === marker.id && dragRef.current.type === 'swamp-marker'
+            const fx = isDragging ? dragPos!.x : marker.x
+            const fy = isDragging ? dragPos!.y : marker.y
+            const isSelected = selectedItem?.type === 'swamp-marker' && selectedItem.id === marker.id
+            const s = labelFontSize * marker.sizeFactor
+            const strokeW = bw(isSelected ? 2 : 1.5, marker.boldness)
+            const color = marker.color
+            return (
+              <g key={marker.id} opacity={marker.opacity}
+                onMouseDown={(e) => handleItemMouseDown(e, 'swamp-marker', marker.id)}
+                style={{ cursor: isSelected ? 'grab' : 'pointer' }}>
+                {/* Center upright */}
+                <line x1={fx} y1={fy} x2={fx} y2={fy-s} stroke={color} strokeWidth={strokeW} strokeLinecap="round" vectorEffect="non-scaling-stroke" />
+                {/* Left-center upright */}
+                <line x1={fx} y1={fy} x2={fx-s*0.22} y2={fy-s*0.88} stroke={color} strokeWidth={strokeW} strokeLinecap="round" vectorEffect="non-scaling-stroke" />
+                {/* Right-center upright */}
+                <line x1={fx} y1={fy} x2={fx+s*0.22} y2={fy-s*0.88} stroke={color} strokeWidth={strokeW} strokeLinecap="round" vectorEffect="non-scaling-stroke" />
+                {/* Left bent shoot — curves outward and droops */}
+                <path d={`M ${fx} ${fy} Q ${fx-s*0.52} ${fy-s*0.62} ${fx-s*0.64} ${fy-s*0.18}`}
+                  fill="none" stroke={color} strokeWidth={strokeW} strokeLinecap="round" vectorEffect="non-scaling-stroke" />
+                {/* Right bent shoot */}
+                <path d={`M ${fx} ${fy} Q ${fx+s*0.52} ${fy-s*0.62} ${fx+s*0.64} ${fy-s*0.18}`}
+                  fill="none" stroke={color} strokeWidth={strokeW} strokeLinecap="round" vectorEffect="non-scaling-stroke" />
+                {isSelected && (
+                  <circle cx={fx} cy={fy} r={s * 0.12}
+                    fill="none" stroke={color} strokeWidth={2} vectorEffect="non-scaling-stroke" />
                 )}
               </g>
             )
@@ -1608,6 +1691,22 @@ export function MapCanvas(): JSX.Element {
                 </g>
               )
             }
+            if (mapTool === 'swamp-marker') {
+              const s = labelFontSize
+              const color = swampMarkerDefaults.color
+              const strokeW = bw(1.5, swampMarkerDefaults.boldness)
+              return (
+                <g opacity={0.7} style={{ pointerEvents: 'none' }}>
+                  <line x1={hoverPos.x} y1={hoverPos.y} x2={hoverPos.x} y2={hoverPos.y-s} stroke={color} strokeWidth={strokeW} strokeLinecap="round" vectorEffect="non-scaling-stroke" />
+                  <line x1={hoverPos.x} y1={hoverPos.y} x2={hoverPos.x-s*0.22} y2={hoverPos.y-s*0.88} stroke={color} strokeWidth={strokeW} strokeLinecap="round" vectorEffect="non-scaling-stroke" />
+                  <line x1={hoverPos.x} y1={hoverPos.y} x2={hoverPos.x+s*0.22} y2={hoverPos.y-s*0.88} stroke={color} strokeWidth={strokeW} strokeLinecap="round" vectorEffect="non-scaling-stroke" />
+                  <path d={`M ${hoverPos.x} ${hoverPos.y} Q ${hoverPos.x-s*0.52} ${hoverPos.y-s*0.62} ${hoverPos.x-s*0.64} ${hoverPos.y-s*0.18}`}
+                    fill="none" stroke={color} strokeWidth={strokeW} strokeLinecap="round" vectorEffect="non-scaling-stroke" />
+                  <path d={`M ${hoverPos.x} ${hoverPos.y} Q ${hoverPos.x+s*0.52} ${hoverPos.y-s*0.62} ${hoverPos.x+s*0.64} ${hoverPos.y-s*0.18}`}
+                    fill="none" stroke={color} strokeWidth={strokeW} strokeLinecap="round" vectorEffect="non-scaling-stroke" />
+                </g>
+              )
+            }
             if (mapTool === 'slope-arrow' && hoverPos.angleDeg !== undefined && hoverPos.slopeDeg !== undefined) {
               const angleRad = (hoverPos.angleDeg * Math.PI) / 180
               const cos = Math.cos(angleRad)
@@ -1673,6 +1772,8 @@ export function MapCanvas(): JSX.Element {
           measureBar={measureBar}
           hasRuggednessFlags={ruggednessFlags.length > 0}
           ruggednessColorBySeverity={ruggednessColorBySeverity}
+          hasSwampMarkers={swampMarkers.length > 0}
+          swampMarkerDefaults={swampMarkerDefaults}
         />
       )}
 

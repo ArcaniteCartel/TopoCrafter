@@ -15,6 +15,8 @@ export interface ExportLayerConfig {
   hasElevationFlags?: boolean
   hasSlopeArrows?: boolean
   hasRuggednessFlags?: boolean
+  hasSwampMarkers?: boolean
+  swampMarkerColor?: string
   measureBar?: MeasureBarConfig
   calibration?: ElevationCalibration
   heightmap?: HeightmapInfo
@@ -42,6 +44,8 @@ export interface OverlayExportConfig {
   hasElevationFlags?: boolean
   hasSlopeArrows?: boolean
   hasRuggednessFlags?: boolean
+  hasSwampMarkers?: boolean
+  swampMarkerColor?: string
   measureBar?: MeasureBarConfig
   calibration?: ElevationCalibration
   heightmap?: HeightmapInfo
@@ -675,6 +679,8 @@ function drawLegend(
   totalH: number,
   measureBar?: MeasureBarConfig,
   hasRuggednessFlags?: boolean,
+  hasSwampMarkers?: boolean,
+  swampMarkerColor?: string,
 ): void {
   const hasGeoAnchor = legend.showGeoAnchor && !!measureBar?.enabled && !!measureBar?.geoEnabled
   const showColorBar = legend.showRuggednessFlags && !!hasRuggednessFlags
@@ -686,6 +692,7 @@ function drawLegend(
     legend.showSlopeArrows && hasSlopeArrows            ? { type: 'arrow',      label: legend.arrowLabel         } : null,
     hasGeoAnchor ? { type: 'geo-anchor', label: `${legend.geoAnchorLabel}: ${toDMS(measureBar!.anchorLat, true)}, ${toDMS(measureBar!.anchorLon, false)}` } : null,
     showColorBar  ? { type: 'ruggedness', label: legend.ruggednessFlagLabel } : null,
+    legend.showSwampMarkers && !!hasSwampMarkers ? { type: 'swamp', label: legend.swampMarkerLabel } : null,
   ].filter(Boolean) as { type: string; label: string }[]
 
   if (items.length === 0) return
@@ -773,6 +780,17 @@ function drawLegend(
       ctx.lineTo(fx+h*0.18, fy_top-h*0.06); ctx.lineTo(fx+h*0.33, fy_top+h*0.05)
       ctx.lineTo(fx+h*0.48, fy_top-h*0.1); ctx.lineTo(fx+h*0.6, fy_top+h*0.01)
       ctx.stroke()
+    } else if (type === 'swamp') {
+      const color = swampMarkerColor ?? '#388E3C'
+      const s = rowH * 0.4
+      const sfx = sx1 + sampW / 2
+      const sfy = midY + s * 0.15
+      ctx.strokeStyle = color; ctx.lineWidth = 0.8; ctx.lineCap = 'round'
+      ctx.beginPath(); ctx.moveTo(sfx, sfy); ctx.lineTo(sfx, sfy - s); ctx.stroke()
+      ctx.beginPath(); ctx.moveTo(sfx, sfy); ctx.lineTo(sfx - s * 0.22, sfy - s * 0.88); ctx.stroke()
+      ctx.beginPath(); ctx.moveTo(sfx, sfy); ctx.lineTo(sfx + s * 0.22, sfy - s * 0.88); ctx.stroke()
+      ctx.beginPath(); ctx.moveTo(sfx, sfy); ctx.quadraticCurveTo(sfx - s * 0.52, sfy - s * 0.62, sfx - s * 0.64, sfy - s * 0.18); ctx.stroke()
+      ctx.beginPath(); ctx.moveTo(sfx, sfy); ctx.quadraticCurveTo(sfx + s * 0.52, sfy - s * 0.62, sfx + s * 0.64, sfy - s * 0.18); ctx.stroke()
     } else {
       const w = sampW * 0.6, hw = w * 0.28, hl = w * 0.3
       const ax1 = sx1 + (sampW - w) / 2, ax2 = ax1 + w, ab = ax2 - hl
@@ -1000,7 +1018,7 @@ export async function exportOverlayToBlob(config: OverlayExportConfig): Promise<
   }
   if (withFrame && config.legend && config.contourStyle) {
     drawLegend(ctx, config.legend, config.frame!, config.contourStyle,
-      config.hasElevationFlags ?? false, config.hasSlopeArrows ?? false, totalW, totalH, config.measureBar, config.hasRuggednessFlags)
+      config.hasElevationFlags ?? false, config.hasSlopeArrows ?? false, totalW, totalH, config.measureBar, config.hasRuggednessFlags, config.hasSwampMarkers, config.swampMarkerColor)
   }
   if (withFrame && config.measureBar?.enabled && config.calibration && config.heightmap) {
     drawMeasureBars(ctx, config.measureBar, config.calibration, config.heightmap, config.frame!, totalW, totalH)
@@ -1075,7 +1093,7 @@ export async function exportToBlob(config: ExportLayerConfig): Promise<Blob> {
   }
   if (withFrame && config.legend && config.contourStyle) {
     drawLegend(ctx, config.legend, config.frame!, config.contourStyle,
-      config.hasElevationFlags ?? false, config.hasSlopeArrows ?? false, totalW, totalH, config.measureBar, config.hasRuggednessFlags)
+      config.hasElevationFlags ?? false, config.hasSlopeArrows ?? false, totalW, totalH, config.measureBar, config.hasRuggednessFlags, config.hasSwampMarkers, config.swampMarkerColor)
   }
   if (withFrame && config.measureBar?.enabled && config.calibration && config.heightmap) {
     drawMeasureBars(ctx, config.measureBar, config.calibration, config.heightmap, config.frame!, totalW, totalH)

@@ -3,7 +3,8 @@ import { persist, createJSONStorage } from 'zustand/middleware'
 import type {
   ProjectState, ContourParameters, ContourStyle,
   HeightmapInfo, HillshadeParameters, ElevationCalibration,
-  ElevationFlag, SlopeArrow, RuggednessFlag, MapTool, FrameConfig, TitleConfig, CompassConfig, LegendConfig, MeasureBarConfig,
+  ElevationFlag, SlopeArrow, RuggednessFlag, SwampMarker, MarkerDefaults, SwampMarkerDefaults,
+  MapTool, FrameConfig, TitleConfig, CompassConfig, LegendConfig, MeasureBarConfig,
 } from '../types'
 import { defaultParameters, defaultStyle, defaultHillshadeParameters, defaultElevationCalibration, defaultFrameConfig, defaultTitleConfig, defaultCompassConfig, defaultLegendConfig, defaultMeasureBarConfig } from '../types'
 
@@ -61,6 +62,13 @@ interface AppActions {
   updateRuggednessFlag: (id: string, updates: Partial<Omit<RuggednessFlag, 'id'>>) => void
   removeRuggednessFlag: (id: string) => void
   setRuggednessColorBySeverity: (val: boolean) => void
+  addSwampMarker: (marker: SwampMarker) => void
+  updateSwampMarker: (id: string, updates: Partial<Omit<SwampMarker, 'id'>>) => void
+  removeSwampMarker: (id: string) => void
+  updateElevationFlagDefaults: (d: Partial<MarkerDefaults>) => void
+  updateSlopeArrowDefaults: (d: Partial<MarkerDefaults>) => void
+  updateRuggednessFlagDefaults: (d: Partial<MarkerDefaults>) => void
+  updateSwampMarkerDefaults: (d: Partial<SwampMarkerDefaults>) => void
   setMapTool: (tool: MapTool) => void
   setActiveTab: (tab: 'terrain' | 'hillshade') => void
   setMapZoom: (zoom: number) => void
@@ -99,7 +107,12 @@ const initialState: ProjectState = {
   elevationFlags: [],
   slopeArrows: [],
   ruggednessFlags: [],
+  swampMarkers: [],
   ruggednessColorBySeverity: true,
+  elevationFlagDefaults: { boldness: 2, opacity: 1 },
+  slopeArrowDefaults: { boldness: 2, opacity: 1 },
+  ruggednessFlagDefaults: { boldness: 2, opacity: 1 },
+  swampMarkerDefaults: { boldness: 2, opacity: 1, color: '#388E3C' },
   mapTool: 'none',
   snapshotParams: null,
   snapshotStyle: null,
@@ -322,6 +335,33 @@ export const useStore = create<ProjectState & AppActions>()(
 
       setRuggednessColorBySeverity: (val) => set({ ruggednessColorBySeverity: val }),
 
+      addSwampMarker: (marker) =>
+        set((state) => ({ swampMarkers: [...state.swampMarkers, marker], isDirty: true })),
+
+      updateSwampMarker: (id, updates) =>
+        set((state) => ({
+          swampMarkers: state.swampMarkers.map((m) => m.id === id ? { ...m, ...updates } : m),
+          isDirty: true,
+        })),
+
+      removeSwampMarker: (id) =>
+        set((state) => ({
+          swampMarkers: state.swampMarkers.filter((m) => m.id !== id),
+          isDirty: true,
+        })),
+
+      updateElevationFlagDefaults: (d) =>
+        set((state) => ({ elevationFlagDefaults: { ...state.elevationFlagDefaults, ...d } })),
+
+      updateSlopeArrowDefaults: (d) =>
+        set((state) => ({ slopeArrowDefaults: { ...state.slopeArrowDefaults, ...d } })),
+
+      updateRuggednessFlagDefaults: (d) =>
+        set((state) => ({ ruggednessFlagDefaults: { ...state.ruggednessFlagDefaults, ...d } })),
+
+      updateSwampMarkerDefaults: (d) =>
+        set((state) => ({ swampMarkerDefaults: { ...state.swampMarkerDefaults, ...d } })),
+
       setMapTool: (tool) => set({ mapTool: tool }),
 
       setActiveTab: (tab) => set({ activeTab: tab }),
@@ -388,7 +428,12 @@ export const useStore = create<ProjectState & AppActions>()(
         elevationFlags: state.elevationFlags,
         slopeArrows: state.slopeArrows,
         ruggednessFlags: state.ruggednessFlags,
+        swampMarkers: state.swampMarkers,
         ruggednessColorBySeverity: state.ruggednessColorBySeverity,
+        elevationFlagDefaults: state.elevationFlagDefaults,
+        slopeArrowDefaults: state.slopeArrowDefaults,
+        ruggednessFlagDefaults: state.ruggednessFlagDefaults,
+        swampMarkerDefaults: state.swampMarkerDefaults,
       }),
     }
   )

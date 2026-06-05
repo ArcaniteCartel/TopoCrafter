@@ -53,6 +53,18 @@ function AnchorIcon(): JSX.Element {
   )
 }
 
+function SwampIcon(): JSX.Element {
+  return (
+    <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round">
+      <line x1="8" y1="14" x2="8" y2="3" />
+      <line x1="8" y1="14" x2="5.5" y2="4.5" />
+      <line x1="8" y1="14" x2="10.5" y2="4.5" />
+      <path d="M 8 14 Q 3.5 9 3 11" fill="none" />
+      <path d="M 8 14 Q 12.5 9 13 11" fill="none" />
+    </svg>
+  )
+}
+
 function RuggednessIcon(): JSX.Element {
   return (
     <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
@@ -83,6 +95,8 @@ export function Toolbar(): JSX.Element {
   const elevationFlags = useStore((s) => s.elevationFlags)
   const slopeArrows = useStore((s) => s.slopeArrows)
   const ruggednessFlags = useStore((s) => s.ruggednessFlags)
+  const swampMarkers = useStore((s) => s.swampMarkers)
+  const swampMarkerDefaults = useStore((s) => s.swampMarkerDefaults)
   const mapDisplaySize = useStore((s) => s.mapDisplaySize)
   const { themeId, setTheme } = useThemeStore()
   const [themeModalOpen, setThemeModalOpen] = useState(false)
@@ -109,7 +123,8 @@ export function Toolbar(): JSX.Element {
       const frameOpts = {
         frame, includeFrame: frame.enabled && includeFrame, title, compass,
         legend, contourStyle: style, hasElevationFlags: elevationFlags.length > 0, hasSlopeArrows: slopeArrows.length > 0,
-        hasRuggednessFlags: ruggednessFlags.length > 0,
+        hasRuggednessFlags: ruggednessFlags.length > 0, hasSwampMarkers: swampMarkers.length > 0,
+        swampMarkerColor: swampMarkerDefaults.color,
         measureBar, calibration: elevationCalibration, heightmap: heightmap ?? undefined,
       }
       let blob: Blob
@@ -180,6 +195,17 @@ export function Toolbar(): JSX.Element {
             </Popover.Target>
             <Popover.Dropdown p="xs">
               <Group gap="xs">
+                <Tooltip label="Add a swamp / marsh marker" position="bottom" withArrow>
+                  <ActionIcon
+                    variant={mapTool === 'swamp-marker' ? 'filled' : 'subtle'}
+                    size="md"
+                    disabled={!heightmap}
+                    onClick={() => setMapTool(mapTool === 'swamp-marker' ? 'none' : 'swamp-marker')}
+                    aria-label="Swamp marker tool"
+                  >
+                    <SwampIcon />
+                  </ActionIcon>
+                </Tooltip>
                 <Tooltip label="Add a terrain ruggedness index marker" position="bottom" withArrow>
                   <ActionIcon
                     variant={mapTool === 'ruggedness-flag' ? 'filled' : 'subtle'}
@@ -340,6 +366,8 @@ export function Toolbar(): JSX.Element {
           hasElevationFlags={elevationFlags.length > 0}
           hasSlopeArrows={slopeArrows.length > 0}
           hasRuggednessFlags={ruggednessFlags.length > 0}
+          hasSwampMarkers={swampMarkers.length > 0}
+          swampMarkerColor={swampMarkerDefaults.color}
           measureBar={measureBar}
           heightmap={heightmap ?? undefined}
         />

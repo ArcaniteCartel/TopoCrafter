@@ -20,6 +20,8 @@ interface Props {
   hasElevationFlags: boolean
   hasSlopeArrows: boolean
   hasRuggednessFlags?: boolean
+  hasSwampMarkers?: boolean
+  swampMarkerColor?: string
   measureBar?: MeasureBarConfig
   heightmap?: HeightmapInfo
 }
@@ -38,6 +40,8 @@ export function OverlayExportModal({
   hasElevationFlags,
   hasSlopeArrows,
   hasRuggednessFlags,
+  hasSwampMarkers,
+  swampMarkerColor,
   measureBar,
   heightmap,
 }: Props): JSX.Element {
@@ -100,6 +104,8 @@ export function OverlayExportModal({
         hasElevationFlags,
         hasSlopeArrows,
         hasRuggednessFlags,
+        hasSwampMarkers,
+        swampMarkerColor,
         measureBar,
         calibration: elevationCalibration,
         heightmap,

@@ -75,6 +75,8 @@ export interface ElevationFlag {
   x: number         // SVG / heightmap pixel coordinate
   y: number
   elevation: number // real-world elevation at placement point
+  boldness?: 1 | 2 | 3
+  opacity?: number
 }
 
 export interface SlopeArrow {
@@ -83,6 +85,8 @@ export interface SlopeArrow {
   y: number
   angleDeg: number  // direction of steepest ascent in SVG coordinate space
   slopeDeg: number  // slope angle from horizontal in degrees (label value)
+  boldness?: 1 | 2 | 3
+  opacity?: number
 }
 
 export interface RuggednessFlag {
@@ -90,6 +94,27 @@ export interface RuggednessFlag {
   x: number
   y: number
   triNorm: number  // normalized TRI value (0 to ~0.3); dimensionless
+  boldness?: 1 | 2 | 3
+  opacity?: number
+}
+
+export interface SwampMarker {
+  id: string
+  x: number
+  y: number
+  sizeFactor: number  // 0.75–1.25 randomized at drop time
+  boldness: 1 | 2 | 3
+  opacity: number
+  color: string
+}
+
+export interface MarkerDefaults {
+  boldness: 1 | 2 | 3
+  opacity: number
+}
+
+export interface SwampMarkerDefaults extends MarkerDefaults {
+  color: string
 }
 
 export const TRI_THRESHOLDS = [0.004, 0.015, 0.04, 0.1] as const
@@ -104,7 +129,7 @@ export function getTriSeverity(triNorm: number): 0 | 1 | 2 | 3 | 4 {
   return 4
 }
 
-export type MapTool = 'none' | 'elevation-flag' | 'slope-arrow' | 'measure-anchor' | 'ruggedness-flag'
+export type MapTool = 'none' | 'elevation-flag' | 'slope-arrow' | 'measure-anchor' | 'ruggedness-flag' | 'swamp-marker'
 
 export type FrameBorderStyle = 'single' | 'double' | 'cartographic' | 'shadow' | 'ornate'
 
@@ -177,6 +202,7 @@ export interface LegendConfig {
   showSlopeArrows: boolean
   showGeoAnchor: boolean
   showRuggednessFlags: boolean
+  showSwampMarkers: boolean
   minorLabel: string
   majorLabel: string
   seaLevelLabel: string
@@ -184,6 +210,7 @@ export interface LegendConfig {
   arrowLabel: string
   geoAnchorLabel: string
   ruggednessFlagLabel: string
+  swampMarkerLabel: string
 }
 
 export const defaultLegendConfig: LegendConfig = {
@@ -199,6 +226,7 @@ export const defaultLegendConfig: LegendConfig = {
   showSlopeArrows: true,
   showGeoAnchor: true,
   showRuggednessFlags: true,
+  showSwampMarkers: true,
   minorLabel: 'Minor contour',
   majorLabel: 'Major contour',
   seaLevelLabel: 'Sea level',
@@ -206,6 +234,7 @@ export const defaultLegendConfig: LegendConfig = {
   arrowLabel: 'Slope angle',
   geoAnchorLabel: 'Geo reference',
   ruggednessFlagLabel: 'Ruggedness index',
+  swampMarkerLabel: 'Marsh / Swamp',
 }
 
 export interface CompassConfig {
@@ -308,7 +337,12 @@ export interface ProjectState {
   elevationFlags: ElevationFlag[]
   slopeArrows: SlopeArrow[]
   ruggednessFlags: RuggednessFlag[]
+  swampMarkers: SwampMarker[]
   ruggednessColorBySeverity: boolean
+  elevationFlagDefaults: MarkerDefaults
+  slopeArrowDefaults: MarkerDefaults
+  ruggednessFlagDefaults: MarkerDefaults
+  swampMarkerDefaults: SwampMarkerDefaults
   mapTool: MapTool
   snapshotParams: ContourParameters | null
   snapshotStyle: ContourStyle | null
