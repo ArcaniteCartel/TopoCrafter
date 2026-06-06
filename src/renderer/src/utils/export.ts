@@ -18,8 +18,7 @@ export interface ExportLayerConfig {
   hasRuggednessFlags?: boolean
   hasSwampMarkers?: boolean
   swampMarkerColor?: string
-  hasRoads?: boolean
-  roadColor?: string
+  roadTypeSummary?: Array<{ type: string; color: string }>
   ruggednessSeverityColors?: string[]
   measureBar?: MeasureBarConfig
   calibration?: ElevationCalibration
@@ -50,8 +49,7 @@ export interface OverlayExportConfig {
   hasRuggednessFlags?: boolean
   hasSwampMarkers?: boolean
   swampMarkerColor?: string
-  hasRoads?: boolean
-  roadColor?: string
+  roadTypeSummary?: Array<{ type: string; color: string }>
   ruggednessSeverityColors?: string[]
   measureBar?: MeasureBarConfig
   calibration?: ElevationCalibration
@@ -690,8 +688,7 @@ function drawLegend(
   hasRuggednessFlags?: boolean,
   hasSwampMarkers?: boolean,
   swampMarkerColor?: string,
-  hasRoads?: boolean,
-  roadColor?: string,
+  roadTypeSummary?: Array<{ type: string; color: string }>,
   ruggednessSeverityColors?: string[],
   calibration?: ElevationCalibration,
 ): void {
@@ -702,17 +699,35 @@ function drawLegend(
   const unitAbbr = calibration?.unitType === 'feet' ? 'ft'
     : calibration?.unitType === 'meters' ? 'm'
     : calibration?.unitType === 'custom' ? (calibration.customAbbr || '') : undefined
+
+  const roadItems: Array<{ type: string; label: string; color: string }> = []
+  if (roadTypeSummary) {
+    for (const { type, color } of roadTypeSummary) {
+      const show = type === 'dirt' ? legend.showDirtRoads
+        : type === 'gravel' ? legend.showGravelRoads
+        : type === 'paved' ? legend.showPavedRoads
+        : type === 'footpath' ? legend.showFootpaths
+        : type === 'trail' ? legend.showTrails : false
+      const label = type === 'dirt' ? legend.dirtRoadsLabel
+        : type === 'gravel' ? legend.gravelRoadsLabel
+        : type === 'paved' ? legend.pavedRoadsLabel
+        : type === 'footpath' ? legend.footpathsLabel
+        : legend.trailsLabel
+      if (show) roadItems.push({ type: `road-${type}`, label, color })
+    }
+  }
+
   const items = [
-    legend.showMinorContour                             ? { type: 'minor',      label: legend.minorLabel         } : null,
-    legend.showMajorContour                             ? { type: 'major',      label: legend.majorLabel         } : null,
-    legend.showSeaLevel && contourStyle.showSeaLevel    ? { type: 'sea-level',  label: legend.seaLevelLabel      } : null,
-    legend.showElevationFlags && hasElevationFlags      ? { type: 'flag',       label: legend.flagLabel          } : null,
-    legend.showSlopeArrows && hasSlopeArrows            ? { type: 'arrow',      label: legend.arrowLabel         } : null,
-    hasGeoAnchor ? { type: 'geo-anchor', label: `${legend.geoAnchorLabel}: ${toDMS(measureBar!.anchorLat, true)}, ${toDMS(measureBar!.anchorLon, false)}` } : null,
-    showColorBar  ? { type: 'ruggedness', label: legend.ruggednessFlagLabel } : null,
-    legend.showSwampMarkers && !!hasSwampMarkers ? { type: 'swamp', label: legend.swampMarkerLabel } : null,
-    legend.showRoads && !!hasRoads               ? { type: 'roads', label: legend.roadsLabel        } : null,
-  ].filter(Boolean) as { type: string; label: string }[]
+    legend.showMinorContour                             ? { type: 'minor',      label: legend.minorLabel,         color: contourStyle.minorColor }   : null,
+    legend.showMajorContour                             ? { type: 'major',      label: legend.majorLabel,         color: contourStyle.majorColor }   : null,
+    legend.showSeaLevel && contourStyle.showSeaLevel    ? { type: 'sea-level',  label: legend.seaLevelLabel,      color: contourStyle.seaLevelColor }: null,
+    legend.showElevationFlags && hasElevationFlags      ? { type: 'flag',       label: legend.flagLabel,          color: contourStyle.labelColor }   : null,
+    legend.showSlopeArrows && hasSlopeArrows            ? { type: 'arrow',      label: legend.arrowLabel,         color: contourStyle.labelColor }   : null,
+    hasGeoAnchor ? { type: 'geo-anchor', label: `${legend.geoAnchorLabel}: ${toDMS(measureBar!.anchorLat, true)}, ${toDMS(measureBar!.anchorLon, false)}`, color: legend.color } : null,
+    showColorBar  ? { type: 'ruggedness', label: legend.ruggednessFlagLabel, color: legend.color } : null,
+    legend.showSwampMarkers && !!hasSwampMarkers ? { type: 'swamp', label: legend.swampMarkerLabel, color: swampMarkerColor ?? '#388E3C' } : null,
+    ...roadItems,
+  ].filter(Boolean) as { type: string; label: string; color: string }[]
 
   if (items.length === 0) return
 
@@ -810,13 +825,22 @@ function drawLegend(
       ctx.beginPath(); ctx.moveTo(sfx, sfy); ctx.lineTo(sfx + s * 0.22, sfy - s * 0.88); ctx.stroke()
       ctx.beginPath(); ctx.moveTo(sfx, sfy); ctx.quadraticCurveTo(sfx - s * 0.52, sfy - s * 0.62, sfx - s * 0.64, sfy - s * 0.18); ctx.stroke()
       ctx.beginPath(); ctx.moveTo(sfx, sfy); ctx.quadraticCurveTo(sfx + s * 0.52, sfy - s * 0.62, sfx + s * 0.64, sfy - s * 0.18); ctx.stroke()
-    } else if (type === 'roads') {
-      const rc = roadColor ?? '#8B6914'
+    } else if (type === 'road-dirt' || type === 'road-gravel' || type === 'road-paved') {
       const gap = rowH * 0.22
-      ctx.strokeStyle = rc; ctx.lineWidth = 1.2; ctx.lineCap = 'round'
-      ctx.setLineDash([3, 2])
+      ctx.strokeStyle = items[i].color; ctx.lineWidth = 1.2; ctx.lineCap = 'round'
+      ctx.setLineDash(type === 'road-dirt' ? [2, 3] : type === 'road-gravel' ? [5, 2] : [])
       ctx.beginPath(); ctx.moveTo(sx1, midY - gap); ctx.lineTo(sx2, midY - gap); ctx.stroke()
       ctx.beginPath(); ctx.moveTo(sx1, midY + gap); ctx.lineTo(sx2, midY + gap); ctx.stroke()
+      ctx.setLineDash([])
+    } else if (type === 'road-footpath') {
+      ctx.strokeStyle = items[i].color; ctx.lineWidth = 1.2; ctx.lineCap = 'round'
+      ctx.setLineDash([1, 3])
+      ctx.beginPath(); ctx.moveTo(sx1, midY); ctx.lineTo(sx2, midY); ctx.stroke()
+      ctx.setLineDash([])
+    } else if (type === 'road-trail') {
+      ctx.strokeStyle = items[i].color; ctx.lineWidth = 1.2; ctx.lineCap = 'round'
+      ctx.setLineDash([1, 2, 5, 2])
+      ctx.beginPath(); ctx.moveTo(sx1, midY); ctx.lineTo(sx2, midY); ctx.stroke()
       ctx.setLineDash([])
     } else {
       const w = sampW * 0.6, hw = w * 0.28, hl = w * 0.3
@@ -957,7 +981,7 @@ export async function exportOverlayToBlob(config: OverlayExportConfig): Promise<
   }
   if (withFrame && config.legend && config.contourStyle) {
     drawLegend(ctx, config.legend, config.frame!, config.contourStyle,
-      config.hasElevationFlags ?? false, config.hasSlopeArrows ?? false, totalW, totalH, config.measureBar, config.hasRuggednessFlags, config.hasSwampMarkers, config.swampMarkerColor, config.hasRoads, config.roadColor, config.ruggednessSeverityColors, config.calibration)
+      config.hasElevationFlags ?? false, config.hasSlopeArrows ?? false, totalW, totalH, config.measureBar, config.hasRuggednessFlags, config.hasSwampMarkers, config.swampMarkerColor, config.roadTypeSummary, config.ruggednessSeverityColors, config.calibration)
   }
   if (withFrame && config.measureBar?.enabled && config.calibration && config.heightmap) {
     drawMeasureBars(ctx, config.measureBar, config.calibration, config.heightmap, config.frame!, totalW, totalH)
@@ -1038,7 +1062,7 @@ export async function exportToBlob(config: ExportLayerConfig): Promise<Blob> {
   }
   if (withFrame && config.legend && config.contourStyle) {
     drawLegend(ctx, config.legend, config.frame!, config.contourStyle,
-      config.hasElevationFlags ?? false, config.hasSlopeArrows ?? false, totalW, totalH, config.measureBar, config.hasRuggednessFlags, config.hasSwampMarkers, config.swampMarkerColor, config.hasRoads, config.roadColor, config.ruggednessSeverityColors, config.calibration)
+      config.hasElevationFlags ?? false, config.hasSlopeArrows ?? false, totalW, totalH, config.measureBar, config.hasRuggednessFlags, config.hasSwampMarkers, config.swampMarkerColor, config.roadTypeSummary, config.ruggednessSeverityColors, config.calibration)
   }
   if (withFrame && config.measureBar?.enabled && config.calibration && config.heightmap) {
     drawMeasureBars(ctx, config.measureBar, config.calibration, config.heightmap, config.frame!, totalW, totalH)

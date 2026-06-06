@@ -913,12 +913,15 @@ export function ParameterPanel(): JSX.Element {
 
           <Text size="xs" fw={500}>Road type</Text>
           <SegmentedControl size="xs"
+            orientation="vertical"
             value={roadDefaults.type}
             onChange={(v) => updateRoadDefaults({ type: v as RoadType })}
             data={[
-              { value: 'dirt', label: 'Dirt' },
-              { value: 'gravel', label: 'Gravel' },
-              { value: 'paved', label: 'Paved' },
+              { value: 'dirt',     label: 'Dirt' },
+              { value: 'gravel',   label: 'Gravel' },
+              { value: 'paved',    label: 'Paved' },
+              { value: 'footpath', label: 'Footpath (dotted)' },
+              { value: 'trail',    label: 'Trail (dot-dash)' },
             ]}
           />
 
@@ -940,6 +943,20 @@ export function ParameterPanel(): JSX.Element {
               <Text size="xs" c="dimmed">Paved</Text>
               <ColorInput size="xs" value={roadDefaults.pavedColor}
                 onChange={(v) => updateRoadDefaults({ pavedColor: v })}
+                format="hex" />
+            </Stack>
+          </Group>
+          <Group grow gap="xs">
+            <Stack gap={2}>
+              <Text size="xs" c="dimmed">Footpath</Text>
+              <ColorInput size="xs" value={roadDefaults.footpathColor}
+                onChange={(v) => updateRoadDefaults({ footpathColor: v })}
+                format="hex" />
+            </Stack>
+            <Stack gap={2}>
+              <Text size="xs" c="dimmed">Trail</Text>
+              <ColorInput size="xs" value={roadDefaults.trailColor}
+                onChange={(v) => updateRoadDefaults({ trailColor: v })}
                 format="hex" />
             </Stack>
           </Group>
@@ -980,26 +997,33 @@ export function ParameterPanel(): JSX.Element {
                 <Divider label="Selected Road" labelPosition="left" />
                 <Text size="xs" fw={500}>Road type</Text>
                 <SegmentedControl size="xs"
+                  orientation="vertical"
                   value={road.type}
                   onChange={(v) => updateRoad(selectedRoadId, {
                     type: v as RoadType,
                     color: v === 'dirt' ? roadDefaults.dirtColor
                       : v === 'gravel' ? roadDefaults.gravelColor
-                      : roadDefaults.pavedColor,
+                      : v === 'paved' ? roadDefaults.pavedColor
+                      : v === 'footpath' ? roadDefaults.footpathColor
+                      : roadDefaults.trailColor,
                   })}
                   data={[
-                    { value: 'dirt', label: 'Dirt' },
-                    { value: 'gravel', label: 'Gravel' },
-                    { value: 'paved', label: 'Paved' },
+                    { value: 'dirt',     label: 'Dirt' },
+                    { value: 'gravel',   label: 'Gravel' },
+                    { value: 'paved',    label: 'Paved' },
+                    { value: 'footpath', label: 'Footpath (dotted)' },
+                    { value: 'trail',    label: 'Trail (dot-dash)' },
                   ]}
                 />
-                <TextInput
-                  label="Label"
-                  size="xs"
-                  placeholder="Road name…"
-                  value={road.label}
-                  onChange={(e) => updateRoad(selectedRoadId, { label: e.currentTarget.value })}
-                />
+                {road.type !== 'footpath' && (
+                  <TextInput
+                    label="Label"
+                    size="xs"
+                    placeholder="Road name…"
+                    value={road.label}
+                    onChange={(e) => updateRoad(selectedRoadId, { label: e.currentTarget.value })}
+                  />
+                )}
                 <Button
                   size="xs"
                   color="red"
@@ -1549,8 +1573,12 @@ export function ParameterPanel(): JSX.Element {
           { key: 'showSlopeArrows',  labelKey: 'arrowLabel',    label: 'Slope arrows',  requiresData: slopeArrows.length > 0 },
           { key: 'showGeoAnchor',    labelKey: 'geoAnchorLabel',      label: 'Geo reference',    requiresData: measureBar.enabled && measureBar.geoEnabled },
           { key: 'showRuggednessFlags', labelKey: 'ruggednessFlagLabel', label: 'Ruggedness index', requiresData: ruggednessFlags.length > 0 },
-          { key: 'showSwampMarkers', labelKey: 'swampMarkerLabel', label: 'Swamp markers', requiresData: swampMarkers.length > 0 },
-          { key: 'showRoads',        labelKey: 'roadsLabel',        label: 'Roads',         requiresData: roads.length > 0 },
+          { key: 'showSwampMarkers',  labelKey: 'swampMarkerLabel',  label: 'Swamp markers', requiresData: swampMarkers.length > 0 },
+          { key: 'showDirtRoads',    labelKey: 'dirtRoadsLabel',    label: 'Dirt road',     requiresData: roads.some(r => r.type === 'dirt') },
+          { key: 'showGravelRoads',  labelKey: 'gravelRoadsLabel',  label: 'Gravel road',   requiresData: roads.some(r => r.type === 'gravel') },
+          { key: 'showPavedRoads',   labelKey: 'pavedRoadsLabel',   label: 'Paved road',    requiresData: roads.some(r => r.type === 'paved') },
+          { key: 'showFootpaths',    labelKey: 'footpathsLabel',    label: 'Footpath',      requiresData: roads.some(r => r.type === 'footpath') },
+          { key: 'showTrails',       labelKey: 'trailsLabel',       label: 'Trail',         requiresData: roads.some(r => r.type === 'trail') },
         ] as { key: keyof typeof legend; labelKey: keyof typeof legend; label: string; requiresData?: boolean }[]).map(({ key, labelKey, label, requiresData }) => (
           <Group key={key as string} gap="xs" align="center" wrap="nowrap">
             <Switch

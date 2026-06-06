@@ -117,7 +117,7 @@ export interface SwampMarkerDefaults extends MarkerDefaults {
   color: string
 }
 
-export type RoadType = 'dirt' | 'gravel' | 'paved'
+export type RoadType = 'dirt' | 'gravel' | 'paved' | 'footpath' | 'trail'
 
 export interface Road {
   id: string
@@ -136,6 +136,8 @@ export interface RoadDefaults {
   dirtColor: string
   gravelColor: string
   pavedColor: string
+  footpathColor: string
+  trailColor: string
   trackWidthFraction: number  // multiplied by heightmap.width at placement
   strokeWeightFraction: number  // multiplied by trackWidth
   opacity: number
@@ -146,6 +148,8 @@ export const defaultRoadDefaults: RoadDefaults = {
   dirtColor: '#8B6914',
   gravelColor: '#888888',
   pavedColor: '#555555',
+  footpathColor: '#8B6914',
+  trailColor: '#5C4A2A',
   trackWidthFraction: 0.010,
   strokeWeightFraction: 0.12,
   opacity: 1,
@@ -249,7 +253,11 @@ export interface LegendConfig {
   showGeoAnchor: boolean
   showRuggednessFlags: boolean
   showSwampMarkers: boolean
-  showRoads: boolean
+  showDirtRoads: boolean
+  showGravelRoads: boolean
+  showPavedRoads: boolean
+  showFootpaths: boolean
+  showTrails: boolean
   minorLabel: string
   majorLabel: string
   seaLevelLabel: string
@@ -258,7 +266,11 @@ export interface LegendConfig {
   geoAnchorLabel: string
   ruggednessFlagLabel: string
   swampMarkerLabel: string
-  roadsLabel: string
+  dirtRoadsLabel: string
+  gravelRoadsLabel: string
+  pavedRoadsLabel: string
+  footpathsLabel: string
+  trailsLabel: string
 }
 
 export const defaultLegendConfig: LegendConfig = {
@@ -275,7 +287,11 @@ export const defaultLegendConfig: LegendConfig = {
   showGeoAnchor: true,
   showRuggednessFlags: true,
   showSwampMarkers: true,
-  showRoads: true,
+  showDirtRoads: true,
+  showGravelRoads: true,
+  showPavedRoads: true,
+  showFootpaths: true,
+  showTrails: true,
   minorLabel: 'Minor contour',
   majorLabel: 'Major contour',
   seaLevelLabel: 'Sea level',
@@ -284,7 +300,11 @@ export const defaultLegendConfig: LegendConfig = {
   geoAnchorLabel: 'Geo reference',
   ruggednessFlagLabel: 'Ruggedness index',
   swampMarkerLabel: 'Marsh / Swamp',
-  roadsLabel: 'Roads',
+  dirtRoadsLabel: 'Dirt road',
+  gravelRoadsLabel: 'Gravel road',
+  pavedRoadsLabel: 'Paved road',
+  footpathsLabel: 'Footpath',
+  trailsLabel: 'Trail',
 }
 
 export interface CompassConfig {

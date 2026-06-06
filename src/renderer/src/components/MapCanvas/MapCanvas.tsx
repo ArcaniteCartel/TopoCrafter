@@ -4,7 +4,7 @@ import type { ContourMultiPolygon } from 'd3-contour'
 import { useStore } from '../../store/useStore'
 import { generateContours, contourToSvgPath } from '../../utils/contour'
 import type { ContourSet } from '../../utils/contour'
-import type { ElevationFlag, SlopeArrow, RuggednessFlag, SwampMarker, FrameConfig, CompassConfig, LegendConfig, ContourStyle, FramePosition, MeasureBarConfig, ElevationCalibration, HeightmapInfo, GridConfig } from '../../types'
+import type { ElevationFlag, SlopeArrow, RuggednessFlag, SwampMarker, Road, FrameConfig, CompassConfig, LegendConfig, ContourStyle, FramePosition, MeasureBarConfig, ElevationCalibration, HeightmapInfo, GridConfig } from '../../types'
 import { TRI_THRESHOLDS, TRI_COLORS, TRI_LABELS, getTriSeverity, triRangeLabel } from '../../types'
 import { catmullRomPath, catmullRomOffsetPath } from '../../utils/spline'
 import { drawGridOnCanvas } from '../../utils/grid'
@@ -399,12 +399,13 @@ function GridCanvas({ grid, measureBar, calibration, mapW, mapH }: {
 // Legend overlay
 // ---------------------------------------------------------------------------
 
-function LegendOverlay({ legend, frame, style, hasElevationFlags, hasSlopeArrows, measureBar, hasRuggednessFlags, ruggednessColorBySeverity, ruggednessSeverityColors, hasSwampMarkers, swampMarkerDefaults, hasRoads, roadDefaults, elevationCalibration }: {
+function LegendOverlay({ legend, frame, style, hasElevationFlags, hasSlopeArrows, measureBar, hasRuggednessFlags, ruggednessColorBySeverity, ruggednessSeverityColors, hasSwampMarkers, swampMarkerDefaults, roads, roadDefaults, elevationCalibration }: {
   legend: LegendConfig; frame: FrameConfig; style: ContourStyle
   hasElevationFlags: boolean; hasSlopeArrows: boolean; measureBar?: MeasureBarConfig
   hasRuggednessFlags: boolean; ruggednessColorBySeverity: boolean; ruggednessSeverityColors: string[]
   hasSwampMarkers: boolean; swampMarkerDefaults: { color: string; boldness: 1|2|3 }
-  hasRoads: boolean; roadDefaults: RoadDefaults
+  roads: Road[]
+  roadDefaults: { dirtColor: string; gravelColor: string; pavedColor: string; footpathColor: string; trailColor: string }
   elevationCalibration: ElevationCalibration
 }): JSX.Element | null {
   const hasGeoAnchor = legend.showGeoAnchor && !!measureBar?.enabled && !!measureBar?.geoEnabled
@@ -418,16 +419,20 @@ function LegendOverlay({ legend, frame, style, hasElevationFlags, hasSlopeArrows
     : elevationCalibration.unitType === 'meters' ? 'm'
     : elevationCalibration.unitType === 'custom' ? (elevationCalibration.customAbbr || '') : undefined
   const items = [
-    legend.showMinorContour                           ? { type: 'minor',      label: legend.minorLabel         } : null,
-    legend.showMajorContour                           ? { type: 'major',      label: legend.majorLabel         } : null,
-    legend.showSeaLevel && style.showSeaLevel         ? { type: 'sea-level',  label: legend.seaLevelLabel      } : null,
-    legend.showElevationFlags && hasElevationFlags    ? { type: 'flag',       label: legend.flagLabel          } : null,
-    legend.showSlopeArrows && hasSlopeArrows          ? { type: 'arrow',      label: legend.arrowLabel         } : null,
-    hasGeoAnchor                                      ? { type: 'geo-anchor', label: geoAnchorLabel            } : null,
-    showColorBar                                      ? { type: 'ruggedness', label: legend.ruggednessFlagLabel} : null,
-    legend.showSwampMarkers && hasSwampMarkers         ? { type: 'swamp',      label: legend.swampMarkerLabel   } : null,
-    legend.showRoads && hasRoads                       ? { type: 'roads',      label: legend.roadsLabel         } : null,
-  ].filter(Boolean) as { type: string; label: string }[]
+    legend.showMinorContour                           ? { type: 'minor',      label: legend.minorLabel,          color: style.minorColor }  : null,
+    legend.showMajorContour                           ? { type: 'major',      label: legend.majorLabel,          color: style.majorColor }  : null,
+    legend.showSeaLevel && style.showSeaLevel         ? { type: 'sea-level',  label: legend.seaLevelLabel,       color: style.seaLevelColor }: null,
+    legend.showElevationFlags && hasElevationFlags    ? { type: 'flag',       label: legend.flagLabel,           color: style.labelColor }  : null,
+    legend.showSlopeArrows && hasSlopeArrows          ? { type: 'arrow',      label: legend.arrowLabel,          color: style.labelColor }  : null,
+    hasGeoAnchor                                      ? { type: 'geo-anchor', label: geoAnchorLabel,             color: legend.color }      : null,
+    showColorBar                                      ? { type: 'ruggedness', label: legend.ruggednessFlagLabel, color: legend.color }      : null,
+    legend.showSwampMarkers && hasSwampMarkers         ? { type: 'swamp',      label: legend.swampMarkerLabel,    color: swampMarkerDefaults.color }: null,
+    legend.showDirtRoads && roads.some(r => r.type === 'dirt')     ? { type: 'road-dirt',    label: legend.dirtRoadsLabel,  color: roadDefaults.dirtColor    } : null,
+    legend.showGravelRoads && roads.some(r => r.type === 'gravel') ? { type: 'road-gravel',  label: legend.gravelRoadsLabel, color: roadDefaults.gravelColor  } : null,
+    legend.showPavedRoads && roads.some(r => r.type === 'paved')   ? { type: 'road-paved',   label: legend.pavedRoadsLabel, color: roadDefaults.pavedColor   } : null,
+    legend.showFootpaths && roads.some(r => r.type === 'footpath') ? { type: 'road-footpath',label: legend.footpathsLabel,  color: roadDefaults.footpathColor} : null,
+    legend.showTrails && roads.some(r => r.type === 'trail')       ? { type: 'road-trail',   label: legend.trailsLabel,     color: roadDefaults.trailColor   } : null,
+  ].filter(Boolean) as { type: string; label: string; color: string }[]
 
   if (items.length === 0) return null
 
@@ -458,7 +463,7 @@ function LegendOverlay({ legend, frame, style, hasElevationFlags, hasSlopeArrows
     <svg width={boxW} height={boxH} style={getElementPositionStyle(legend.position, frame, boxW, boxH, edgeGap)} overflow="visible">
       <rect x={0.5} y={0.5} width={boxW-1} height={boxH-1}
         fill={frame.marginColor} stroke={legend.color} strokeWidth={0.5} rx={1.5} />
-      {items.map(({ type, label }, i) => {
+      {items.map(({ type, label, color }, i) => {
         const col = Math.floor(i / rows)
         const row = i % rows
         const sx1 = pad + col * (colW + colGap)
@@ -524,16 +529,45 @@ function LegendOverlay({ legend, frame, style, hasElevationFlags, hasSlopeArrows
                 fill="none" stroke={color} strokeWidth={sw} strokeLinecap="round" />
             </g>
           )
-        } else if (type === 'roads') {
-          const rc = roadDefaults.dirtColor
+        } else if (type === 'road-dirt') {
           const gap = rowH * 0.22
           sample = (
             <g>
               <line x1={sx1} y1={midY - gap} x2={sx2} y2={midY - gap}
-                stroke={rc} strokeWidth={1.2} strokeLinecap="round" strokeDasharray="3 2" />
+                stroke={color} strokeWidth={1.2} strokeLinecap="round" strokeDasharray="2 3" />
               <line x1={sx1} y1={midY + gap} x2={sx2} y2={midY + gap}
-                stroke={rc} strokeWidth={1.2} strokeLinecap="round" strokeDasharray="3 2" />
+                stroke={color} strokeWidth={1.2} strokeLinecap="round" strokeDasharray="2 3" />
             </g>
+          )
+        } else if (type === 'road-gravel') {
+          const gap = rowH * 0.22
+          sample = (
+            <g>
+              <line x1={sx1} y1={midY - gap} x2={sx2} y2={midY - gap}
+                stroke={color} strokeWidth={1.2} strokeLinecap="round" strokeDasharray="5 2" />
+              <line x1={sx1} y1={midY + gap} x2={sx2} y2={midY + gap}
+                stroke={color} strokeWidth={1.2} strokeLinecap="round" strokeDasharray="5 2" />
+            </g>
+          )
+        } else if (type === 'road-paved') {
+          const gap = rowH * 0.22
+          sample = (
+            <g>
+              <line x1={sx1} y1={midY - gap} x2={sx2} y2={midY - gap}
+                stroke={color} strokeWidth={1.2} strokeLinecap="round" />
+              <line x1={sx1} y1={midY + gap} x2={sx2} y2={midY + gap}
+                stroke={color} strokeWidth={1.2} strokeLinecap="round" />
+            </g>
+          )
+        } else if (type === 'road-footpath') {
+          sample = (
+            <line x1={sx1} y1={midY} x2={sx2} y2={midY}
+              stroke={color} strokeWidth={1.2} strokeLinecap="round" strokeDasharray="1 3" />
+          )
+        } else if (type === 'road-trail') {
+          sample = (
+            <line x1={sx1} y1={midY} x2={sx2} y2={midY}
+              stroke={color} strokeWidth={1.2} strokeLinecap="round" strokeDasharray="1 2 5 2" />
           )
         } else {
           const w = sampW * 0.6, hw = w * 0.28, hl = w * 0.3
@@ -1180,9 +1214,12 @@ export function MapCanvas(): JSX.Element {
     if (!heightmap || pts.length < 2) { setInProgressPts([]); return }
     const tw = heightmap.width * roadDefaultsRef.current.trackWidthFraction
     const sw = tw * roadDefaultsRef.current.strokeWeightFraction
-    const color = roadDefaultsRef.current.type === 'dirt' ? roadDefaultsRef.current.dirtColor
-      : roadDefaultsRef.current.type === 'gravel' ? roadDefaultsRef.current.gravelColor
-      : roadDefaultsRef.current.pavedColor
+    const t = roadDefaultsRef.current.type
+    const color = t === 'dirt' ? roadDefaultsRef.current.dirtColor
+      : t === 'gravel' ? roadDefaultsRef.current.gravelColor
+      : t === 'paved' ? roadDefaultsRef.current.pavedColor
+      : t === 'footpath' ? roadDefaultsRef.current.footpathColor
+      : roadDefaultsRef.current.trailColor
     addRoad({
       id: crypto.randomUUID(),
       type: roadDefaultsRef.current.type,
@@ -1575,7 +1612,10 @@ export function MapCanvas(): JSX.Element {
           {roads.length > 0 && (
             <defs>
               {roads.map(road => {
-                const maskStrokeW = road.trackWidth + road.strokeWeight * 2 + road.trackWidth * 0.3
+                const isSingleLine = road.type === 'footpath' || road.type === 'trail'
+                const maskStrokeW = isSingleLine
+                  ? road.strokeWeight * 4
+                  : road.trackWidth + road.strokeWeight * 2 + road.trackWidth * 0.3
                 return (
                   <mask key={road.id} id={`road-mask-${road.id}`} maskUnits="userSpaceOnUse"
                     x={-heightmap.width * 0.1}
@@ -1611,13 +1651,16 @@ export function MapCanvas(): JSX.Element {
             if (road.points.length < 2) return null
             const tw = road.trackWidth
             const sw = road.strokeWeight
+            const isSingleLine = road.type === 'footpath' || road.type === 'trail'
             const half = tw / 2
-            const leftPath = catmullRomOffsetPath(road.points, road.closed, -half)
-            const rightPath = catmullRomOffsetPath(road.points, road.closed, half)
             const dashArray = road.type === 'dirt'
               ? `${tw * 0.2} ${tw * 0.45}`
               : road.type === 'gravel'
               ? `${tw * 0.9} ${tw * 0.45}`
+              : road.type === 'footpath'
+              ? `${sw} ${sw * 3}`
+              : road.type === 'trail'
+              ? `${sw} ${sw * 2} ${sw * 5} ${sw * 2}`
               : undefined
             const isSelected = selectedItem?.type === 'road' && selectedItem.id === road.id
             const centerPath = catmullRomPath(road.points, road.closed)
@@ -1634,13 +1677,23 @@ export function MapCanvas(): JSX.Element {
                     setSelectedRoadId(road.id)
                     setSelectedItem({ type: 'road', id: road.id })
                   }} />
-                <path d={leftPath} stroke={road.color} strokeWidth={sw} fill="none"
-                  strokeDasharray={dashArray} strokeLinecap="round" />
-                <path d={rightPath} stroke={road.color} strokeWidth={sw} fill="none"
-                  strokeDasharray={dashArray} strokeLinecap="round" />
-                {road.label && (
+                {isSingleLine ? (
+                  <path d={centerPath} stroke={road.color} strokeWidth={sw} fill="none"
+                    strokeDasharray={dashArray} strokeLinecap="round" />
+                ) : (
+                  <>
+                    <path d={catmullRomOffsetPath(road.points, road.closed, -half)}
+                      stroke={road.color} strokeWidth={sw} fill="none"
+                      strokeDasharray={dashArray} strokeLinecap="round" />
+                    <path d={catmullRomOffsetPath(road.points, road.closed, half)}
+                      stroke={road.color} strokeWidth={sw} fill="none"
+                      strokeDasharray={dashArray} strokeLinecap="round" />
+                  </>
+                )}
+                {road.label && road.type !== 'footpath' && (
                   <text fontSize={tw * 0.7} fontFamily={style.labelFont} fill={road.color}
-                    dominantBaseline="middle" textAnchor="middle">
+                    dominantBaseline="middle" textAnchor="middle"
+                    dy={road.type === 'trail' ? -(tw * 0.7 * 0.8) : 0}>
                     <textPath href={`#road-center-${road.id}`} startOffset="50%">
                       {road.label}
                     </textPath>
@@ -1896,27 +1949,40 @@ export function MapCanvas(): JSX.Element {
             const tw = heightmap ? heightmap.width * roadDefaults.trackWidthFraction : 10
             const sw = tw * roadDefaults.strokeWeightFraction
             const half = tw / 2
+            const isSingleLine = roadDefaults.type === 'footpath' || roadDefaults.type === 'trail'
             const color = roadDefaults.type === 'dirt' ? roadDefaults.dirtColor
               : roadDefaults.type === 'gravel' ? roadDefaults.gravelColor
-              : roadDefaults.pavedColor
+              : roadDefaults.type === 'paved' ? roadDefaults.pavedColor
+              : roadDefaults.type === 'footpath' ? roadDefaults.footpathColor
+              : roadDefaults.trailColor
             const dashArray = roadDefaults.type === 'dirt'
               ? `${tw * 0.2} ${tw * 0.45}`
               : roadDefaults.type === 'gravel'
               ? `${tw * 0.9} ${tw * 0.45}`
+              : roadDefaults.type === 'footpath'
+              ? `${sw} ${sw * 3}`
+              : roadDefaults.type === 'trail'
+              ? `${sw} ${sw * 2} ${sw * 5} ${sw * 2}`
               : undefined
             const closeThreshold = tw * 3
 
             return (
               <g opacity={0.7} style={{ pointerEvents: 'none' }}>
                 {previewPts.length >= 2 && (
-                  <>
-                    <path d={catmullRomOffsetPath(previewPts, false, -half)}
+                  isSingleLine ? (
+                    <path d={catmullRomPath(previewPts, false)}
                       stroke={color} strokeWidth={sw} fill="none"
                       strokeDasharray={dashArray} strokeLinecap="round" />
-                    <path d={catmullRomOffsetPath(previewPts, false, half)}
-                      stroke={color} strokeWidth={sw} fill="none"
-                      strokeDasharray={dashArray} strokeLinecap="round" />
-                  </>
+                  ) : (
+                    <>
+                      <path d={catmullRomOffsetPath(previewPts, false, -half)}
+                        stroke={color} strokeWidth={sw} fill="none"
+                        strokeDasharray={dashArray} strokeLinecap="round" />
+                      <path d={catmullRomOffsetPath(previewPts, false, half)}
+                        stroke={color} strokeWidth={sw} fill="none"
+                        strokeDasharray={dashArray} strokeLinecap="round" />
+                    </>
+                  )
                 )}
                 {/* Anchor dots */}
                 {inProgressPts.map((pt, i) => (
@@ -2086,7 +2152,7 @@ export function MapCanvas(): JSX.Element {
           ruggednessSeverityColors={ruggednessSeverityColors}
           hasSwampMarkers={swampMarkers.length > 0}
           swampMarkerDefaults={swampMarkerDefaults}
-          hasRoads={roads.length > 0}
+          roads={roads}
           roadDefaults={roadDefaults}
           elevationCalibration={elevationCalibration}
         />

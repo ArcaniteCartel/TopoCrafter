@@ -141,7 +141,14 @@ export function Toolbar(): JSX.Element {
         legend, contourStyle: style, hasElevationFlags: elevationFlags.length > 0, hasSlopeArrows: slopeArrows.length > 0,
         hasRuggednessFlags: ruggednessFlags.length > 0, hasSwampMarkers: swampMarkers.length > 0,
         swampMarkerColor: swampMarkerDefaults.color,
-        hasRoads: roads.length > 0, roadColor: roadDefaults.dirtColor,
+        roadTypeSummary: [...new Set(roads.map(r => r.type))].map(type => ({
+          type,
+          color: type === 'dirt' ? roadDefaults.dirtColor
+            : type === 'gravel' ? roadDefaults.gravelColor
+            : type === 'paved' ? roadDefaults.pavedColor
+            : type === 'footpath' ? roadDefaults.footpathColor
+            : roadDefaults.trailColor,
+        })),
         ruggednessSeverityColors,
         measureBar, calibration: elevationCalibration, heightmap: heightmap ?? undefined,
         includeGrid, grid,
@@ -399,8 +406,14 @@ export function Toolbar(): JSX.Element {
           hasRuggednessFlags={ruggednessFlags.length > 0}
           hasSwampMarkers={swampMarkers.length > 0}
           swampMarkerColor={swampMarkerDefaults.color}
-          hasRoads={roads.length > 0}
-          roadColor={roadDefaults.dirtColor}
+          roadTypeSummary={[...new Set(roads.map(r => r.type))].map(type => ({
+            type,
+            color: type === 'dirt' ? roadDefaults.dirtColor
+              : type === 'gravel' ? roadDefaults.gravelColor
+              : type === 'paved' ? roadDefaults.pavedColor
+              : type === 'footpath' ? roadDefaults.footpathColor
+              : roadDefaults.trailColor,
+          }))}
           ruggednessSeverityColors={ruggednessSeverityColors}
           measureBar={measureBar}
           heightmap={heightmap ?? undefined}
