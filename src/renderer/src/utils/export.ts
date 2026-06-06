@@ -1,5 +1,6 @@
-import type { FrameConfig, TitleConfig, CompassConfig, ContourStyle, LegendConfig, FramePosition, MeasureBarConfig, ElevationCalibration, HeightmapInfo } from '../types'
+import type { FrameConfig, TitleConfig, CompassConfig, ContourStyle, LegendConfig, FramePosition, MeasureBarConfig, ElevationCalibration, HeightmapInfo, GridConfig } from '../types'
 import { TRI_COLORS, TRI_LABELS, triRangeLabel } from '../types'
+import { drawGridIntoContext } from './grid'
 
 export interface ExportLayerConfig {
   baseImageUrl: string | null
@@ -23,21 +24,21 @@ export interface ExportLayerConfig {
   measureBar?: MeasureBarConfig
   calibration?: ElevationCalibration
   heightmap?: HeightmapInfo
+  includeGrid?: boolean
+  grid?: GridConfig
 }
 
-export type OverlayBackgroundMode = 'transparent' | 'white' | 'colored' | 'grid'
-export type OverlayGridType = 'square' | 'hex-flat' | 'hex-pointy' | 'hex-rotated'
+export type OverlayBackgroundMode = 'transparent' | 'white' | 'colored'
+
+export type FrameBackgroundMode = 'transparent' | 'white' | 'colored'
 
 export interface OverlayExportConfig {
   overlayOpacity: number
   mode: OverlayBackgroundMode
   bgColor: string
   bgOpacity: number
-  gridType: OverlayGridType
-  gridIntervalPx: number
-  gridColor: string
-  gridThickness: number
-  gridOpacity: number
+  frameBackground: FrameBackgroundMode
+  frameBgColor: string
   frame?: FrameConfig
   includeFrame?: boolean
   title?: TitleConfig
@@ -55,6 +56,8 @@ export interface OverlayExportConfig {
   measureBar?: MeasureBarConfig
   calibration?: ElevationCalibration
   heightmap?: HeightmapInfo
+  includeGrid?: boolean
+  grid?: GridConfig
 }
 
 // ---------------------------------------------------------------------------
@@ -863,97 +866,6 @@ function drawLegend(
 
 
 // ---------------------------------------------------------------------------
-// Grid helpers — draw into offset region of the destination canvas
-// ---------------------------------------------------------------------------
-
-function drawSquareGrid(
-  ctx: CanvasRenderingContext2D,
-  offsetX: number,
-  offsetY: number,
-  mapW: number,
-  mapH: number,
-  intervalPx: number,
-  color: string,
-  thickness: number,
-  opacity: number,
-): void {
-  const temp = document.createElement('canvas')
-  temp.width = mapW
-  temp.height = mapH
-  const tc = temp.getContext('2d')!
-  tc.strokeStyle = color
-  tc.lineWidth = thickness
-  for (let x = 0; x <= mapW; x += intervalPx) {
-    tc.beginPath(); tc.moveTo(x, 0); tc.lineTo(x, mapH); tc.stroke()
-  }
-  for (let y = 0; y <= mapH; y += intervalPx) {
-    tc.beginPath(); tc.moveTo(0, y); tc.lineTo(mapW, y); tc.stroke()
-  }
-  ctx.globalAlpha = opacity
-  ctx.drawImage(temp, offsetX, offsetY)
-  ctx.globalAlpha = 1
-}
-
-function drawHexGrid(
-  ctx: CanvasRenderingContext2D,
-  offsetX: number,
-  offsetY: number,
-  mapW: number,
-  mapH: number,
-  intervalPx: number,
-  rotationRad: number,
-  color: string,
-  thickness: number,
-  opacity: number,
-): void {
-  // intervalPx = flat-to-flat distance; R = circumradius (center to vertex)
-  const R = intervalPx / Math.sqrt(3)
-  const cos = Math.cos(rotationRad)
-  const sin = Math.sin(rotationRad)
-
-  // Hexagonal Bravais lattice basis vectors for flat-top (rotationRad=0):
-  //   b1 = (3R/2,  R√3/2)   b2 = (0, R√3)
-  // Rotated by rotationRad via 2D rotation matrix:
-  const b1x = R * (1.5 * cos - (Math.sqrt(3) / 2) * sin)
-  const b1y = R * (1.5 * sin + (Math.sqrt(3) / 2) * cos)
-  const b2x = R * (-Math.sqrt(3) * sin)
-  const b2y = R * (Math.sqrt(3) * cos)
-
-  const originX = mapW / 2
-  const originY = mapH / 2
-  const N = Math.ceil(Math.sqrt(mapW * mapW + mapH * mapH) / intervalPx) + 2
-
-  const temp = document.createElement('canvas')
-  temp.width = mapW
-  temp.height = mapH
-  const tc = temp.getContext('2d')!
-  tc.strokeStyle = color
-  tc.lineWidth = thickness
-
-  for (let n = -N; n <= N; n++) {
-    for (let m = -N; m <= N; m++) {
-      const cx = originX + n * b1x + m * b2x
-      const cy = originY + n * b1y + m * b2y
-      if (cx < -2 * R || cx > mapW + 2 * R || cy < -2 * R || cy > mapH + 2 * R) continue
-      tc.beginPath()
-      for (let i = 0; i < 6; i++) {
-        const angle = rotationRad + (Math.PI / 3) * i
-        const vx = cx + R * Math.cos(angle)
-        const vy = cy + R * Math.sin(angle)
-        if (i === 0) tc.moveTo(vx, vy)
-        else tc.lineTo(vx, vy)
-      }
-      tc.closePath()
-      tc.stroke()
-    }
-  }
-
-  ctx.globalAlpha = opacity
-  ctx.drawImage(temp, offsetX, offsetY)
-  ctx.globalAlpha = 1
-}
-
-// ---------------------------------------------------------------------------
 // Overlay-only export
 // ---------------------------------------------------------------------------
 
@@ -982,10 +894,17 @@ export async function exportOverlayToBlob(config: OverlayExportConfig): Promise<
   canvas.height = totalH
   const ctx = canvas.getContext('2d')!
 
-  // Margin background
+  // Margin strips (never touches the map area)
   if (withFrame) {
-    ctx.fillStyle = config.frame!.marginColor
-    ctx.fillRect(0, 0, totalW, totalH)
+    const fb = config.frameBackground ?? 'colored'
+    const fbColor = fb === 'white' ? '#ffffff' : fb === 'colored' ? (config.frameBgColor || config.frame!.marginColor) : null
+    if (fbColor) {
+      ctx.fillStyle = fbColor
+      if (mt > 0) ctx.fillRect(0, 0, totalW, mt)
+      if (mb > 0) ctx.fillRect(0, totalH - mb, totalW, mb)
+      if (ml > 0) ctx.fillRect(0, mt, ml, mapH)
+      if (mr > 0) ctx.fillRect(totalW - mr, mt, mr, mapH)
+    }
   }
 
   // Map area background (never extends into margins)
@@ -997,24 +916,6 @@ export async function exportOverlayToBlob(config: OverlayExportConfig): Promise<
     ctx.fillStyle = config.bgColor
     ctx.fillRect(ml, mt, mapW, mapH)
     ctx.globalAlpha = 1
-  } else if (config.mode === 'grid') {
-    if (config.bgOpacity > 0) {
-      ctx.globalAlpha = config.bgOpacity
-      ctx.fillStyle = config.bgColor
-      ctx.fillRect(ml, mt, mapW, mapH)
-      ctx.globalAlpha = 1
-    }
-    // Grid drawn onto a temp canvas sized for the map area, then composited at map offset
-    // — ensures grid lines never bleed into the frame margins
-    if (config.gridType === 'square') {
-      drawSquareGrid(ctx, ml, mt, mapW, mapH, config.gridIntervalPx, config.gridColor, config.gridThickness, config.gridOpacity)
-    } else {
-      const rotation =
-        config.gridType === 'hex-flat'   ? 0 :
-        config.gridType === 'hex-pointy' ? Math.PI / 6 :
-        /* hex-rotated */                  Math.PI / 4
-      drawHexGrid(ctx, ml, mt, mapW, mapH, config.gridIntervalPx, rotation, config.gridColor, config.gridThickness, config.gridOpacity)
-    }
   }
 
   // SVG overlay layers
@@ -1035,6 +936,11 @@ export async function exportOverlayToBlob(config: OverlayExportConfig): Promise<
     }
   }
 
+  // Grid overlay
+  if (config.includeGrid && config.grid?.enabled) {
+    drawGridIntoContext(ctx, ml, mt, mapW, mapH, config.grid, config.measureBar, config.calibration)
+  }
+
   // Frame border on top of everything
   if (withFrame && config.frame!.borderEnabled) {
     drawFrameBorder(ctx, config.frame!, totalW, totalH)
@@ -1043,8 +949,10 @@ export async function exportOverlayToBlob(config: OverlayExportConfig): Promise<
     drawTitle(ctx, config.title, config.frame!, totalW, totalH)
   }
   if (withFrame && config.compass) {
-    const edgeGap = 4
-    const [cx, cy] = getPositionCenter(config.compass.position, config.frame!, totalW, totalH, edgeGap)
+    const cs = config.compass.size
+    const cfs = Math.max(8, Math.round(cs * 0.35))
+    const compassEdgeGap = cs + cs * 0.22 + cfs * 1.4 + 4
+    const [cx, cy] = getPositionCenter(config.compass.position, config.frame!, totalW, totalH, compassEdgeGap)
     drawCompassRose(ctx, cx, cy, config.compass)
   }
   if (withFrame && config.legend && config.contourStyle) {
@@ -1111,6 +1019,10 @@ export async function exportToBlob(config: ExportLayerConfig): Promise<Blob> {
     ctx.drawImage(img, ml, mt, mapW, mapH)
   }
 
+  if (config.includeGrid && config.grid?.enabled) {
+    drawGridIntoContext(ctx, ml, mt, mapW, mapH, config.grid, config.measureBar, config.calibration)
+  }
+
   if (withFrame && config.frame!.borderEnabled) {
     drawFrameBorder(ctx, config.frame!, totalW, totalH)
   }
@@ -1118,8 +1030,10 @@ export async function exportToBlob(config: ExportLayerConfig): Promise<Blob> {
     drawTitle(ctx, config.title, config.frame!, totalW, totalH)
   }
   if (withFrame && config.compass) {
-    const edgeGap = 4
-    const [cx, cy] = getPositionCenter(config.compass.position, config.frame!, totalW, totalH, edgeGap)
+    const cs = config.compass.size
+    const cfs = Math.max(8, Math.round(cs * 0.35))
+    const compassEdgeGap = cs + cs * 0.22 + cfs * 1.4 + 4
+    const [cx, cy] = getPositionCenter(config.compass.position, config.frame!, totalW, totalH, compassEdgeGap)
     drawCompassRose(ctx, cx, cy, config.compass)
   }
   if (withFrame && config.legend && config.contourStyle) {

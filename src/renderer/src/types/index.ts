@@ -365,6 +365,41 @@ export const defaultMeasureBarConfig: MeasureBarConfig = {
   horizontalAxisIsLat: false,
 }
 
+export type GridType = 'measured' | 'square' | 'hex-flat' | 'hex-pointy' | 'hex-rotated'
+export type GridLinePattern = 'solid' | 'dashed' | 'dotted' | 'dot-dash'
+
+export interface GridConfig {
+  enabled: boolean
+  type: GridType
+  interval: number          // major interval: real-world units when calibrated, pixels otherwise
+  color: string
+  opacity: number
+  lineWidth: number
+  pattern: GridLinePattern
+  showMinor: boolean
+  minorDivisions: number    // subdivisions per major interval
+  minorColor: string
+  minorOpacity: number
+  minorLineWidth: number
+  minorPattern: GridLinePattern
+}
+
+export const defaultGridConfig: GridConfig = {
+  enabled: false,
+  type: 'square',
+  interval: 100,
+  color: '#555555',
+  opacity: 0.3,
+  lineWidth: 0.5,
+  pattern: 'solid',
+  showMinor: false,
+  minorDivisions: 4,
+  minorColor: '#555555',
+  minorOpacity: 0.15,
+  minorLineWidth: 0.25,
+  minorPattern: 'solid',
+}
+
 export interface ProjectState {
   terrainImagePath: string | null
   heightmapPath: string | null
@@ -416,6 +451,7 @@ export interface ProjectState {
   compass: CompassConfig
   legend: LegendConfig
   measureBar: MeasureBarConfig
+  grid: GridConfig
 }
 
 export const defaultParameters: ContourParameters = {

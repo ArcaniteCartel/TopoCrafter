@@ -1,10 +1,10 @@
 import { useState } from 'react'
 import {
-  Modal, SegmentedControl, Slider, NumberInput, ColorInput,
-  Radio, Group, Stack, Text, Button, Divider, Switch,
+  Modal, SegmentedControl, Slider, ColorInput,
+  Group, Stack, Text, Button, Divider, Switch,
 } from '@mantine/core'
-import { ElevationCalibration, FrameConfig, TitleConfig, CompassConfig, LegendConfig, ContourStyle, MeasureBarConfig, HeightmapInfo } from '../../types'
-import { OverlayExportConfig, OverlayBackgroundMode, OverlayGridType } from '../../utils/export'
+import type { ElevationCalibration, FrameConfig, TitleConfig, CompassConfig, LegendConfig, ContourStyle, MeasureBarConfig, HeightmapInfo, GridConfig } from '../../types'
+import type { OverlayExportConfig, OverlayBackgroundMode, FrameBackgroundMode } from '../../utils/export'
 
 interface Props {
   opened: boolean
@@ -27,6 +27,7 @@ interface Props {
   ruggednessSeverityColors?: string[]
   measureBar?: MeasureBarConfig
   heightmap?: HeightmapInfo
+  grid?: GridConfig
 }
 
 export function OverlayExportModal({
@@ -34,7 +35,6 @@ export function OverlayExportModal({
   onClose,
   onExport,
   elevationCalibration,
-  hasGroundResolution,
   frame,
   title,
   compass,
@@ -50,57 +50,33 @@ export function OverlayExportModal({
   ruggednessSeverityColors,
   measureBar,
   heightmap,
+  grid,
 }: Props): JSX.Element {
-  const unitAbbr = hasGroundResolution
-    ? (elevationCalibration.unitType === 'custom'
-        ? (elevationCalibration.customAbbr || 'units')
-        : (elevationCalibration.unitType ?? 'units'))
-    : '% of width'
-
-  const defaultInterval = hasGroundResolution && elevationCalibration.mapWidth
-    ? Math.max(1, Math.round(elevationCalibration.mapWidth / 20))
-    : 5
-
   const [mode, setMode] = useState<OverlayBackgroundMode>('transparent')
   const [overlayOpacity, setOverlayOpacity] = useState(100)
   const [bgColor, setBgColor] = useState('#ffffff')
   const [bgOpacity, setBgOpacity] = useState(100)
-  const [gridType, setGridType] = useState<OverlayGridType>('hex-flat')
-  const [gridInterval, setGridInterval] = useState<number>(defaultInterval)
-  const [gridColor, setGridColor] = useState('#000000')
-  const [gridThickness, setGridThickness] = useState<number>(1)
-  const [gridOpacity, setGridOpacity] = useState(100)
+  const [frameBackground, setFrameBackground] = useState<FrameBackgroundMode>('white')
+  const [frameBgColor, setFrameBgColor] = useState(frame.marginColor)
   const [includeFrame, setIncludeFrame] = useState(true)
+  const [includeGrid, setIncludeGrid] = useState(grid?.enabled ?? false)
   const [exporting, setExporting] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
-  const showBg = mode === 'colored' || mode === 'grid'
-  const showGrid = mode === 'grid'
+  const showBg = mode === 'colored'
+  const showFrameColorPicker = includeFrame && frame.enabled && frameBackground === 'colored'
 
   const handleExport = async () => {
     setError(null)
     setExporting(true)
     try {
-      const ref = document.getElementById('annotation-svg') ?? document.getElementById('contour-svg')
-      const svgWidth = ref ? Math.round(ref.getBoundingClientRect().width) : 1000
-
-      let gridIntervalPx: number
-      if (hasGroundResolution && elevationCalibration.mapWidth) {
-        gridIntervalPx = Math.max(1, Math.round((gridInterval / elevationCalibration.mapWidth) * svgWidth))
-      } else {
-        gridIntervalPx = Math.max(1, Math.round((gridInterval / 100) * svgWidth))
-      }
-
       await onExport({
         overlayOpacity: overlayOpacity / 100,
         mode,
         bgColor,
         bgOpacity: bgOpacity / 100,
-        gridType,
-        gridIntervalPx,
-        gridColor,
-        gridThickness,
-        gridOpacity: gridOpacity / 100,
+        frameBackground,
+        frameBgColor,
         frame,
         includeFrame: frame.enabled && includeFrame,
         title,
@@ -118,6 +94,8 @@ export function OverlayExportModal({
         measureBar,
         calibration: elevationCalibration,
         heightmap,
+        includeGrid,
+        grid,
       })
       onClose()
     } catch (e) {
@@ -130,6 +108,8 @@ export function OverlayExportModal({
   return (
     <Modal opened={opened} onClose={onClose} title="Export Overlay" centered size="md">
       <Stack gap="md">
+        <Divider label="Map area background" labelPosition="left" />
+
         <SegmentedControl
           fullWidth
           value={mode}
@@ -138,7 +118,6 @@ export function OverlayExportModal({
             { label: 'Transparent', value: 'transparent' },
             { label: 'White', value: 'white' },
             { label: 'Colored', value: 'colored' },
-            { label: 'Grid', value: 'grid' },
           ]}
         />
 
@@ -157,97 +136,27 @@ export function OverlayExportModal({
         </div>
 
         {showBg && (
-          <>
-            <Divider label="Background" labelPosition="left" />
-            <Group gap="md" align="flex-end" grow>
-              <ColorInput
-                label="Color"
-                value={bgColor}
-                onChange={setBgColor}
-                format="hex"
-              />
-              <div>
-                <Text size="sm" fw={500} mb={4}>Opacity</Text>
-                <Group gap="xs" align="center">
-                  <Slider
-                    min={0} max={100} step={1}
-                    value={bgOpacity}
-                    onChange={setBgOpacity}
-                    label={(v) => `${v}%`}
-                    style={{ flex: 1 }}
-                  />
-                  <Text size="xs" c="dimmed" style={{ width: 36, textAlign: 'right' }}>{bgOpacity}%</Text>
-                </Group>
-              </div>
-            </Group>
-          </>
-        )}
-
-        {showGrid && (
-          <>
-            <Divider label="Grid" labelPosition="left" />
-
-            <Radio.Group
-              label="Grid type"
-              value={gridType}
-              onChange={(v) => setGridType(v as OverlayGridType)}
-            >
-              <Group gap="md" mt={4} wrap="wrap">
-                <Radio value="square" label="Square" />
-                <Radio value="hex-flat" label="Hex (flat-top)" />
-                <Radio value="hex-pointy" label="Hex (pointy-top)" />
-                <Radio value="hex-rotated" label="Hex (rotated 45°)" />
+          <Group gap="md" align="flex-end" grow>
+            <ColorInput
+              label="Background color"
+              value={bgColor}
+              onChange={setBgColor}
+              format="hex"
+            />
+            <div>
+              <Text size="sm" fw={500} mb={4}>Opacity</Text>
+              <Group gap="xs" align="center">
+                <Slider
+                  min={0} max={100} step={1}
+                  value={bgOpacity}
+                  onChange={setBgOpacity}
+                  label={(v) => `${v}%`}
+                  style={{ flex: 1 }}
+                />
+                <Text size="xs" c="dimmed" style={{ width: 36, textAlign: 'right' }}>{bgOpacity}%</Text>
               </Group>
-            </Radio.Group>
-
-            <Group gap="md" align="flex-end" grow>
-              <NumberInput
-                label={`Interval (${unitAbbr})`}
-                description={
-                  hasGroundResolution && elevationCalibration.mapWidth
-                    ? `Map width: ${elevationCalibration.mapWidth} ${unitAbbr}`
-                    : 'Percentage of map width'
-                }
-                value={gridInterval}
-                onChange={(v) => { if (typeof v === 'number' && v > 0) setGridInterval(v) }}
-                min={0.1}
-                step={hasGroundResolution ? 1 : 0.5}
-                decimalScale={2}
-                allowDecimal
-              />
-              <ColorInput
-                label="Line color"
-                value={gridColor}
-                onChange={setGridColor}
-                format="hex"
-              />
-            </Group>
-
-            <Group gap="md" align="flex-start" grow>
-              <NumberInput
-                label="Line thickness (px)"
-                value={gridThickness}
-                onChange={(v) => { if (typeof v === 'number' && v > 0) setGridThickness(v) }}
-                min={0.5}
-                step={0.5}
-                decimalScale={1}
-                allowDecimal
-              />
-              <div>
-                <Text size="sm" fw={500} mb={4}>Line opacity</Text>
-                <Group gap="xs" align="center">
-                  <Slider
-                    min={0} max={100} step={1}
-                    value={gridOpacity}
-                    onChange={setGridOpacity}
-                    label={(v) => `${v}%`}
-                    style={{ flex: 1 }}
-                  />
-                  <Text size="xs" c="dimmed" style={{ width: 36, textAlign: 'right' }}>{gridOpacity}%</Text>
-                </Group>
-              </div>
-            </Group>
-          </>
+            </div>
+          </Group>
         )}
 
         {frame.enabled && (
@@ -259,8 +168,43 @@ export function OverlayExportModal({
               checked={includeFrame}
               onChange={(e) => setIncludeFrame(e.currentTarget.checked)}
             />
+            {includeFrame && (
+              <>
+                <Text size="xs" fw={500}>Frame margin background</Text>
+                <SegmentedControl
+                  fullWidth
+                  size="xs"
+                  value={frameBackground}
+                  onChange={(v) => setFrameBackground(v as FrameBackgroundMode)}
+                  data={[
+                    { label: 'Transparent', value: 'transparent' },
+                    { label: 'White', value: 'white' },
+                    { label: 'Colored', value: 'colored' },
+                  ]}
+                />
+                {showFrameColorPicker && (
+                  <ColorInput
+                    label="Frame margin color"
+                    size="xs"
+                    value={frameBgColor}
+                    onChange={setFrameBgColor}
+                    format="hex"
+                  />
+                )}
+              </>
+            )}
           </>
         )}
+
+        <Divider label="Grid" labelPosition="left" />
+        <Switch
+          label="Include grid in export"
+          size="sm"
+          checked={includeGrid}
+          onChange={(e) => setIncludeGrid(e.currentTarget.checked)}
+          disabled={!grid?.enabled}
+          description={!grid?.enabled ? 'Enable grid in Grids panel first' : undefined}
+        />
 
         {error && <Text size="xs" c="red">{error}</Text>}
 

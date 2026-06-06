@@ -5,9 +5,9 @@ import type {
   HeightmapInfo, HillshadeParameters, ElevationCalibration,
   ElevationFlag, SlopeArrow, RuggednessFlag, SwampMarker, MarkerDefaults, SwampMarkerDefaults,
   MapTool, FrameConfig, TitleConfig, CompassConfig, LegendConfig, MeasureBarConfig,
-  Road, RoadDefaults,
+  Road, RoadDefaults, GridConfig,
 } from '../types'
-import { defaultParameters, defaultStyle, defaultHillshadeParameters, defaultElevationCalibration, defaultFrameConfig, defaultTitleConfig, defaultCompassConfig, defaultLegendConfig, defaultMeasureBarConfig, TRI_COLORS, defaultRoadDefaults } from '../types'
+import { defaultParameters, defaultStyle, defaultHillshadeParameters, defaultElevationCalibration, defaultFrameConfig, defaultTitleConfig, defaultCompassConfig, defaultLegendConfig, defaultMeasureBarConfig, TRI_COLORS, defaultRoadDefaults, defaultGridConfig } from '../types'
 
 function calToMeters(value: number, cal: ElevationCalibration): number {
   if (cal.unitType === 'feet') return value * 0.3048
@@ -92,6 +92,7 @@ interface AppActions {
   updateCompass: (c: Partial<CompassConfig>) => void
   updateLegend: (l: Partial<LegendConfig>) => void
   updateMeasureBar: (m: Partial<MeasureBarConfig>) => void
+  updateGrid: (updates: Partial<GridConfig>) => void
   clearPendingChanges: () => void
   markClean: () => void
   reset: () => void
@@ -148,6 +149,7 @@ const initialState: ProjectState = {
   compass: defaultCompassConfig,
   legend: defaultLegendConfig,
   measureBar: defaultMeasureBarConfig,
+  grid: defaultGridConfig,
 }
 
 export const useStore = create<ProjectState & AppActions>()(
@@ -437,6 +439,9 @@ export const useStore = create<ProjectState & AppActions>()(
       updateMeasureBar: (m) =>
         set((state) => ({ measureBar: { ...state.measureBar, ...m } })),
 
+      updateGrid: (updates) =>
+        set((s) => ({ grid: { ...s.grid, ...updates } })),
+
       clearPendingChanges: () =>
         set((state) => ({
           parameters: state.snapshotParams ?? state.parameters,
@@ -480,6 +485,7 @@ export const useStore = create<ProjectState & AppActions>()(
           ruggednessFlagDefaults: merge(current.ruggednessFlagDefaults, ps.ruggednessFlagDefaults),
           swampMarkerDefaults:    merge(current.swampMarkerDefaults,    ps.swampMarkerDefaults),
           roadDefaults:           merge(current.roadDefaults,           ps.roadDefaults),
+          grid:                   merge(current.grid,                   ps.grid),
         }
       },
       partialize: (state) => ({
@@ -515,6 +521,7 @@ export const useStore = create<ProjectState & AppActions>()(
         roads: state.roads,
         roadsVisible: state.roadsVisible,
         roadDefaults: state.roadDefaults,
+        grid: state.grid,
       }),
     }
   )

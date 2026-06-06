@@ -4,9 +4,10 @@ import type { ContourMultiPolygon } from 'd3-contour'
 import { useStore } from '../../store/useStore'
 import { generateContours, contourToSvgPath } from '../../utils/contour'
 import type { ContourSet } from '../../utils/contour'
-import type { ElevationFlag, SlopeArrow, RuggednessFlag, SwampMarker, FrameConfig, CompassConfig, LegendConfig, ContourStyle, FramePosition, MeasureBarConfig, ElevationCalibration, HeightmapInfo } from '../../types'
+import type { ElevationFlag, SlopeArrow, RuggednessFlag, SwampMarker, FrameConfig, CompassConfig, LegendConfig, ContourStyle, FramePosition, MeasureBarConfig, ElevationCalibration, HeightmapInfo, GridConfig } from '../../types'
 import { TRI_THRESHOLDS, TRI_COLORS, TRI_LABELS, getTriSeverity, triRangeLabel } from '../../types'
 import { catmullRomPath, catmullRomOffsetPath } from '../../utils/spline'
+import { drawGridOnCanvas } from '../../utils/grid'
 
 function getLabelPoint(poly: ContourMultiPolygon): [number, number] | null {
   let best: [number, number][] | null = null
@@ -362,6 +363,36 @@ function toDMS(degrees: number, isLat: boolean): string {
   if (m >= 60) { m = 0; d += 1 }
   const dir = isLat ? (sign > 0 ? 'N' : 'S') : (sign > 0 ? 'E' : 'W')
   return `${d}°${m}'${s}"${dir}`
+}
+
+// ---------------------------------------------------------------------------
+// Grid canvas overlay
+// ---------------------------------------------------------------------------
+
+function GridCanvas({ grid, measureBar, calibration, mapW, mapH }: {
+  grid: GridConfig
+  measureBar: MeasureBarConfig
+  calibration: ElevationCalibration
+  mapW: number
+  mapH: number
+}): JSX.Element | null {
+  const canvasRef = useRef<HTMLCanvasElement>(null)
+  useEffect(() => {
+    const canvas = canvasRef.current
+    if (!canvas) return
+    const ctx = canvas.getContext('2d')
+    if (!ctx) return
+    drawGridOnCanvas(ctx, mapW, mapH, grid, measureBar, calibration)
+  }, [grid, measureBar, calibration, mapW, mapH])
+  if (!grid.enabled) return null
+  return (
+    <canvas
+      ref={canvasRef}
+      width={mapW}
+      height={mapH}
+      style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', pointerEvents: 'none' }}
+    />
+  )
 }
 
 // ---------------------------------------------------------------------------
@@ -1274,6 +1305,7 @@ export function MapCanvas(): JSX.Element {
   const title = useStore((s) => s.title)
   const compass = useStore((s) => s.compass)
   const legend = useStore((s) => s.legend)
+  const grid = useStore((s) => s.grid)
 
   const baseImageUrl = activeTab === 'terrain' ? terrainImageUrl : hillshadeImageUrl
   const showPlaceholder = !baseImageUrl && !heightmap && !hillshadeGenerating && !fileLoadingMessage
@@ -2020,6 +2052,17 @@ export function MapCanvas(): JSX.Element {
             return null
           })()}
         </svg>
+      )}
+
+      {/* Grid overlay — on top of all other layers */}
+      {grid.enabled && heightmap && innerMapSize && (
+        <GridCanvas
+          grid={grid}
+          measureBar={measureBar}
+          calibration={elevationCalibration}
+          mapW={innerMapSize.w}
+          mapH={innerMapSize.h}
+        />
       )}
 
       </div>{/* end inner map area */}

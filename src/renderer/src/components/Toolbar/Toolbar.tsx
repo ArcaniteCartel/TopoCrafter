@@ -112,6 +112,7 @@ export function Toolbar(): JSX.Element {
   const roadDefaults = useStore((s) => s.roadDefaults)
   const ruggednessSeverityColors = useStore((s) => s.ruggednessSeverityColors)
   const mapDisplaySize = useStore((s) => s.mapDisplaySize)
+  const grid = useStore((s) => s.grid)
   const { themeId, setTheme } = useThemeStore()
   const [themeModalOpen, setThemeModalOpen] = useState(false)
   const [toolPanelOpen, setToolPanelOpen] = useState(false)
@@ -121,6 +122,7 @@ export function Toolbar(): JSX.Element {
   type StandardExportType = 'merged-terrain' | 'merged-hillshade' | 'unmarked-hillshade' | 'visible-map'
   const [pendingExport, setPendingExport] = useState<StandardExportType | null>(null)
   const [exportIncludeFrame, setExportIncludeFrame] = useState(true)
+  const [exportIncludeGrid, setExportIncludeGrid] = useState(false)
 
   const { unitType, customAbbr, customRatio, realMin, realMax, mapWidth } = elevationCalibration
   const calReady = (unitType === 'feet' || unitType === 'meters'
@@ -131,7 +133,7 @@ export function Toolbar(): JSX.Element {
   const canExport = !!heightmap
   const baseImageUrl = activeTab === 'terrain' ? terrainImageUrl : hillshadeImageUrl
 
-  const handleExport = async (type: StandardExportType, includeFrame: boolean) => {
+  const handleExport = async (type: StandardExportType, includeFrame: boolean, includeGrid: boolean) => {
     setExportError(null)
     try {
       const frameOpts = {
@@ -142,6 +144,7 @@ export function Toolbar(): JSX.Element {
         hasRoads: roads.length > 0, roadColor: roadDefaults.dirtColor,
         ruggednessSeverityColors,
         measureBar, calibration: elevationCalibration, heightmap: heightmap ?? undefined,
+        includeGrid, grid,
       }
       let blob: Blob
       switch (type) {
@@ -174,9 +177,10 @@ export function Toolbar(): JSX.Element {
   const requestExport = (type: StandardExportType) => {
     if (frame.enabled) {
       setExportIncludeFrame(true)
+      setExportIncludeGrid(grid.enabled)
       setPendingExport(type)
     } else {
-      handleExport(type, false)
+      handleExport(type, false, grid.enabled)
     }
   }
 
@@ -400,6 +404,7 @@ export function Toolbar(): JSX.Element {
           ruggednessSeverityColors={ruggednessSeverityColors}
           measureBar={measureBar}
           heightmap={heightmap ?? undefined}
+          grid={grid}
         />
       )}
 
@@ -418,12 +423,20 @@ export function Toolbar(): JSX.Element {
             checked={exportIncludeFrame}
             onChange={(e) => setExportIncludeFrame(e.currentTarget.checked)}
           />
+          <Switch
+            label="Include grid in export"
+            size="sm"
+            checked={exportIncludeGrid}
+            onChange={(e) => setExportIncludeGrid(e.currentTarget.checked)}
+            disabled={!grid.enabled}
+            description={!grid.enabled ? 'Enable grid in Grids panel first' : undefined}
+          />
           <Group justify="flex-end">
             <Button variant="subtle" onClick={() => setPendingExport(null)}>Cancel</Button>
             <Button onClick={() => {
               const type = pendingExport!
               setPendingExport(null)
-              handleExport(type, exportIncludeFrame)
+              handleExport(type, exportIncludeFrame, exportIncludeGrid)
             }}>Export</Button>
           </Group>
         </Stack>

@@ -1,13 +1,20 @@
 import { useEffect, useRef, useState } from 'react'
-import { Stack, Text, Slider, NumberInput, ColorInput, Switch, Divider, Group, Select, TextInput, Collapse, Checkbox, SegmentedControl, Box, Button } from '@mantine/core'
+import { Stack, Text, Slider, NumberInput, ColorInput, Switch, Divider, Group, Select, TextInput, Collapse, Checkbox, SegmentedControl, Box, Button, Radio, Tooltip } from '@mantine/core'
 import { useStore } from '../../store/useStore'
-import type { FrameBorderStyle, TitleConfig, CompassConfig, FramePosition, RoadType } from '../../types'
+import type { FrameBorderStyle, TitleConfig, CompassConfig, FramePosition, RoadType, GridType, GridLinePattern, GridConfig } from '../../types'
 import { TRI_LABELS, TRI_THRESHOLDS, triRangeLabel } from '../../types'
 
 const DASH_OPTIONS = [
   { value: 'solid', label: 'Solid' },
   { value: 'dashed', label: 'Dashed' },
   { value: 'dotted', label: 'Dotted' },
+]
+
+const LINE_PATTERN_OPTIONS = [
+  { value: 'solid',    label: 'Solid' },
+  { value: 'dashed',   label: 'Dashed' },
+  { value: 'dotted',   label: 'Dotted' },
+  { value: 'dot-dash', label: 'Dot-dash' },
 ]
 
 const FONT_OPTIONS = [
@@ -132,6 +139,8 @@ export function ParameterPanel(): JSX.Element {
   const setOverlayOnly = useStore((s) => s.setOverlayOnly)
   const overlayBrightness = useStore((s) => s.overlayBrightness)
   const setOverlayBrightness = useStore((s) => s.setOverlayBrightness)
+  const grid = useStore((s) => s.grid)
+  const updateGrid = useStore((s) => s.updateGrid)
 
   const { unitType, customName, customAbbr, customBase, customRatio, realMin, realMax, realInterval, mapWidth } = elevationCalibration
 
@@ -164,13 +173,14 @@ export function ParameterPanel(): JSX.Element {
   const [seaLevelOpen, setSeaLevelOpen] = useState(true)
   const [markersOpen, setMarkersOpen] = useState(true)
   const [roadsOpen, setRoadsOpen] = useState(true)
+  const [gridsOpen, setGridsOpen] = useState(true)
   const [framingOpen, setFramingOpen] = useState(true)
 
-  const allOpen = hillshadeOpen && contoursOpen && styleOpen && labelStylingOpen && seaLevelOpen && markersOpen && roadsOpen && framingOpen
+  const allOpen = hillshadeOpen && contoursOpen && styleOpen && labelStylingOpen && seaLevelOpen && markersOpen && roadsOpen && gridsOpen && framingOpen
   const toggleAll = () => {
     const next = !allOpen
     setHillshadeOpen(next); setContoursOpen(next); setStyleOpen(next)
-    setLabelStylingOpen(next); setSeaLevelOpen(next); setMarkersOpen(next); setRoadsOpen(next); setFramingOpen(next)
+    setLabelStylingOpen(next); setSeaLevelOpen(next); setMarkersOpen(next); setRoadsOpen(next); setGridsOpen(next); setFramingOpen(next)
   }
 
   // Refs for latest values — safe to read inside event handlers and effects
@@ -1004,6 +1014,192 @@ export function ParameterPanel(): JSX.Element {
               </>
             )
           })()}
+
+        </Stack>
+      </Collapse>
+
+      <Divider />
+
+      <Group
+        justify="space-between"
+        style={{ cursor: 'pointer', userSelect: 'none' }}
+        onClick={() => setGridsOpen((o) => !o)}
+      >
+        <Group gap="xs" align="center">
+          <Text fw={600} size="sm" c="dimmed" tt="uppercase" style={{ letterSpacing: 1 }}>
+            Grids
+          </Text>
+          <Switch
+            size="xs"
+            label="Show grid"
+            checked={grid.enabled}
+            onClick={(e) => e.stopPropagation()}
+            onChange={(e) => updateGrid({ enabled: e.currentTarget.checked })}
+            disabled={!heightmap}
+          />
+        </Group>
+        <Text size="lg" c="dimmed">{gridsOpen ? '▾' : '▸'}</Text>
+      </Group>
+
+      <Collapse in={gridsOpen}>
+        <Stack gap="md">
+
+          {/* Five mutually exclusive grid types */}
+          <Radio.Group
+            value={grid.type}
+            onChange={(v) => updateGrid({ type: v as GridType })}
+          >
+            <Stack gap={4}>
+              <Radio value="square"      label="Square" disabled={!heightmap} />
+              <Radio value="hex-flat"    label="Hex (flat-top)" disabled={!heightmap} />
+              <Radio value="hex-pointy"  label="Hex (pointy-top)" disabled={!heightmap} />
+              <Radio value="hex-rotated" label="Hex (rotated 45°)" disabled={!heightmap} />
+              <Tooltip
+                label="Enable Framing → measure bars first"
+                disabled={measureBar.enabled}
+                position="right"
+              >
+                <Radio
+                  value="measured"
+                  label="Measured (matches measure bars)"
+                  disabled={!heightmap || !measureBar.enabled}
+                />
+              </Tooltip>
+            </Stack>
+          </Radio.Group>
+
+          {/* Interval (only for square/hex) */}
+          {grid.type !== 'measured' && (
+            <NumberInput
+              label={`Interval${abbr ? ` (${abbr})` : ' (px)'}`}
+              description={calReady && mapWidth ? `Map width: ${mapWidth} ${abbr}` : 'Pixels (no calibration)'}
+              size="xs"
+              value={grid.interval}
+              onChange={(v) => typeof v === 'number' && v > 0 && updateGrid({ interval: v })}
+              min={1}
+              step={calReady ? 10 : 5}
+              decimalScale={1}
+              allowDecimal
+              disabled={!heightmap}
+            />
+          )}
+
+          {/* Major lines */}
+          <Divider label="Major lines" labelPosition="left" />
+          <Group grow align="flex-end">
+            <ColorInput
+              label="Color"
+              size="xs"
+              value={grid.color}
+              onChange={(v) => updateGrid({ color: v })}
+              format="hex"
+              disabled={!heightmap}
+            />
+            <Select
+              label="Pattern"
+              size="xs"
+              data={LINE_PATTERN_OPTIONS}
+              value={grid.pattern}
+              onChange={(v) => v && updateGrid({ pattern: v as GridLinePattern })}
+              disabled={!heightmap}
+            />
+          </Group>
+          <Group grow align="flex-end">
+            <NumberInput
+              label="Width (px)"
+              size="xs"
+              value={grid.lineWidth}
+              onChange={(v) => typeof v === 'number' && v > 0 && updateGrid({ lineWidth: v })}
+              min={0.25}
+              step={0.25}
+              decimalScale={2}
+              allowDecimal
+              disabled={!heightmap}
+            />
+            <Stack gap={4}>
+              <Text size="xs" fw={500} c={heightmap ? undefined : 'dimmed'}>Opacity</Text>
+              <Group gap="xs" align="center">
+                <Slider
+                  min={0} max={1} step={0.05}
+                  value={grid.opacity}
+                  onChange={(v) => updateGrid({ opacity: v })}
+                  label={(v) => `${Math.round(v * 100)}%`}
+                  disabled={!heightmap}
+                  style={{ flex: 1 }}
+                />
+                <Text size="xs" c="dimmed" style={{ width: 34, textAlign: 'right' }}>{Math.round(grid.opacity * 100)}%</Text>
+              </Group>
+            </Stack>
+          </Group>
+
+          {/* Minor lines (square and measured only) */}
+          {(grid.type === 'square' || grid.type === 'measured') && (
+            <>
+              <Divider label="Minor lines" labelPosition="left" />
+              <Switch
+                size="xs"
+                label="Show minor lines"
+                checked={grid.showMinor}
+                onChange={(e) => updateGrid({ showMinor: e.currentTarget.checked })}
+                disabled={!heightmap}
+              />
+              <NumberInput
+                label="Divisions per major interval"
+                size="xs"
+                value={grid.minorDivisions}
+                onChange={(v) => typeof v === 'number' && v >= 2 && updateGrid({ minorDivisions: Math.round(v) })}
+                min={2}
+                max={20}
+                step={1}
+                disabled={!heightmap || !grid.showMinor}
+              />
+              <Group grow align="flex-end">
+                <ColorInput
+                  label="Color"
+                  size="xs"
+                  value={grid.minorColor}
+                  onChange={(v) => updateGrid({ minorColor: v })}
+                  format="hex"
+                  disabled={!heightmap || !grid.showMinor}
+                />
+                <Select
+                  label="Pattern"
+                  size="xs"
+                  data={LINE_PATTERN_OPTIONS}
+                  value={grid.minorPattern}
+                  onChange={(v) => v && updateGrid({ minorPattern: v as GridLinePattern })}
+                  disabled={!heightmap || !grid.showMinor}
+                />
+              </Group>
+              <Group grow align="flex-end">
+                <NumberInput
+                  label="Width (px)"
+                  size="xs"
+                  value={grid.minorLineWidth}
+                  onChange={(v) => typeof v === 'number' && v > 0 && updateGrid({ minorLineWidth: v })}
+                  min={0.1}
+                  step={0.1}
+                  decimalScale={2}
+                  allowDecimal
+                  disabled={!heightmap || !grid.showMinor}
+                />
+                <Stack gap={4}>
+                  <Text size="xs" fw={500} c={heightmap && grid.showMinor ? undefined : 'dimmed'}>Opacity</Text>
+                  <Group gap="xs" align="center">
+                    <Slider
+                      min={0} max={1} step={0.05}
+                      value={grid.minorOpacity}
+                      onChange={(v) => updateGrid({ minorOpacity: v })}
+                      label={(v) => `${Math.round(v * 100)}%`}
+                      disabled={!heightmap || !grid.showMinor}
+                      style={{ flex: 1 }}
+                    />
+                    <Text size="xs" c="dimmed" style={{ width: 34, textAlign: 'right' }}>{Math.round(grid.minorOpacity * 100)}%</Text>
+                  </Group>
+                </Stack>
+              </Group>
+            </>
+          )}
 
         </Stack>
       </Collapse>
