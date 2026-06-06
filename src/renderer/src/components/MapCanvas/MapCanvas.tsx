@@ -978,7 +978,7 @@ export function MapCanvas(): JSX.Element {
 
   // Road drawing state
   const [inProgressPts, setInProgressPts] = useState<{ x: number; y: number }[]>([])
-  const [roadHoverPt, setRoadHoverPt] = useState<{ x: number; y: number } | null>(null)
+  const [roadHoverPt, setRoadHoverPt] = useState<{ x: number; y: number; elevation?: number } | null>(null)
   const roadAnchorDragRef = useRef<{ roadId: string; ptIdx: number } | null>(null)
   const lastClickTimeRef = useRef<number>(0)
   const roadsRef = useRef(roads)
@@ -1238,7 +1238,10 @@ export function MapCanvas(): JSX.Element {
   function handleSvgMouseMove(e: React.MouseEvent<SVGSVGElement>) {
     if (mapTool === 'road') {
       const pt = getSvgPoint(e.clientX, e.clientY)
-      if (pt) setRoadHoverPt({ x: pt.x, y: pt.y })
+      if (pt) {
+        const elevation = computeElevationAt(pt.x, pt.y)
+        setRoadHoverPt({ x: pt.x, y: pt.y, elevation: elevation ?? undefined })
+      }
       return
     }
     if (!toolActive || dragRef.current) { setHoverPos(null); return }
@@ -2000,6 +2003,31 @@ export function MapCanvas(): JSX.Element {
                   return null
                 })()}
               </g>
+            )
+          })()}
+
+          {/* Road tool — elevation readout beside the crosshair */}
+          {mapTool === 'road' && roadHoverPt && roadHoverPt.elevation !== undefined && (() => {
+            const s = labelFontSize
+            const color = roadDefaults.type === 'dirt' ? roadDefaults.dirtColor
+              : roadDefaults.type === 'gravel' ? roadDefaults.gravelColor
+              : roadDefaults.type === 'paved' ? roadDefaults.pavedColor
+              : roadDefaults.type === 'footpath' ? roadDefaults.footpathColor
+              : roadDefaults.trailColor
+            const unitAbbr = elevationCalibration.unitType === 'feet' ? 'ft'
+              : elevationCalibration.unitType === 'meters' ? 'm'
+              : elevationCalibration.unitType === 'custom' ? (elevationCalibration.customAbbr || '') : ''
+            return (
+              <text
+                x={roadHoverPt.x + s * 0.9}
+                y={roadHoverPt.y - s * 0.3}
+                fontSize={s}
+                fontFamily={style.labelFont}
+                fill={color}
+                dominantBaseline="middle"
+                style={{ pointerEvents: 'none' }}
+                opacity={0.85}
+              >{roadHoverPt.elevation}{unitAbbr}</text>
             )
           })()}
 
