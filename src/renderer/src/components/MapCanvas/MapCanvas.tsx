@@ -4,10 +4,47 @@ import type { ContourMultiPolygon } from 'd3-contour'
 import { useStore } from '../../store/useStore'
 import { generateContours, contourToSvgPath } from '../../utils/contour'
 import type { ContourSet } from '../../utils/contour'
-import type { ElevationFlag, SlopeArrow, RuggednessFlag, SwampMarker, Road, FrameConfig, CompassConfig, LegendConfig, ContourStyle, FramePosition, MeasureBarConfig, ElevationCalibration, HeightmapInfo, GridConfig } from '../../types'
+import type { ElevationFlag, SlopeArrow, RuggednessFlag, SwampMarker, Road, BuildingEntry, BuildingShape, FrameConfig, CompassConfig, LegendConfig, ContourStyle, FramePosition, MeasureBarConfig, ElevationCalibration, HeightmapInfo, GridConfig } from '../../types'
+import { BUILDING_CATALOG } from '../../data/buildings'
 import { TRI_THRESHOLDS, TRI_COLORS, TRI_LABELS, getTriSeverity, triRangeLabel } from '../../types'
 import { catmullRomPath, catmullRomOffsetPath } from '../../utils/spline'
 import { drawGridOnCanvas } from '../../utils/grid'
+
+function buildingPath(shape: BuildingShape, cx: number, cy: number, w: number, d: number): string {
+  const hw = w / 2, hd = d / 2
+  switch (shape) {
+    case 'rectangle':
+      return `M ${cx-hw},${cy-hd} L ${cx+hw},${cy-hd} L ${cx+hw},${cy+hd} L ${cx-hw},${cy+hd} Z`
+    case 'circle':
+      return `M ${cx-hw},${cy} A ${hw},${hd} 0 1,0 ${cx+hw},${cy} A ${hw},${hd} 0 1,0 ${cx-hw},${cy} Z`
+    case 'bow-sided': {
+      const bow = hw * 1.14
+      return `M ${cx-hw},${cy-hd} Q ${cx-bow},${cy} ${cx-hw},${cy+hd} L ${cx+hw},${cy+hd} Q ${cx+bow},${cy} ${cx+hw},${cy-hd} Z`
+    }
+    case 'apsidal':
+      return `M ${cx-hw},${cy+hd} L ${cx+hw},${cy+hd} L ${cx+hw},${cy-hd+hw} A ${hw},${hw} 0 0,0 ${cx-hw},${cy-hd+hw} Z`
+    case 'courtyard': {
+      const iw2 = w * 0.3, id2 = d * 0.3
+      return `M ${cx-hw},${cy-hd} L ${cx+hw},${cy-hd} L ${cx+hw},${cy+hd} L ${cx-hw},${cy+hd} Z ` +
+             `M ${cx-iw2},${cy-id2} L ${cx-iw2},${cy+id2} L ${cx+iw2},${cy+id2} L ${cx+iw2},${cy-id2} Z`
+    }
+    case 'L-shape':
+      return `M ${cx-hw},${cy-hd} L ${cx},${cy-hd} L ${cx},${cy} L ${cx+hw},${cy} L ${cx+hw},${cy+hd} L ${cx-hw},${cy+hd} Z`
+    case 'U-shape': {
+      const nw = hw * 0.5
+      return `M ${cx-hw},${cy-hd} L ${cx+hw},${cy-hd} L ${cx+hw},${cy+hd} ` +
+             `L ${cx+nw},${cy+hd} L ${cx+nw},${cy} L ${cx-nw},${cy} L ${cx-nw},${cy+hd} ` +
+             `L ${cx-hw},${cy+hd} Z`
+    }
+    case 'octagon': {
+      const cut = 0.2929
+      const xc = hw * cut, yc = hd * cut
+      return `M ${cx-hw},${cy-hd+yc} L ${cx-hw+xc},${cy-hd} L ${cx+hw-xc},${cy-hd} ` +
+             `L ${cx+hw},${cy-hd+yc} L ${cx+hw},${cy+hd-yc} L ${cx+hw-xc},${cy+hd} ` +
+             `L ${cx-hw+xc},${cy+hd} L ${cx-hw},${cy+hd-yc} Z`
+    }
+  }
+}
 
 function getLabelPoint(poly: ContourMultiPolygon): [number, number] | null {
   let best: [number, number][] | null = null
@@ -31,8 +68,8 @@ interface ContourState {
   maxElevation: number
 }
 
-type SelectedItem = { type: 'flag' | 'slope-arrow' | 'ruggedness-flag' | 'swamp-marker' | 'road'; id: string }
-type DragRef = { type: 'flag' | 'slope-arrow' | 'ruggedness-flag' | 'swamp-marker'; itemId: string; startX: number; startY: number; moved: boolean }
+type SelectedItem = { type: 'flag' | 'slope-arrow' | 'ruggedness-flag' | 'swamp-marker' | 'road' | 'building'; id: string }
+type DragRef = { type: 'flag' | 'slope-arrow' | 'ruggedness-flag' | 'swamp-marker' | 'building'; itemId: string; startX: number; startY: number; moved: boolean }
 type DragPos = { x: number; y: number; elevation?: number; angleDeg?: number; slopeDeg?: number; triNorm?: number }
 
 // ---------------------------------------------------------------------------
@@ -928,6 +965,12 @@ export function MapCanvas(): JSX.Element {
   const roadDefaults = useStore((s) => s.roadDefaults)
   const selectedRoadId = useStore((s) => s.selectedRoadId)
   const setSelectedRoadId = useStore((s) => s.setSelectedRoadId)
+  const buildings = useStore((s) => s.buildings)
+  const addBuilding = useStore((s) => s.addBuilding)
+  const updateBuilding = useStore((s) => s.updateBuilding)
+  const removeBuilding = useStore((s) => s.removeBuilding)
+  const buildingsVisible = useStore((s) => s.buildingsVisible)
+  const buildingDefaults = useStore((s) => s.buildingDefaults)
   const elevationFlagDefaults = useStore((s) => s.elevationFlagDefaults)
   const slopeArrowDefaults = useStore((s) => s.slopeArrowDefaults)
   const ruggednessFlagDefaults = useStore((s) => s.ruggednessFlagDefaults)
@@ -985,6 +1028,8 @@ export function MapCanvas(): JSX.Element {
   roadsRef.current = roads
   const roadDefaultsRef = useRef(roadDefaults)
   roadDefaultsRef.current = roadDefaults
+  const buildingDefaultsRef = useRef(buildingDefaults)
+  buildingDefaultsRef.current = buildingDefaults
   const inProgressPtsRef = useRef(inProgressPts)
   inProgressPtsRef.current = inProgressPts
 
@@ -1112,12 +1157,13 @@ export function MapCanvas(): JSX.Element {
         else if (type === 'ruggedness-flag') removeRuggednessFlag(id)
         else if (type === 'swamp-marker') removeSwampMarker(id)
         else if (type === 'road') { removeRoad(id); setSelectedRoadId(null) }
+        else if (type === 'building') removeBuilding(id)
         setSelectedItem(null)
       }
     }
     document.addEventListener('keydown', handleKeyDown)
     return () => document.removeEventListener('keydown', handleKeyDown)
-  }, [mapTool, setMapTool, removeElevationFlag, removeSlopeArrow, removeRuggednessFlag, removeSwampMarker, removeRoad, setSelectedRoadId])
+  }, [mapTool, setMapTool, removeElevationFlag, removeSlopeArrow, removeRuggednessFlag, removeSwampMarker, removeRoad, setSelectedRoadId, removeBuilding])
 
   // Document-level drag handlers so drag works even when cursor leaves the SVG
   useEffect(() => {
@@ -1159,8 +1205,10 @@ export function MapCanvas(): JSX.Element {
           } else if (type === 'ruggedness-flag') {
             const triNorm = computeTriAt(pt.x, pt.y) ?? 0
             updateRuggednessFlag(itemId, { x: pt.x, y: pt.y, triNorm })
-          } else {
+          } else if (type === 'swamp-marker') {
             updateSwampMarker(itemId, { x: pt.x, y: pt.y })
+          } else if (type === 'building') {
+            updateBuilding(itemId, { x: pt.x, y: pt.y })
           }
         }
       } else {
@@ -1175,7 +1223,7 @@ export function MapCanvas(): JSX.Element {
       document.removeEventListener('mousemove', onMove)
       document.removeEventListener('mouseup', onUp)
     }
-  }, [getSvgPoint, computeElevationAt, computeSlopeAt, computeTriAt, updateElevationFlag, updateSlopeArrow, updateRuggednessFlag, updateSwampMarker])
+  }, [getSvgPoint, computeElevationAt, computeSlopeAt, computeTriAt, updateElevationFlag, updateSlopeArrow, updateRuggednessFlag, updateSwampMarker, updateBuilding])
 
   // Road anchor point drag — document-level so drag continues outside SVG
   useEffect(() => {
@@ -1260,6 +1308,8 @@ export function MapCanvas(): JSX.Element {
       setHoverPos(triNorm !== null ? { x: pt.x, y: pt.y, triNorm } : null)
     } else if (mapTool === 'swamp-marker') {
       setHoverPos({ x: pt.x, y: pt.y })
+    } else if (mapTool === 'building') {
+      setHoverPos({ x: pt.x, y: pt.y })
     }
   }
 
@@ -1268,7 +1318,7 @@ export function MapCanvas(): JSX.Element {
     setRoadHoverPt(null)
   }
 
-  function handleItemMouseDown(e: React.MouseEvent, type: 'flag' | 'slope-arrow' | 'ruggedness-flag' | 'swamp-marker', itemId: string) {
+  function handleItemMouseDown(e: React.MouseEvent, type: 'flag' | 'slope-arrow' | 'ruggedness-flag' | 'swamp-marker' | 'building', itemId: string) {
     e.stopPropagation()
     const pt = getSvgPoint(e.clientX, e.clientY)
     if (!pt) return
@@ -1334,6 +1384,20 @@ export function MapCanvas(): JSX.Element {
       const sizeFactor = 0.75 + Math.random() * 0.5
       addSwampMarker({ id: crypto.randomUUID(), x: pt.x, y: pt.y, sizeFactor,
         boldness: swampMarkerDefaults.boldness, opacity: swampMarkerDefaults.opacity, color: swampMarkerDefaults.color })
+    } else if (mapTool === 'building') {
+      const d = buildingDefaultsRef.current
+      const tpl = BUILDING_CATALOG.flatMap(g => g.buildings).find(b => b.id === d.buildingTemplateId)
+      addBuilding({
+        id: crypto.randomUUID(),
+        x: pt.x,
+        y: pt.y,
+        rotation: d.rotation,
+        widthM: d.widthM,
+        depthM: d.depthM,
+        shape: tpl?.shape ?? 'rectangle',
+        color: d.color,
+        opacity: d.opacity,
+      })
     }
   }
 
@@ -1361,8 +1425,19 @@ export function MapCanvas(): JSX.Element {
     ? getLabelPoint(contourState.contourSet.seaLevelPath)
     : null
 
-  const toolActive = mapTool === 'elevation-flag' || mapTool === 'slope-arrow' || mapTool === 'measure-anchor' || mapTool === 'ruggedness-flag' || mapTool === 'swamp-marker' || mapTool === 'road'
-  const flagSvgInteractive = toolActive || elevationFlags.length > 0 || slopeArrows.length > 0 || ruggednessFlags.length > 0 || swampMarkers.length > 0 || roads.length > 0
+  const toolActive = mapTool === 'elevation-flag' || mapTool === 'slope-arrow' || mapTool === 'measure-anchor' || mapTool === 'ruggedness-flag' || mapTool === 'swamp-marker' || mapTool === 'road' || mapTool === 'building'
+  const flagSvgInteractive = toolActive || elevationFlags.length > 0 || slopeArrows.length > 0 || ruggednessFlags.length > 0 || swampMarkers.length > 0 || roads.length > 0 || buildings.length > 0
+
+  const pixelsPerMeter = (() => {
+    if (!heightmap || !elevationCalibration.mapWidth || elevationCalibration.mapWidth <= 0) {
+      return heightmap ? heightmap.width * 0.01 : 1
+    }
+    const cal = elevationCalibration
+    const metersPerUnit = cal.unitType === 'feet' ? 0.3048
+      : cal.unitType === 'meters' ? 1
+      : (cal.customRatio ?? 1) * (cal.customBase === 'feet' ? 0.3048 : 1)
+    return heightmap.width / (cal.mapWidth * metersPerUnit)
+  })()
 
   // Pan-drag and wheel-zoom for default (no-tool) mode
   const scrollContainerRef = useRef<HTMLDivElement>(null)
@@ -1926,6 +2001,37 @@ export function MapCanvas(): JSX.Element {
             )
           })}
 
+          {/* Buildings */}
+          {buildingsVisible && buildings.map((building) => {
+            const isDragging = dragPos !== null && dragRef.current?.itemId === building.id && dragRef.current.type === 'building'
+            const fx = isDragging ? dragPos!.x : building.x
+            const fy = isDragging ? dragPos!.y : building.y
+            const isSelected = selectedItem?.type === 'building' && selectedItem.id === building.id
+            const pw = building.widthM * pixelsPerMeter
+            const pd = building.depthM * pixelsPerMeter
+            const d = buildingPath(building.shape, fx, fy, pw, pd)
+            return (
+              <g key={building.id}
+                opacity={building.opacity}
+                transform={building.rotation !== 0 ? `rotate(${building.rotation},${fx},${fy})` : undefined}
+                onMouseDown={(e) => handleItemMouseDown(e, 'building', building.id)}
+                style={{ cursor: isSelected ? 'grab' : 'pointer' }}>
+                <path d={d}
+                  fill={building.color} fillOpacity={0.6}
+                  stroke={building.color} strokeWidth={1}
+                  fillRule={building.shape === 'courtyard' ? 'evenodd' : undefined}
+                  vectorEffect="non-scaling-stroke" />
+                {isSelected && (
+                  <path d={d}
+                    fill="none" stroke="white" strokeWidth={2}
+                    fillRule={building.shape === 'courtyard' ? 'evenodd' : undefined}
+                    strokeDasharray="3 3"
+                    vectorEffect="non-scaling-stroke" />
+                )}
+              </g>
+            )
+          })}
+
           {/* Measure anchor crosshair */}
           {(() => {
             const showAnchor = mapTool === 'measure-anchor'
@@ -2098,6 +2204,24 @@ export function MapCanvas(): JSX.Element {
                     fill="none" stroke={color} strokeWidth={strokeW} strokeLinecap="round" vectorEffect="non-scaling-stroke" />
                   <path d={`M ${hoverPos.x} ${hoverPos.y} Q ${hoverPos.x+s*0.52} ${hoverPos.y-s*0.62} ${hoverPos.x+s*0.64} ${hoverPos.y-s*0.18}`}
                     fill="none" stroke={color} strokeWidth={strokeW} strokeLinecap="round" vectorEffect="non-scaling-stroke" />
+                </g>
+              )
+            }
+            if (mapTool === 'building') {
+              const d = buildingDefaultsRef.current
+              const tpl = BUILDING_CATALOG.flatMap(g => g.buildings).find(b => b.id === d.buildingTemplateId)
+              const shape = tpl?.shape ?? 'rectangle'
+              const pw = d.widthM * pixelsPerMeter
+              const pd = d.depthM * pixelsPerMeter
+              const pathD = buildingPath(shape, hoverPos.x, hoverPos.y, pw, pd)
+              return (
+                <g opacity={0.7} style={{ pointerEvents: 'none' }}
+                  transform={d.rotation !== 0 ? `rotate(${d.rotation},${hoverPos.x},${hoverPos.y})` : undefined}>
+                  <path d={pathD}
+                    fill={d.color} fillOpacity={0.6}
+                    stroke={d.color} strokeWidth={1}
+                    fillRule={shape === 'courtyard' ? 'evenodd' : undefined}
+                    vectorEffect="non-scaling-stroke" />
                 </g>
               )
             }

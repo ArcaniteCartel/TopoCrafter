@@ -86,6 +86,17 @@ function RoadIcon(): JSX.Element {
   )
 }
 
+function BuildingIcon(): JSX.Element {
+  return (
+    <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor" fillOpacity={0.7} stroke="currentColor" strokeWidth="1.1">
+      <rect x="2" y="5" width="12" height="9" rx="0.5" />
+      <rect x="5" y="2" width="6" height="5" rx="0.5" />
+      <rect x="5.5" y="7" width="2.5" height="2.5" fill="none" strokeWidth="0.9" />
+      <rect x="8" y="7" width="2.5" height="2.5" fill="none" strokeWidth="0.9" />
+    </svg>
+  )
+}
+
 export function Toolbar(): JSX.Element {
   const heightmap = useStore((s) => s.heightmap)
   const mapZoom = useStore((s) => s.mapZoom)
@@ -286,6 +297,17 @@ export function Toolbar(): JSX.Element {
                     aria-label="Road tool"
                   >
                     <RoadIcon />
+                  </ActionIcon>
+                </Tooltip>
+                <Tooltip label="Place a historical building footprint" position="bottom" withArrow>
+                  <ActionIcon
+                    variant={mapTool === 'building' ? 'filled' : 'subtle'}
+                    size="md"
+                    disabled={!heightmap}
+                    onClick={() => setMapTool(mapTool === 'building' ? 'none' : 'building')}
+                    aria-label="Building tool"
+                  >
+                    <BuildingIcon />
                   </ActionIcon>
                 </Tooltip>
               </Group>

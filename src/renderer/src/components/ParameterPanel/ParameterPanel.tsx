@@ -3,6 +3,8 @@ import { Stack, Text, Slider, NumberInput, ColorInput, Switch, Divider, Group, S
 import { useStore } from '../../store/useStore'
 import type { FrameBorderStyle, TitleConfig, CompassConfig, FramePosition, RoadType, GridType, GridLinePattern, GridConfig } from '../../types'
 import { TRI_LABELS, TRI_THRESHOLDS, triRangeLabel } from '../../types'
+import { BUILDING_CATALOG } from '../../data/buildings'
+import type { BuildingShape } from '../../data/buildings'
 
 const DASH_OPTIONS = [
   { value: 'solid', label: 'Solid' },
@@ -83,6 +85,20 @@ const activeStyle = {
   },
 }
 
+function buildingPreviewPath(shape: BuildingShape, cx: number, cy: number, w: number, d: number): string {
+  const hw = w / 2, hd = d / 2
+  switch (shape) {
+    case 'rectangle': return `M ${cx-hw},${cy-hd} L ${cx+hw},${cy-hd} L ${cx+hw},${cy+hd} L ${cx-hw},${cy+hd} Z`
+    case 'circle': return `M ${cx-hw},${cy} A ${hw},${hd} 0 1,0 ${cx+hw},${cy} A ${hw},${hd} 0 1,0 ${cx-hw},${cy} Z`
+    case 'bow-sided': { const bow = hw * 1.14; return `M ${cx-hw},${cy-hd} Q ${cx-bow},${cy} ${cx-hw},${cy+hd} L ${cx+hw},${cy+hd} Q ${cx+bow},${cy} ${cx+hw},${cy-hd} Z` }
+    case 'apsidal': return `M ${cx-hw},${cy+hd} L ${cx+hw},${cy+hd} L ${cx+hw},${cy-hd+hw} A ${hw},${hw} 0 0,0 ${cx-hw},${cy-hd+hw} Z`
+    case 'courtyard': { const iw2 = w * 0.3, id2 = d * 0.3; return `M ${cx-hw},${cy-hd} L ${cx+hw},${cy-hd} L ${cx+hw},${cy+hd} L ${cx-hw},${cy+hd} Z M ${cx-iw2},${cy-id2} L ${cx-iw2},${cy+id2} L ${cx+iw2},${cy+id2} L ${cx+iw2},${cy-id2} Z` }
+    case 'L-shape': return `M ${cx-hw},${cy-hd} L ${cx},${cy-hd} L ${cx},${cy} L ${cx+hw},${cy} L ${cx+hw},${cy+hd} L ${cx-hw},${cy+hd} Z`
+    case 'U-shape': { const nw = hw * 0.5; return `M ${cx-hw},${cy-hd} L ${cx+hw},${cy-hd} L ${cx+hw},${cy+hd} L ${cx+nw},${cy+hd} L ${cx+nw},${cy} L ${cx-nw},${cy} L ${cx-nw},${cy+hd} L ${cx-hw},${cy+hd} Z` }
+    case 'octagon': { const cut = 0.2929, xc = hw*cut, yc = hd*cut; return `M ${cx-hw},${cy-hd+yc} L ${cx-hw+xc},${cy-hd} L ${cx+hw-xc},${cy-hd} L ${cx+hw},${cy-hd+yc} L ${cx+hw},${cy+hd-yc} L ${cx+hw-xc},${cy+hd} L ${cx-hw+xc},${cy+hd} L ${cx-hw},${cy+hd-yc} Z` }
+  }
+}
+
 export function ParameterPanel(): JSX.Element {
   const {
     parameters, style, hillshadeParams, elevationCalibration, heightmap,
@@ -141,6 +157,11 @@ export function ParameterPanel(): JSX.Element {
   const setOverlayBrightness = useStore((s) => s.setOverlayBrightness)
   const grid = useStore((s) => s.grid)
   const updateGrid = useStore((s) => s.updateGrid)
+  const buildings = useStore((s) => s.buildings)
+  const buildingsVisible = useStore((s) => s.buildingsVisible)
+  const setBuildingsVisible = useStore((s) => s.setBuildingsVisible)
+  const buildingDefaults = useStore((s) => s.buildingDefaults)
+  const updateBuildingDefaults = useStore((s) => s.updateBuildingDefaults)
 
   const { unitType, customName, customAbbr, customBase, customRatio, realMin, realMax, realInterval, mapWidth } = elevationCalibration
 
@@ -173,14 +194,15 @@ export function ParameterPanel(): JSX.Element {
   const [seaLevelOpen, setSeaLevelOpen] = useState(true)
   const [markersOpen, setMarkersOpen] = useState(true)
   const [roadsOpen, setRoadsOpen] = useState(true)
+  const [buildingsOpen, setBuildingsOpen] = useState(true)
   const [gridsOpen, setGridsOpen] = useState(true)
   const [framingOpen, setFramingOpen] = useState(true)
 
-  const allOpen = hillshadeOpen && contoursOpen && styleOpen && labelStylingOpen && seaLevelOpen && markersOpen && roadsOpen && gridsOpen && framingOpen
+  const allOpen = hillshadeOpen && contoursOpen && styleOpen && labelStylingOpen && seaLevelOpen && markersOpen && roadsOpen && buildingsOpen && gridsOpen && framingOpen
   const toggleAll = () => {
     const next = !allOpen
     setHillshadeOpen(next); setContoursOpen(next); setStyleOpen(next)
-    setLabelStylingOpen(next); setSeaLevelOpen(next); setMarkersOpen(next); setRoadsOpen(next); setGridsOpen(next); setFramingOpen(next)
+    setLabelStylingOpen(next); setSeaLevelOpen(next); setMarkersOpen(next); setRoadsOpen(next); setBuildingsOpen(next); setGridsOpen(next); setFramingOpen(next)
   }
 
   // Refs for latest values — safe to read inside event handlers and effects
@@ -1036,6 +1058,147 @@ export function ParameterPanel(): JSX.Element {
                   Delete selected road
                 </Button>
               </>
+            )
+          })()}
+
+        </Stack>
+      </Collapse>
+
+      <Divider />
+
+      <Group
+        justify="space-between"
+        style={{ cursor: 'pointer', userSelect: 'none' }}
+        onClick={() => setBuildingsOpen((o) => !o)}
+      >
+        <Text fw={600} size="sm" c="dimmed" tt="uppercase" style={{ letterSpacing: 1 }}>
+          Urban Areas &amp; Settlements
+        </Text>
+        <Text size="lg" c="dimmed">{buildingsOpen ? '▾' : '▸'}</Text>
+      </Group>
+
+      <Collapse in={buildingsOpen}>
+        <Stack gap="md">
+
+          <Switch size="sm" label="Show on map"
+            checked={buildingsVisible}
+            onChange={(e) => setBuildingsVisible(e.currentTarget.checked)} />
+
+          <Text size="xs" c="dimmed">
+            {buildings.length === 0 ? 'No buildings placed yet' : `${buildings.length} building${buildings.length === 1 ? '' : 's'} on map`}
+          </Text>
+
+          <Divider label="New Building Defaults" labelPosition="left" />
+
+          <Select
+            label="Culture / Period"
+            size="xs"
+            data={BUILDING_CATALOG.map(g => ({ value: g.id, label: `${g.label} (${g.period})` }))}
+            value={buildingDefaults.cultureId}
+            onChange={(v) => {
+              if (!v) return
+              const group = BUILDING_CATALOG.find(g => g.id === v)
+              if (!group) return
+              const firstTpl = group.buildings[0]
+              updateBuildingDefaults({
+                cultureId: v,
+                buildingTemplateId: firstTpl.id,
+                widthM: firstTpl.defaultWidthM,
+                depthM: firstTpl.defaultDepthM,
+              })
+            }}
+          />
+
+          {(() => {
+            const group = BUILDING_CATALOG.find(g => g.id === buildingDefaults.cultureId)
+            if (!group) return null
+            return (
+              <Select
+                label="Building type"
+                size="xs"
+                data={group.buildings.map(b => ({ value: b.id, label: b.name }))}
+                value={buildingDefaults.buildingTemplateId}
+                onChange={(v) => {
+                  if (!v) return
+                  const tpl = group.buildings.find(b => b.id === v)
+                  if (!tpl) return
+                  updateBuildingDefaults({
+                    buildingTemplateId: v,
+                    widthM: tpl.defaultWidthM,
+                    depthM: tpl.defaultDepthM,
+                  })
+                }}
+              />
+            )
+          })()}
+
+          <Group grow>
+            <NumberInput
+              label="Width (m)"
+              size="xs"
+              value={buildingDefaults.widthM}
+              onChange={(v) => typeof v === 'number' && v > 0 && updateBuildingDefaults({ widthM: v })}
+              min={1}
+              step={1}
+              decimalScale={1}
+            />
+            <NumberInput
+              label="Depth (m)"
+              size="xs"
+              value={buildingDefaults.depthM}
+              onChange={(v) => typeof v === 'number' && v > 0 && updateBuildingDefaults({ depthM: v })}
+              min={1}
+              step={1}
+              decimalScale={1}
+            />
+          </Group>
+
+          <Stack gap={4}>
+            <Text size="xs" fw={500}>Rotation (°)</Text>
+            <Slider
+              min={0} max={355} step={5}
+              value={buildingDefaults.rotation}
+              onChange={(v) => updateBuildingDefaults({ rotation: v })}
+              label={(v) => `${v}°`}
+            />
+          </Stack>
+
+          <ColorInput
+            label="Color"
+            size="xs"
+            value={buildingDefaults.color}
+            onChange={(v) => updateBuildingDefaults({ color: v })}
+            format="hex"
+          />
+
+          <Stack gap={4}>
+            <Text size="xs" fw={500}>Opacity</Text>
+            <Slider
+              min={0} max={1} step={0.05}
+              value={buildingDefaults.opacity}
+              onChange={(v) => updateBuildingDefaults({ opacity: v })}
+              label={(v) => `${Math.round(v * 100)}%`}
+            />
+          </Stack>
+
+          {(() => {
+            const group = BUILDING_CATALOG.find(g => g.id === buildingDefaults.cultureId)
+            const tpl = group?.buildings.find(b => b.id === buildingDefaults.buildingTemplateId)
+            if (!tpl) return null
+            const shape = tpl.shape
+            const cx = 50, cy = 40, pw = 38, pd = 28
+            const dPath = buildingPreviewPath(shape, cx, cy, pw, pd)
+            return (
+              <Stack gap={2}>
+                <Text size="xs" fw={500} c="dimmed">Shape preview</Text>
+                <svg width={100} height={80} style={{ border: '1px solid rgba(128,128,128,0.2)', borderRadius: 4 }}>
+                  <path d={dPath}
+                    fill={buildingDefaults.color} fillOpacity={0.6}
+                    stroke={buildingDefaults.color} strokeWidth={1.5}
+                    fillRule={shape === 'courtyard' ? 'evenodd' : undefined} />
+                </svg>
+                <Text size="xs" c="dimmed">{tpl.name}</Text>
+              </Stack>
             )
           })()}
 

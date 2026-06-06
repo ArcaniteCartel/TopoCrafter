@@ -179,7 +179,41 @@ export function triRangeLabel(i: number, elevRange?: number, unitAbbr?: string):
   return hi !== null ? `${lo}–${hi}` : `>${lo}`
 }
 
-export type MapTool = 'none' | 'elevation-flag' | 'slope-arrow' | 'measure-anchor' | 'ruggedness-flag' | 'swamp-marker' | 'road'
+export type MapTool = 'none' | 'elevation-flag' | 'slope-arrow' | 'measure-anchor' | 'ruggedness-flag' | 'swamp-marker' | 'road' | 'building'
+
+export type BuildingShape = 'rectangle' | 'circle' | 'bow-sided' | 'apsidal' | 'courtyard' | 'L-shape' | 'U-shape' | 'octagon'
+
+export interface BuildingEntry {
+  id: string
+  x: number
+  y: number
+  rotation: number
+  widthM: number
+  depthM: number
+  shape: BuildingShape
+  color: string
+  opacity: number
+}
+
+export interface BuildingDefaults {
+  cultureId: string
+  buildingTemplateId: string
+  widthM: number
+  depthM: number
+  rotation: number
+  color: string
+  opacity: number
+}
+
+export const defaultBuildingDefaults: BuildingDefaults = {
+  cultureId: 'medieval-europe',
+  buildingTemplateId: 'me-cot-md',
+  widthM: 5,
+  depthM: 11,
+  rotation: 0,
+  color: '#8B6914',
+  opacity: 0.85,
+}
 
 export type FrameBorderStyle = 'single' | 'double' | 'cartographic' | 'shadow' | 'ornate'
 
@@ -457,6 +491,9 @@ export interface ProjectState {
   roadsVisible: boolean
   roadDefaults: RoadDefaults
   selectedRoadId: string | null
+  buildings: BuildingEntry[]
+  buildingsVisible: boolean
+  buildingDefaults: BuildingDefaults
   mapTool: MapTool
   snapshotParams: ContourParameters | null
   snapshotStyle: ContourStyle | null

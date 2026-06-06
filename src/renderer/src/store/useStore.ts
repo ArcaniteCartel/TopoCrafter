@@ -5,9 +5,9 @@ import type {
   HeightmapInfo, HillshadeParameters, ElevationCalibration,
   ElevationFlag, SlopeArrow, RuggednessFlag, SwampMarker, MarkerDefaults, SwampMarkerDefaults,
   MapTool, FrameConfig, TitleConfig, CompassConfig, LegendConfig, MeasureBarConfig,
-  Road, RoadDefaults, GridConfig,
+  Road, RoadDefaults, GridConfig, BuildingEntry, BuildingDefaults,
 } from '../types'
-import { defaultParameters, defaultStyle, defaultHillshadeParameters, defaultElevationCalibration, defaultFrameConfig, defaultTitleConfig, defaultCompassConfig, defaultLegendConfig, defaultMeasureBarConfig, TRI_COLORS, defaultRoadDefaults, defaultGridConfig } from '../types'
+import { defaultParameters, defaultStyle, defaultHillshadeParameters, defaultElevationCalibration, defaultFrameConfig, defaultTitleConfig, defaultCompassConfig, defaultLegendConfig, defaultMeasureBarConfig, TRI_COLORS, defaultRoadDefaults, defaultGridConfig, defaultBuildingDefaults } from '../types'
 
 function calToMeters(value: number, cal: ElevationCalibration): number {
   if (cal.unitType === 'feet') return value * 0.3048
@@ -80,6 +80,11 @@ interface AppActions {
   setRoadsVisible: (v: boolean) => void
   updateRoadDefaults: (d: Partial<RoadDefaults>) => void
   setSelectedRoadId: (id: string | null) => void
+  addBuilding: (b: BuildingEntry) => void
+  updateBuilding: (id: string, updates: Partial<Omit<BuildingEntry, 'id'>>) => void
+  removeBuilding: (id: string) => void
+  setBuildingsVisible: (v: boolean) => void
+  updateBuildingDefaults: (d: Partial<BuildingDefaults>) => void
   setRuggednessSeverityColor: (index: number, color: string) => void
   setMapTool: (tool: MapTool) => void
   setActiveTab: (tab: 'terrain' | 'hillshade') => void
@@ -135,6 +140,9 @@ const initialState: ProjectState = {
   roadsVisible: true,
   roadDefaults: defaultRoadDefaults,
   selectedRoadId: null,
+  buildings: [],
+  buildingsVisible: true,
+  buildingDefaults: defaultBuildingDefaults,
   mapTool: 'none',
   snapshotParams: null,
   snapshotStyle: null,
@@ -407,6 +415,16 @@ export const useStore = create<ProjectState & AppActions>()(
       updateRoadDefaults: (d) => set((state) => ({ roadDefaults: { ...state.roadDefaults, ...d } })),
       setSelectedRoadId: (id) => set({ selectedRoadId: id }),
 
+      addBuilding: (b) => set((state) => ({ buildings: [...state.buildings, b], isDirty: true })),
+      updateBuilding: (id, updates) => set((state) => ({
+        buildings: state.buildings.map((b) => b.id === id ? { ...b, ...updates } : b), isDirty: true,
+      })),
+      removeBuilding: (id) => set((state) => ({
+        buildings: state.buildings.filter((b) => b.id !== id), isDirty: true,
+      })),
+      setBuildingsVisible: (v) => set({ buildingsVisible: v }),
+      updateBuildingDefaults: (d) => set((state) => ({ buildingDefaults: { ...state.buildingDefaults, ...d } })),
+
       setRuggednessSeverityColor: (index, color) =>
         set((state) => ({
           ruggednessSeverityColors: state.ruggednessSeverityColors.map((c, i) => i === index ? color : c),
@@ -485,6 +503,7 @@ export const useStore = create<ProjectState & AppActions>()(
           ruggednessFlagDefaults: merge(current.ruggednessFlagDefaults, ps.ruggednessFlagDefaults),
           swampMarkerDefaults:    merge(current.swampMarkerDefaults,    ps.swampMarkerDefaults),
           roadDefaults:           merge(current.roadDefaults,           ps.roadDefaults),
+          buildingDefaults:       merge(current.buildingDefaults,       ps.buildingDefaults),
           grid:                   merge(current.grid,                   ps.grid),
         }
       },
@@ -521,6 +540,9 @@ export const useStore = create<ProjectState & AppActions>()(
         roads: state.roads,
         roadsVisible: state.roadsVisible,
         roadDefaults: state.roadDefaults,
+        buildings: state.buildings,
+        buildingsVisible: state.buildingsVisible,
+        buildingDefaults: state.buildingDefaults,
         grid: state.grid,
       }),
     }
