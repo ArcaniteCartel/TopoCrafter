@@ -6,6 +6,7 @@ import { generateContours, contourToSvgPath } from '../../utils/contour'
 import type { ContourSet } from '../../utils/contour'
 import type { ElevationFlag, SlopeArrow, RuggednessFlag, SwampMarker, FrameConfig, CompassConfig, LegendConfig, ContourStyle, FramePosition, MeasureBarConfig, ElevationCalibration, HeightmapInfo } from '../../types'
 import { TRI_THRESHOLDS, TRI_COLORS, TRI_LABELS, getTriSeverity, triRangeLabel } from '../../types'
+import { catmullRomPath, catmullRomOffsetPath } from '../../utils/spline'
 
 function getLabelPoint(poly: ContourMultiPolygon): [number, number] | null {
   let best: [number, number][] | null = null
@@ -29,7 +30,7 @@ interface ContourState {
   maxElevation: number
 }
 
-type SelectedItem = { type: 'flag' | 'slope-arrow' | 'ruggedness-flag' | 'swamp-marker'; id: string }
+type SelectedItem = { type: 'flag' | 'slope-arrow' | 'ruggedness-flag' | 'swamp-marker' | 'road'; id: string }
 type DragRef = { type: 'flag' | 'slope-arrow' | 'ruggedness-flag' | 'swamp-marker'; itemId: string; startX: number; startY: number; moved: boolean }
 type DragPos = { x: number; y: number; elevation?: number; angleDeg?: number; slopeDeg?: number; triNorm?: number }
 
@@ -841,6 +842,14 @@ export function MapCanvas(): JSX.Element {
   const updateSwampMarker = useStore((s) => s.updateSwampMarker)
   const removeSwampMarker = useStore((s) => s.removeSwampMarker)
   const swampMarkerDefaults = useStore((s) => s.swampMarkerDefaults)
+  const roads = useStore((s) => s.roads)
+  const addRoad = useStore((s) => s.addRoad)
+  const updateRoad = useStore((s) => s.updateRoad)
+  const removeRoad = useStore((s) => s.removeRoad)
+  const roadsVisible = useStore((s) => s.roadsVisible)
+  const roadDefaults = useStore((s) => s.roadDefaults)
+  const selectedRoadId = useStore((s) => s.selectedRoadId)
+  const setSelectedRoadId = useStore((s) => s.setSelectedRoadId)
   const elevationFlagDefaults = useStore((s) => s.elevationFlagDefaults)
   const slopeArrowDefaults = useStore((s) => s.slopeArrowDefaults)
   const ruggednessFlagDefaults = useStore((s) => s.ruggednessFlagDefaults)
@@ -888,6 +897,18 @@ export function MapCanvas(): JSX.Element {
   const flagSvgRef = useRef<SVGSVGElement>(null)
   const selectedItemRef = useRef<SelectedItem | null>(null)
   selectedItemRef.current = selectedItem
+
+  // Road drawing state
+  const [inProgressPts, setInProgressPts] = useState<{ x: number; y: number }[]>([])
+  const [roadHoverPt, setRoadHoverPt] = useState<{ x: number; y: number } | null>(null)
+  const roadAnchorDragRef = useRef<{ roadId: string; ptIdx: number } | null>(null)
+  const lastClickTimeRef = useRef<number>(0)
+  const roadsRef = useRef(roads)
+  roadsRef.current = roads
+  const roadDefaultsRef = useRef(roadDefaults)
+  roadDefaultsRef.current = roadDefaults
+  const inProgressPtsRef = useRef(inProgressPts)
+  inProgressPtsRef.current = inProgressPts
 
   // Only recompute contours when a new heightmap is loaded or Recalculate is clicked.
   // 300ms delay gives the browser time to paint the spinner before the synchronous
@@ -992,11 +1013,19 @@ export function MapCanvas(): JSX.Element {
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
+        if (mapTool === 'road' && inProgressPtsRef.current.length > 0) {
+          setInProgressPts([])
+          setRoadHoverPt(null)
+          return
+        }
         setMapTool('none')
         setSelectedItem(null)
         dragRef.current = null
         setDragPos(null)
         setHoverPos(null)
+      }
+      if (e.key === 'Enter' && mapTool === 'road' && inProgressPtsRef.current.length >= 2) {
+        commitRoad(inProgressPtsRef.current, false)
       }
       if (e.key === 'Delete' && selectedItemRef.current) {
         const { type, id } = selectedItemRef.current
@@ -1004,12 +1033,13 @@ export function MapCanvas(): JSX.Element {
         else if (type === 'slope-arrow') removeSlopeArrow(id)
         else if (type === 'ruggedness-flag') removeRuggednessFlag(id)
         else if (type === 'swamp-marker') removeSwampMarker(id)
+        else if (type === 'road') { removeRoad(id); setSelectedRoadId(null) }
         setSelectedItem(null)
       }
     }
     document.addEventListener('keydown', handleKeyDown)
     return () => document.removeEventListener('keydown', handleKeyDown)
-  }, [setMapTool, removeElevationFlag, removeSlopeArrow, removeRuggednessFlag, removeSwampMarker])
+  }, [mapTool, setMapTool, removeElevationFlag, removeSlopeArrow, removeRuggednessFlag, removeSwampMarker, removeRoad, setSelectedRoadId])
 
   // Document-level drag handlers so drag works even when cursor leaves the SVG
   useEffect(() => {
@@ -1069,12 +1099,67 @@ export function MapCanvas(): JSX.Element {
     }
   }, [getSvgPoint, computeElevationAt, computeSlopeAt, computeTriAt, updateElevationFlag, updateSlopeArrow, updateRuggednessFlag, updateSwampMarker])
 
+  // Road anchor point drag — document-level so drag continues outside SVG
+  useEffect(() => {
+    const onMove = (e: MouseEvent) => {
+      if (!roadAnchorDragRef.current) return
+      const svgEl = document.getElementById('annotation-svg') as SVGSVGElement | null
+      if (!svgEl) return
+      const pt = svgEl.createSVGPoint()
+      pt.x = e.clientX; pt.y = e.clientY
+      const svgPt = pt.matrixTransform(svgEl.getScreenCTM()!.inverse())
+      const { roadId, ptIdx } = roadAnchorDragRef.current
+      const road = roadsRef.current.find(r => r.id === roadId)
+      if (!road) return
+      updateRoad(roadId, {
+        points: road.points.map((p, i) =>
+          i === ptIdx ? { x: svgPt.x, y: svgPt.y } : p
+        ),
+      })
+    }
+    const onUp = () => { roadAnchorDragRef.current = null }
+    document.addEventListener('mousemove', onMove)
+    document.addEventListener('mouseup', onUp)
+    return () => {
+      document.removeEventListener('mousemove', onMove)
+      document.removeEventListener('mouseup', onUp)
+    }
+  }, [updateRoad])
+
   // Clear hover preview whenever the tool mode is turned off
   useEffect(() => {
-    if (mapTool === 'none') setHoverPos(null)
+    if (mapTool === 'none') { setHoverPos(null) }
+    if (mapTool !== 'road') { setInProgressPts([]); setRoadHoverPt(null) }
   }, [mapTool])
 
+  function commitRoad(pts: { x: number; y: number }[], closed: boolean) {
+    if (!heightmap || pts.length < 2) { setInProgressPts([]); return }
+    const tw = heightmap.width * roadDefaultsRef.current.trackWidthFraction
+    const sw = tw * roadDefaultsRef.current.strokeWeightFraction
+    const color = roadDefaultsRef.current.type === 'dirt' ? roadDefaultsRef.current.dirtColor
+      : roadDefaultsRef.current.type === 'gravel' ? roadDefaultsRef.current.gravelColor
+      : roadDefaultsRef.current.pavedColor
+    addRoad({
+      id: crypto.randomUUID(),
+      type: roadDefaultsRef.current.type,
+      points: pts,
+      closed,
+      label: '',
+      color,
+      trackWidth: tw,
+      strokeWeight: sw,
+      opacity: roadDefaultsRef.current.opacity,
+    })
+    setInProgressPts([])
+    setRoadHoverPt(null)
+  }
+
   function handleSvgMouseMove(e: React.MouseEvent<SVGSVGElement>) {
+    if (mapTool === 'road') {
+      const pt = getSvgPoint(e.clientX, e.clientY)
+      if (pt) setRoadHoverPt({ x: pt.x, y: pt.y })
+      return
+    }
     if (!toolActive || dragRef.current) { setHoverPos(null); return }
     const pt = getSvgPoint(e.clientX, e.clientY)
     if (!pt) return
@@ -1096,6 +1181,7 @@ export function MapCanvas(): JSX.Element {
 
   function handleSvgMouseLeave() {
     setHoverPos(null)
+    setRoadHoverPt(null)
   }
 
   function handleItemMouseDown(e: React.MouseEvent, type: 'flag' | 'slope-arrow' | 'ruggedness-flag' | 'swamp-marker', itemId: string) {
@@ -1106,7 +1192,32 @@ export function MapCanvas(): JSX.Element {
   }
 
   // Fires only for background clicks — annotation elements call stopPropagation
-  function handleSvgMouseDown(_e: React.MouseEvent<SVGSVGElement>) {
+  function handleSvgMouseDown(e: React.MouseEvent<SVGSVGElement>) {
+    if (mapTool === 'road') {
+      const pt = getSvgPoint(e.clientX, e.clientY)
+      if (!pt) return
+      const now = Date.now()
+      const isDouble = now - lastClickTimeRef.current < 300
+      lastClickTimeRef.current = now
+      if (isDouble && inProgressPtsRef.current.length >= 2) {
+        // Commit road on double-click (remove last point added by first click of dblclick)
+        const pts = inProgressPtsRef.current.slice(0, -1)
+        if (pts.length >= 2) commitRoad(pts, false)
+        return
+      }
+      // Check if clicking near first point to close
+      if (inProgressPtsRef.current.length >= 3) {
+        const first = inProgressPtsRef.current[0]
+        const dist = Math.sqrt((pt.x - first.x) ** 2 + (pt.y - first.y) ** 2)
+        const tw = heightmap ? heightmap.width * roadDefaultsRef.current.trackWidthFraction : 10
+        if (dist < tw * 3) {
+          commitRoad(inProgressPtsRef.current, true)
+          return
+        }
+      }
+      setInProgressPts(prev => [...prev, { x: pt.x, y: pt.y }])
+      return
+    }
     setSelectedItem(null)
   }
 
@@ -1165,8 +1276,8 @@ export function MapCanvas(): JSX.Element {
     ? getLabelPoint(contourState.contourSet.seaLevelPath)
     : null
 
-  const toolActive = mapTool === 'elevation-flag' || mapTool === 'slope-arrow' || mapTool === 'measure-anchor' || mapTool === 'ruggedness-flag' || mapTool === 'swamp-marker'
-  const flagSvgInteractive = toolActive || elevationFlags.length > 0 || slopeArrows.length > 0 || ruggednessFlags.length > 0 || swampMarkers.length > 0
+  const toolActive = mapTool === 'elevation-flag' || mapTool === 'slope-arrow' || mapTool === 'measure-anchor' || mapTool === 'ruggedness-flag' || mapTool === 'swamp-marker' || mapTool === 'road'
+  const flagSvgInteractive = toolActive || elevationFlags.length > 0 || slopeArrows.length > 0 || ruggednessFlags.length > 0 || swampMarkers.length > 0 || roads.length > 0
 
   // Pan-drag and wheel-zoom for default (no-tool) mode
   const scrollContainerRef = useRef<HTMLDivElement>(null)
@@ -1415,6 +1526,95 @@ export function MapCanvas(): JSX.Element {
             />
           )}
 
+          {/* SVG defs: road masks + center paths for textPath */}
+          {roads.length > 0 && (
+            <defs>
+              {roads.map(road => {
+                const maskStrokeW = road.trackWidth + road.strokeWeight * 2 + road.trackWidth * 0.3
+                return (
+                  <mask key={road.id} id={`road-mask-${road.id}`} maskUnits="userSpaceOnUse"
+                    x={-heightmap.width * 0.1}
+                    y={-heightmap.height * 0.1}
+                    width={heightmap.width * 1.2}
+                    height={heightmap.height * 1.2}>
+                    <rect
+                      x={-heightmap.width * 0.1}
+                      y={-heightmap.height * 0.1}
+                      width={heightmap.width * 1.2}
+                      height={heightmap.height * 1.2}
+                      fill="white" />
+                    {roads.filter(r => r.id !== road.id && r.points.length >= 2).map(other => (
+                      <path key={other.id}
+                        d={catmullRomPath(other.points, other.closed)}
+                        stroke="black"
+                        strokeWidth={maskStrokeW}
+                        fill="none"
+                        strokeLinecap="round" />
+                    ))}
+                  </mask>
+                )
+              })}
+              {roads.filter(r => r.label && r.points.length >= 2).map(road => (
+                <path key={road.id} id={`road-center-${road.id}`}
+                  d={catmullRomPath(road.points, road.closed)} />
+              ))}
+            </defs>
+          )}
+
+          {/* Roads */}
+          {roadsVisible && roads.map(road => {
+            if (road.points.length < 2) return null
+            const tw = road.trackWidth
+            const sw = road.strokeWeight
+            const half = tw / 2
+            const leftPath = catmullRomOffsetPath(road.points, road.closed, -half)
+            const rightPath = catmullRomOffsetPath(road.points, road.closed, half)
+            const dashArray = road.type === 'dirt'
+              ? `${tw * 0.2} ${tw * 0.45}`
+              : road.type === 'gravel'
+              ? `${tw * 0.9} ${tw * 0.45}`
+              : undefined
+            const isSelected = selectedItem?.type === 'road' && selectedItem.id === road.id
+            const centerPath = catmullRomPath(road.points, road.closed)
+            return (
+              <g key={road.id}
+                mask={roads.length > 1 ? `url(#road-mask-${road.id})` : undefined}
+                opacity={road.opacity}>
+                {/* Hit area (transparent wide stroke for click detection) */}
+                <path d={centerPath} stroke="transparent" strokeWidth={tw + sw * 4} fill="none"
+                  style={{ cursor: mapTool === 'road' ? 'crosshair' : 'pointer' }}
+                  onClick={(e) => {
+                    if (mapTool === 'road') return
+                    e.stopPropagation()
+                    setSelectedRoadId(road.id)
+                    setSelectedItem({ type: 'road', id: road.id })
+                  }} />
+                <path d={leftPath} stroke={road.color} strokeWidth={sw} fill="none"
+                  strokeDasharray={dashArray} strokeLinecap="round" />
+                <path d={rightPath} stroke={road.color} strokeWidth={sw} fill="none"
+                  strokeDasharray={dashArray} strokeLinecap="round" />
+                {road.label && (
+                  <text fontSize={tw * 0.7} fontFamily={style.labelFont} fill={road.color}
+                    dominantBaseline="middle" textAnchor="middle">
+                    <textPath href={`#road-center-${road.id}`} startOffset="50%">
+                      {road.label}
+                    </textPath>
+                  </text>
+                )}
+                {/* Anchor handles when selected */}
+                {isSelected && road.points.map((pt, idx) => (
+                  <circle key={idx} cx={pt.x} cy={pt.y} r={tw * 0.4}
+                    fill="white" stroke={road.color} strokeWidth={sw * 1.5}
+                    style={{ cursor: 'grab' }}
+                    onMouseDown={(e) => {
+                      e.stopPropagation()
+                      roadAnchorDragRef.current = { roadId: road.id, ptIdx: idx }
+                    }} />
+                ))}
+              </g>
+            )
+          })}
+
           {/* Elevation flags */}
           {elevationFlagsVisible && elevationFlags.map((flag) => {
             const isDragging = dragPos !== null && dragRef.current?.itemId === flag.id && dragRef.current.type === 'flag'
@@ -1643,8 +1843,57 @@ export function MapCanvas(): JSX.Element {
             )
           })()}
 
+          {/* Road drawing preview */}
+          {mapTool === 'road' && inProgressPts.length >= 1 && (() => {
+            const previewPts = roadHoverPt
+              ? [...inProgressPts, roadHoverPt]
+              : inProgressPts
+            const tw = heightmap ? heightmap.width * roadDefaults.trackWidthFraction : 10
+            const sw = tw * roadDefaults.strokeWeightFraction
+            const half = tw / 2
+            const color = roadDefaults.type === 'dirt' ? roadDefaults.dirtColor
+              : roadDefaults.type === 'gravel' ? roadDefaults.gravelColor
+              : roadDefaults.pavedColor
+            const dashArray = roadDefaults.type === 'dirt'
+              ? `${tw * 0.2} ${tw * 0.45}`
+              : roadDefaults.type === 'gravel'
+              ? `${tw * 0.9} ${tw * 0.45}`
+              : undefined
+            const closeThreshold = tw * 3
+
+            return (
+              <g opacity={0.7} style={{ pointerEvents: 'none' }}>
+                {previewPts.length >= 2 && (
+                  <>
+                    <path d={catmullRomOffsetPath(previewPts, false, -half)}
+                      stroke={color} strokeWidth={sw} fill="none"
+                      strokeDasharray={dashArray} strokeLinecap="round" />
+                    <path d={catmullRomOffsetPath(previewPts, false, half)}
+                      stroke={color} strokeWidth={sw} fill="none"
+                      strokeDasharray={dashArray} strokeLinecap="round" />
+                  </>
+                )}
+                {/* Anchor dots */}
+                {inProgressPts.map((pt, i) => (
+                  <circle key={i} cx={pt.x} cy={pt.y} r={tw * 0.3}
+                    fill={i === 0 ? color : 'white'} stroke={color} strokeWidth={sw} />
+                ))}
+                {/* Close hint ring */}
+                {inProgressPts.length >= 3 && roadHoverPt && (() => {
+                  const first = inProgressPts[0]
+                  const dist = Math.sqrt((roadHoverPt.x - first.x)**2 + (roadHoverPt.y - first.y)**2)
+                  if (dist < closeThreshold) {
+                    return <circle cx={first.x} cy={first.y} r={closeThreshold}
+                      fill="none" stroke={color} strokeWidth={sw} strokeOpacity={0.5} />
+                  }
+                  return null
+                })()}
+              </g>
+            )
+          })()}
+
           {/* Hover preview — live readout while tool is active, no drag in progress */}
-          {toolActive && hoverPos && !dragPos && (() => {
+          {toolActive && mapTool !== 'road' && hoverPos && !dragPos && (() => {
             const s = labelFontSize
             if (mapTool === 'measure-anchor') {
               const r = s * 0.8

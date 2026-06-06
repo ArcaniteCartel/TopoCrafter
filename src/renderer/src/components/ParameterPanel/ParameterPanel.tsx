@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { Stack, Text, Slider, NumberInput, ColorInput, Switch, Divider, Group, Select, TextInput, Collapse, Checkbox, SegmentedControl, Box, Button } from '@mantine/core'
 import { useStore } from '../../store/useStore'
-import type { FrameBorderStyle, TitleConfig, CompassConfig, FramePosition } from '../../types'
+import type { FrameBorderStyle, TitleConfig, CompassConfig, FramePosition, RoadType } from '../../types'
 import { TRI_LABELS, TRI_THRESHOLDS, triRangeLabel } from '../../types'
 
 const DASH_OPTIONS = [
@@ -119,6 +119,15 @@ export function ParameterPanel(): JSX.Element {
   const setSwampMarkersVisible = useStore((s) => s.setSwampMarkersVisible)
   const ruggednessSeverityColors = useStore((s) => s.ruggednessSeverityColors)
   const setRuggednessSeverityColor = useStore((s) => s.setRuggednessSeverityColor)
+  const roads = useStore((s) => s.roads)
+  const roadsVisible = useStore((s) => s.roadsVisible)
+  const setRoadsVisible = useStore((s) => s.setRoadsVisible)
+  const roadDefaults = useStore((s) => s.roadDefaults)
+  const updateRoadDefaults = useStore((s) => s.updateRoadDefaults)
+  const updateRoad = useStore((s) => s.updateRoad)
+  const removeRoad = useStore((s) => s.removeRoad)
+  const selectedRoadId = useStore((s) => s.selectedRoadId)
+  const setSelectedRoadId = useStore((s) => s.setSelectedRoadId)
   const overlayOnly = useStore((s) => s.overlayOnly)
   const setOverlayOnly = useStore((s) => s.setOverlayOnly)
   const overlayBrightness = useStore((s) => s.overlayBrightness)
@@ -154,13 +163,14 @@ export function ParameterPanel(): JSX.Element {
   const [labelStylingOpen, setLabelStylingOpen] = useState(true)
   const [seaLevelOpen, setSeaLevelOpen] = useState(true)
   const [markersOpen, setMarkersOpen] = useState(true)
+  const [roadsOpen, setRoadsOpen] = useState(true)
   const [framingOpen, setFramingOpen] = useState(true)
 
-  const allOpen = hillshadeOpen && contoursOpen && styleOpen && labelStylingOpen && seaLevelOpen && markersOpen && framingOpen
+  const allOpen = hillshadeOpen && contoursOpen && styleOpen && labelStylingOpen && seaLevelOpen && markersOpen && roadsOpen && framingOpen
   const toggleAll = () => {
     const next = !allOpen
     setHillshadeOpen(next); setContoursOpen(next); setStyleOpen(next)
-    setLabelStylingOpen(next); setSeaLevelOpen(next); setMarkersOpen(next); setFramingOpen(next)
+    setLabelStylingOpen(next); setSeaLevelOpen(next); setMarkersOpen(next); setRoadsOpen(next); setFramingOpen(next)
   }
 
   // Refs for latest values — safe to read inside event handlers and effects
@@ -865,6 +875,135 @@ export function ParameterPanel(): JSX.Element {
               onChange={(v) => updateSwampMarkerDefaults({ opacity: v })}
               label={(v) => `${Math.round(v * 100)}%`} />
           </Stack>
+
+        </Stack>
+      </Collapse>
+
+      <Divider />
+
+      <Group
+        justify="space-between"
+        style={{ cursor: 'pointer', userSelect: 'none' }}
+        onClick={() => setRoadsOpen((o) => !o)}
+      >
+        <Text fw={600} size="sm" c="dimmed" tt="uppercase" style={{ letterSpacing: 1 }}>
+          Roads
+        </Text>
+        <Text size="lg" c="dimmed">{roadsOpen ? '▾' : '▸'}</Text>
+      </Group>
+
+      <Collapse in={roadsOpen}>
+        <Stack gap="md">
+
+          <Switch size="sm" label="Show on map"
+            checked={roadsVisible}
+            onChange={(e) => setRoadsVisible(e.currentTarget.checked)} />
+
+          <Divider label="New Road Defaults" labelPosition="left" />
+
+          <Text size="xs" fw={500}>Road type</Text>
+          <SegmentedControl size="xs"
+            value={roadDefaults.type}
+            onChange={(v) => updateRoadDefaults({ type: v as RoadType })}
+            data={[
+              { value: 'dirt', label: 'Dirt' },
+              { value: 'gravel', label: 'Gravel' },
+              { value: 'paved', label: 'Paved' },
+            ]}
+          />
+
+          <Text size="xs" fw={500}>Colors</Text>
+          <Group grow gap="xs">
+            <Stack gap={2}>
+              <Text size="xs" c="dimmed">Dirt</Text>
+              <ColorInput size="xs" value={roadDefaults.dirtColor}
+                onChange={(v) => updateRoadDefaults({ dirtColor: v })}
+                format="hex" />
+            </Stack>
+            <Stack gap={2}>
+              <Text size="xs" c="dimmed">Gravel</Text>
+              <ColorInput size="xs" value={roadDefaults.gravelColor}
+                onChange={(v) => updateRoadDefaults({ gravelColor: v })}
+                format="hex" />
+            </Stack>
+            <Stack gap={2}>
+              <Text size="xs" c="dimmed">Paved</Text>
+              <ColorInput size="xs" value={roadDefaults.pavedColor}
+                onChange={(v) => updateRoadDefaults({ pavedColor: v })}
+                format="hex" />
+            </Stack>
+          </Group>
+
+          <NumberInput
+            label={`Track width${heightmap ? ` (map units, map is ${heightmap.width} wide)` : ''}`}
+            size="xs"
+            value={Math.round(roadDefaults.trackWidthFraction * (heightmap?.width ?? 1000))}
+            onChange={(v) => {
+              if (typeof v === 'number' && v > 0 && heightmap) {
+                updateRoadDefaults({ trackWidthFraction: v / heightmap.width })
+              }
+            }}
+            min={1}
+            step={1}
+            disabled={!heightmap}
+          />
+
+          <Stack gap={4}>
+            <Text size="xs" fw={500}>Stroke weight (fraction of track width)</Text>
+            <Slider min={0.05} max={0.25} step={0.01} value={roadDefaults.strokeWeightFraction}
+              onChange={(v) => updateRoadDefaults({ strokeWeightFraction: v })}
+              label={(v) => `${Math.round(v * 100)}%`} />
+          </Stack>
+
+          <Stack gap={4}>
+            <Text size="xs" fw={500}>Opacity</Text>
+            <Slider min={0} max={1} step={0.05} value={roadDefaults.opacity}
+              onChange={(v) => updateRoadDefaults({ opacity: v })}
+              label={(v) => `${Math.round(v * 100)}%`} />
+          </Stack>
+
+          {selectedRoadId && (() => {
+            const road = roads.find(r => r.id === selectedRoadId)
+            if (!road) return null
+            return (
+              <>
+                <Divider label="Selected Road" labelPosition="left" />
+                <Text size="xs" fw={500}>Road type</Text>
+                <SegmentedControl size="xs"
+                  value={road.type}
+                  onChange={(v) => updateRoad(selectedRoadId, {
+                    type: v as RoadType,
+                    color: v === 'dirt' ? roadDefaults.dirtColor
+                      : v === 'gravel' ? roadDefaults.gravelColor
+                      : roadDefaults.pavedColor,
+                  })}
+                  data={[
+                    { value: 'dirt', label: 'Dirt' },
+                    { value: 'gravel', label: 'Gravel' },
+                    { value: 'paved', label: 'Paved' },
+                  ]}
+                />
+                <TextInput
+                  label="Label"
+                  size="xs"
+                  placeholder="Road name…"
+                  value={road.label}
+                  onChange={(e) => updateRoad(selectedRoadId, { label: e.currentTarget.value })}
+                />
+                <Button
+                  size="xs"
+                  color="red"
+                  variant="light"
+                  onClick={() => {
+                    removeRoad(selectedRoadId)
+                    setSelectedRoadId(null)
+                  }}
+                >
+                  Delete selected road
+                </Button>
+              </>
+            )
+          })()}
 
         </Stack>
       </Collapse>

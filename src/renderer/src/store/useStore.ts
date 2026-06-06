@@ -5,8 +5,9 @@ import type {
   HeightmapInfo, HillshadeParameters, ElevationCalibration,
   ElevationFlag, SlopeArrow, RuggednessFlag, SwampMarker, MarkerDefaults, SwampMarkerDefaults,
   MapTool, FrameConfig, TitleConfig, CompassConfig, LegendConfig, MeasureBarConfig,
+  Road, RoadDefaults,
 } from '../types'
-import { defaultParameters, defaultStyle, defaultHillshadeParameters, defaultElevationCalibration, defaultFrameConfig, defaultTitleConfig, defaultCompassConfig, defaultLegendConfig, defaultMeasureBarConfig, TRI_COLORS } from '../types'
+import { defaultParameters, defaultStyle, defaultHillshadeParameters, defaultElevationCalibration, defaultFrameConfig, defaultTitleConfig, defaultCompassConfig, defaultLegendConfig, defaultMeasureBarConfig, TRI_COLORS, defaultRoadDefaults } from '../types'
 
 function calToMeters(value: number, cal: ElevationCalibration): number {
   if (cal.unitType === 'feet') return value * 0.3048
@@ -73,6 +74,12 @@ interface AppActions {
   setSlopeArrowsVisible: (v: boolean) => void
   setRuggednessFlagsVisible: (v: boolean) => void
   setSwampMarkersVisible: (v: boolean) => void
+  addRoad: (road: Road) => void
+  updateRoad: (id: string, updates: Partial<Omit<Road, 'id'>>) => void
+  removeRoad: (id: string) => void
+  setRoadsVisible: (v: boolean) => void
+  updateRoadDefaults: (d: Partial<RoadDefaults>) => void
+  setSelectedRoadId: (id: string | null) => void
   setRuggednessSeverityColor: (index: number, color: string) => void
   setMapTool: (tool: MapTool) => void
   setActiveTab: (tab: 'terrain' | 'hillshade') => void
@@ -123,6 +130,10 @@ const initialState: ProjectState = {
   slopeArrowDefaults: { boldness: 2, opacity: 1 },
   ruggednessFlagDefaults: { boldness: 2, opacity: 1 },
   swampMarkerDefaults: { boldness: 2, opacity: 1, color: '#388E3C' },
+  roads: [],
+  roadsVisible: true,
+  roadDefaults: defaultRoadDefaults,
+  selectedRoadId: null,
   mapTool: 'none',
   snapshotParams: null,
   snapshotStyle: null,
@@ -381,6 +392,19 @@ export const useStore = create<ProjectState & AppActions>()(
       setSlopeArrowsVisible: (v) => set({ slopeArrowsVisible: v }),
       setRuggednessFlagsVisible: (v) => set({ ruggednessFlagsVisible: v }),
       setSwampMarkersVisible: (v) => set({ swampMarkersVisible: v }),
+
+      addRoad: (road) => set((state) => ({ roads: [...state.roads, road], isDirty: true })),
+      updateRoad: (id, updates) => set((state) => ({
+        roads: state.roads.map((r) => r.id === id ? { ...r, ...updates } : r), isDirty: true,
+      })),
+      removeRoad: (id) => set((state) => ({
+        roads: state.roads.filter((r) => r.id !== id), isDirty: true,
+        selectedRoadId: state.selectedRoadId === id ? null : state.selectedRoadId,
+      })),
+      setRoadsVisible: (v) => set({ roadsVisible: v }),
+      updateRoadDefaults: (d) => set((state) => ({ roadDefaults: { ...state.roadDefaults, ...d } })),
+      setSelectedRoadId: (id) => set({ selectedRoadId: id }),
+
       setRuggednessSeverityColor: (index, color) =>
         set((state) => ({
           ruggednessSeverityColors: state.ruggednessSeverityColors.map((c, i) => i === index ? color : c),
@@ -455,6 +479,7 @@ export const useStore = create<ProjectState & AppActions>()(
           slopeArrowDefaults:     merge(current.slopeArrowDefaults,     ps.slopeArrowDefaults),
           ruggednessFlagDefaults: merge(current.ruggednessFlagDefaults, ps.ruggednessFlagDefaults),
           swampMarkerDefaults:    merge(current.swampMarkerDefaults,    ps.swampMarkerDefaults),
+          roadDefaults:           merge(current.roadDefaults,           ps.roadDefaults),
         }
       },
       partialize: (state) => ({
@@ -487,6 +512,9 @@ export const useStore = create<ProjectState & AppActions>()(
         slopeArrowDefaults: state.slopeArrowDefaults,
         ruggednessFlagDefaults: state.ruggednessFlagDefaults,
         swampMarkerDefaults: state.swampMarkerDefaults,
+        roads: state.roads,
+        roadsVisible: state.roadsVisible,
+        roadDefaults: state.roadDefaults,
       }),
     }
   )

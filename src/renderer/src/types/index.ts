@@ -117,6 +117,40 @@ export interface SwampMarkerDefaults extends MarkerDefaults {
   color: string
 }
 
+export type RoadType = 'dirt' | 'gravel' | 'paved'
+
+export interface Road {
+  id: string
+  type: RoadType
+  points: { x: number; y: number }[]
+  closed: boolean
+  label: string
+  color: string
+  trackWidth: number    // in heightmap coordinate units
+  strokeWeight: number  // in heightmap coordinate units
+  opacity: number
+}
+
+export interface RoadDefaults {
+  type: RoadType
+  dirtColor: string
+  gravelColor: string
+  pavedColor: string
+  trackWidthFraction: number  // multiplied by heightmap.width at placement
+  strokeWeightFraction: number  // multiplied by trackWidth
+  opacity: number
+}
+
+export const defaultRoadDefaults: RoadDefaults = {
+  type: 'dirt',
+  dirtColor: '#8B6914',
+  gravelColor: '#888888',
+  pavedColor: '#555555',
+  trackWidthFraction: 0.010,
+  strokeWeightFraction: 0.12,
+  opacity: 1,
+}
+
 export const TRI_THRESHOLDS = [0.004, 0.015, 0.04, 0.1] as const
 export const TRI_COLORS = ['#4CAF50', '#8BC34A', '#FFC107', '#FF5722', '#8B0000'] as const
 export const TRI_LABELS = ['Very Low', 'Low', 'Moderate', 'High', 'Extreme'] as const
@@ -141,7 +175,7 @@ export function triRangeLabel(i: number, elevRange?: number, unitAbbr?: string):
   return hi !== null ? `${lo}–${hi}` : `>${lo}`
 }
 
-export type MapTool = 'none' | 'elevation-flag' | 'slope-arrow' | 'measure-anchor' | 'ruggedness-flag' | 'swamp-marker'
+export type MapTool = 'none' | 'elevation-flag' | 'slope-arrow' | 'measure-anchor' | 'ruggedness-flag' | 'swamp-marker' | 'road'
 
 export type FrameBorderStyle = 'single' | 'double' | 'cartographic' | 'shadow' | 'ornate'
 
@@ -360,6 +394,10 @@ export interface ProjectState {
   slopeArrowDefaults: MarkerDefaults
   ruggednessFlagDefaults: MarkerDefaults
   swampMarkerDefaults: SwampMarkerDefaults
+  roads: Road[]
+  roadsVisible: boolean
+  roadDefaults: RoadDefaults
+  selectedRoadId: string | null
   mapTool: MapTool
   snapshotParams: ContourParameters | null
   snapshotStyle: ContourStyle | null

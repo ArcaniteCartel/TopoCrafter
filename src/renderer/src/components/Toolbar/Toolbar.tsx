@@ -76,6 +76,16 @@ function RuggednessIcon(): JSX.Element {
   )
 }
 
+function RoadIcon(): JSX.Element {
+  return (
+    <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.3">
+      <path d="M 2 13 C 4 9 5 7 8 6 C 11 5 12 3 14 2" strokeLinecap="round"/>
+      <path d="M 4 14 C 6 10 7 8 10 7 C 13 6 13 4 15 3" strokeLinecap="round" strokeDasharray="1.5 2.5"/>
+      <path d="M 1 12 C 3 8 4 6 7 5 C 10 4 11 2 13 1" strokeLinecap="round" strokeDasharray="1.5 2.5"/>
+    </svg>
+  )
+}
+
 export function Toolbar(): JSX.Element {
   const heightmap = useStore((s) => s.heightmap)
   const mapZoom = useStore((s) => s.mapZoom)
@@ -251,6 +261,17 @@ export function Toolbar(): JSX.Element {
                     aria-label="Measure anchor tool"
                   >
                     <AnchorIcon />
+                  </ActionIcon>
+                </Tooltip>
+                <Tooltip label="Add a road to the map" position="bottom" withArrow>
+                  <ActionIcon
+                    variant={mapTool === 'road' ? 'filled' : 'subtle'}
+                    size="md"
+                    disabled={!heightmap}
+                    onClick={() => setMapTool(mapTool === 'road' ? 'none' : 'road')}
+                    aria-label="Road tool"
+                  >
+                    <RoadIcon />
                   </ActionIcon>
                 </Tooltip>
               </Group>
