@@ -368,11 +368,12 @@ function toDMS(degrees: number, isLat: boolean): string {
 // Legend overlay
 // ---------------------------------------------------------------------------
 
-function LegendOverlay({ legend, frame, style, hasElevationFlags, hasSlopeArrows, measureBar, hasRuggednessFlags, ruggednessColorBySeverity, ruggednessSeverityColors, hasSwampMarkers, swampMarkerDefaults, elevationCalibration }: {
+function LegendOverlay({ legend, frame, style, hasElevationFlags, hasSlopeArrows, measureBar, hasRuggednessFlags, ruggednessColorBySeverity, ruggednessSeverityColors, hasSwampMarkers, swampMarkerDefaults, hasRoads, roadDefaults, elevationCalibration }: {
   legend: LegendConfig; frame: FrameConfig; style: ContourStyle
   hasElevationFlags: boolean; hasSlopeArrows: boolean; measureBar?: MeasureBarConfig
   hasRuggednessFlags: boolean; ruggednessColorBySeverity: boolean; ruggednessSeverityColors: string[]
   hasSwampMarkers: boolean; swampMarkerDefaults: { color: string; boldness: 1|2|3 }
+  hasRoads: boolean; roadDefaults: RoadDefaults
   elevationCalibration: ElevationCalibration
 }): JSX.Element | null {
   const hasGeoAnchor = legend.showGeoAnchor && !!measureBar?.enabled && !!measureBar?.geoEnabled
@@ -394,6 +395,7 @@ function LegendOverlay({ legend, frame, style, hasElevationFlags, hasSlopeArrows
     hasGeoAnchor                                      ? { type: 'geo-anchor', label: geoAnchorLabel            } : null,
     showColorBar                                      ? { type: 'ruggedness', label: legend.ruggednessFlagLabel} : null,
     legend.showSwampMarkers && hasSwampMarkers         ? { type: 'swamp',      label: legend.swampMarkerLabel   } : null,
+    legend.showRoads && hasRoads                       ? { type: 'roads',      label: legend.roadsLabel         } : null,
   ].filter(Boolean) as { type: string; label: string }[]
 
   if (items.length === 0) return null
@@ -489,6 +491,17 @@ function LegendOverlay({ legend, frame, style, hasElevationFlags, hasSlopeArrows
                 fill="none" stroke={color} strokeWidth={sw} strokeLinecap="round" />
               <path d={`M ${cx} ${base} Q ${cx+h*0.52} ${base-h*0.62} ${cx+h*0.64} ${base-h*0.18}`}
                 fill="none" stroke={color} strokeWidth={sw} strokeLinecap="round" />
+            </g>
+          )
+        } else if (type === 'roads') {
+          const rc = roadDefaults.dirtColor
+          const gap = rowH * 0.22
+          sample = (
+            <g>
+              <line x1={sx1} y1={midY - gap} x2={sx2} y2={midY - gap}
+                stroke={rc} strokeWidth={1.2} strokeLinecap="round" strokeDasharray="3 2" />
+              <line x1={sx1} y1={midY + gap} x2={sx2} y2={midY + gap}
+                stroke={rc} strokeWidth={1.2} strokeLinecap="round" strokeDasharray="3 2" />
             </g>
           )
         } else {
@@ -2030,6 +2043,8 @@ export function MapCanvas(): JSX.Element {
           ruggednessSeverityColors={ruggednessSeverityColors}
           hasSwampMarkers={swampMarkers.length > 0}
           swampMarkerDefaults={swampMarkerDefaults}
+          hasRoads={roads.length > 0}
+          roadDefaults={roadDefaults}
           elevationCalibration={elevationCalibration}
         />
       )}

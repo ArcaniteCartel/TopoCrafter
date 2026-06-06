@@ -22,6 +22,8 @@ interface Props {
   hasRuggednessFlags?: boolean
   hasSwampMarkers?: boolean
   swampMarkerColor?: string
+  hasRoads?: boolean
+  roadColor?: string
   ruggednessSeverityColors?: string[]
   measureBar?: MeasureBarConfig
   heightmap?: HeightmapInfo
@@ -43,6 +45,8 @@ export function OverlayExportModal({
   hasRuggednessFlags,
   hasSwampMarkers,
   swampMarkerColor,
+  hasRoads,
+  roadColor,
   ruggednessSeverityColors,
   measureBar,
   heightmap,
@@ -108,6 +112,8 @@ export function OverlayExportModal({
         hasRuggednessFlags,
         hasSwampMarkers,
         swampMarkerColor,
+        hasRoads,
+        roadColor,
         ruggednessSeverityColors,
         measureBar,
         calibration: elevationCalibration,

@@ -249,6 +249,7 @@ export interface LegendConfig {
   showGeoAnchor: boolean
   showRuggednessFlags: boolean
   showSwampMarkers: boolean
+  showRoads: boolean
   minorLabel: string
   majorLabel: string
   seaLevelLabel: string
@@ -257,6 +258,7 @@ export interface LegendConfig {
   geoAnchorLabel: string
   ruggednessFlagLabel: string
   swampMarkerLabel: string
+  roadsLabel: string
 }
 
 export const defaultLegendConfig: LegendConfig = {
@@ -273,6 +275,7 @@ export const defaultLegendConfig: LegendConfig = {
   showGeoAnchor: true,
   showRuggednessFlags: true,
   showSwampMarkers: true,
+  showRoads: true,
   minorLabel: 'Minor contour',
   majorLabel: 'Major contour',
   seaLevelLabel: 'Sea level',
@@ -281,6 +284,7 @@ export const defaultLegendConfig: LegendConfig = {
   geoAnchorLabel: 'Geo reference',
   ruggednessFlagLabel: 'Ruggedness index',
   swampMarkerLabel: 'Marsh / Swamp',
+  roadsLabel: 'Roads',
 }
 
 export interface CompassConfig {

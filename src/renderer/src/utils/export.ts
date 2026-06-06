@@ -17,6 +17,8 @@ export interface ExportLayerConfig {
   hasRuggednessFlags?: boolean
   hasSwampMarkers?: boolean
   swampMarkerColor?: string
+  hasRoads?: boolean
+  roadColor?: string
   ruggednessSeverityColors?: string[]
   measureBar?: MeasureBarConfig
   calibration?: ElevationCalibration
@@ -47,6 +49,8 @@ export interface OverlayExportConfig {
   hasRuggednessFlags?: boolean
   hasSwampMarkers?: boolean
   swampMarkerColor?: string
+  hasRoads?: boolean
+  roadColor?: string
   ruggednessSeverityColors?: string[]
   measureBar?: MeasureBarConfig
   calibration?: ElevationCalibration
@@ -683,6 +687,8 @@ function drawLegend(
   hasRuggednessFlags?: boolean,
   hasSwampMarkers?: boolean,
   swampMarkerColor?: string,
+  hasRoads?: boolean,
+  roadColor?: string,
   ruggednessSeverityColors?: string[],
   calibration?: ElevationCalibration,
 ): void {
@@ -702,6 +708,7 @@ function drawLegend(
     hasGeoAnchor ? { type: 'geo-anchor', label: `${legend.geoAnchorLabel}: ${toDMS(measureBar!.anchorLat, true)}, ${toDMS(measureBar!.anchorLon, false)}` } : null,
     showColorBar  ? { type: 'ruggedness', label: legend.ruggednessFlagLabel } : null,
     legend.showSwampMarkers && !!hasSwampMarkers ? { type: 'swamp', label: legend.swampMarkerLabel } : null,
+    legend.showRoads && !!hasRoads               ? { type: 'roads', label: legend.roadsLabel        } : null,
   ].filter(Boolean) as { type: string; label: string }[]
 
   if (items.length === 0) return
@@ -800,6 +807,14 @@ function drawLegend(
       ctx.beginPath(); ctx.moveTo(sfx, sfy); ctx.lineTo(sfx + s * 0.22, sfy - s * 0.88); ctx.stroke()
       ctx.beginPath(); ctx.moveTo(sfx, sfy); ctx.quadraticCurveTo(sfx - s * 0.52, sfy - s * 0.62, sfx - s * 0.64, sfy - s * 0.18); ctx.stroke()
       ctx.beginPath(); ctx.moveTo(sfx, sfy); ctx.quadraticCurveTo(sfx + s * 0.52, sfy - s * 0.62, sfx + s * 0.64, sfy - s * 0.18); ctx.stroke()
+    } else if (type === 'roads') {
+      const rc = roadColor ?? '#8B6914'
+      const gap = rowH * 0.22
+      ctx.strokeStyle = rc; ctx.lineWidth = 1.2; ctx.lineCap = 'round'
+      ctx.setLineDash([3, 2])
+      ctx.beginPath(); ctx.moveTo(sx1, midY - gap); ctx.lineTo(sx2, midY - gap); ctx.stroke()
+      ctx.beginPath(); ctx.moveTo(sx1, midY + gap); ctx.lineTo(sx2, midY + gap); ctx.stroke()
+      ctx.setLineDash([])
     } else {
       const w = sampW * 0.6, hw = w * 0.28, hl = w * 0.3
       const ax1 = sx1 + (sampW - w) / 2, ax2 = ax1 + w, ab = ax2 - hl
@@ -1034,7 +1049,7 @@ export async function exportOverlayToBlob(config: OverlayExportConfig): Promise<
   }
   if (withFrame && config.legend && config.contourStyle) {
     drawLegend(ctx, config.legend, config.frame!, config.contourStyle,
-      config.hasElevationFlags ?? false, config.hasSlopeArrows ?? false, totalW, totalH, config.measureBar, config.hasRuggednessFlags, config.hasSwampMarkers, config.swampMarkerColor, config.ruggednessSeverityColors, config.calibration)
+      config.hasElevationFlags ?? false, config.hasSlopeArrows ?? false, totalW, totalH, config.measureBar, config.hasRuggednessFlags, config.hasSwampMarkers, config.swampMarkerColor, config.hasRoads, config.roadColor, config.ruggednessSeverityColors, config.calibration)
   }
   if (withFrame && config.measureBar?.enabled && config.calibration && config.heightmap) {
     drawMeasureBars(ctx, config.measureBar, config.calibration, config.heightmap, config.frame!, totalW, totalH)
@@ -1109,7 +1124,7 @@ export async function exportToBlob(config: ExportLayerConfig): Promise<Blob> {
   }
   if (withFrame && config.legend && config.contourStyle) {
     drawLegend(ctx, config.legend, config.frame!, config.contourStyle,
-      config.hasElevationFlags ?? false, config.hasSlopeArrows ?? false, totalW, totalH, config.measureBar, config.hasRuggednessFlags, config.hasSwampMarkers, config.swampMarkerColor, config.ruggednessSeverityColors, config.calibration)
+      config.hasElevationFlags ?? false, config.hasSlopeArrows ?? false, totalW, totalH, config.measureBar, config.hasRuggednessFlags, config.hasSwampMarkers, config.swampMarkerColor, config.hasRoads, config.roadColor, config.ruggednessSeverityColors, config.calibration)
   }
   if (withFrame && config.measureBar?.enabled && config.calibration && config.heightmap) {
     drawMeasureBars(ctx, config.measureBar, config.calibration, config.heightmap, config.frame!, totalW, totalH)

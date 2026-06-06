@@ -1354,6 +1354,7 @@ export function ParameterPanel(): JSX.Element {
           { key: 'showGeoAnchor',    labelKey: 'geoAnchorLabel',      label: 'Geo reference',    requiresData: measureBar.enabled && measureBar.geoEnabled },
           { key: 'showRuggednessFlags', labelKey: 'ruggednessFlagLabel', label: 'Ruggedness index', requiresData: ruggednessFlags.length > 0 },
           { key: 'showSwampMarkers', labelKey: 'swampMarkerLabel', label: 'Swamp markers', requiresData: swampMarkers.length > 0 },
+          { key: 'showRoads',        labelKey: 'roadsLabel',        label: 'Roads',         requiresData: roads.length > 0 },
         ] as { key: keyof typeof legend; labelKey: keyof typeof legend; label: string; requiresData?: boolean }[]).map(({ key, labelKey, label, requiresData }) => (
           <Group key={key as string} gap="xs" align="center" wrap="nowrap">
             <Switch

@@ -108,6 +108,8 @@ export function Toolbar(): JSX.Element {
   const ruggednessFlags = useStore((s) => s.ruggednessFlags)
   const swampMarkers = useStore((s) => s.swampMarkers)
   const swampMarkerDefaults = useStore((s) => s.swampMarkerDefaults)
+  const roads = useStore((s) => s.roads)
+  const roadDefaults = useStore((s) => s.roadDefaults)
   const ruggednessSeverityColors = useStore((s) => s.ruggednessSeverityColors)
   const mapDisplaySize = useStore((s) => s.mapDisplaySize)
   const { themeId, setTheme } = useThemeStore()
@@ -137,6 +139,7 @@ export function Toolbar(): JSX.Element {
         legend, contourStyle: style, hasElevationFlags: elevationFlags.length > 0, hasSlopeArrows: slopeArrows.length > 0,
         hasRuggednessFlags: ruggednessFlags.length > 0, hasSwampMarkers: swampMarkers.length > 0,
         swampMarkerColor: swampMarkerDefaults.color,
+        hasRoads: roads.length > 0, roadColor: roadDefaults.dirtColor,
         ruggednessSeverityColors,
         measureBar, calibration: elevationCalibration, heightmap: heightmap ?? undefined,
       }
@@ -392,6 +395,8 @@ export function Toolbar(): JSX.Element {
           hasRuggednessFlags={ruggednessFlags.length > 0}
           hasSwampMarkers={swampMarkers.length > 0}
           swampMarkerColor={swampMarkerDefaults.color}
+          hasRoads={roads.length > 0}
+          roadColor={roadDefaults.dirtColor}
           ruggednessSeverityColors={ruggednessSeverityColors}
           measureBar={measureBar}
           heightmap={heightmap ?? undefined}
