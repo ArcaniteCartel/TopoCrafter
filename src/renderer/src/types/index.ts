@@ -179,7 +179,70 @@ export function triRangeLabel(i: number, elevRange?: number, unitAbbr?: string):
   return hi !== null ? `${lo}–${hi}` : `>${lo}`
 }
 
-export type MapTool = 'none' | 'elevation-flag' | 'slope-arrow' | 'measure-anchor' | 'ruggedness-flag' | 'swamp-marker' | 'road' | 'building'
+export type MapTool = 'none' | 'elevation-flag' | 'slope-arrow' | 'measure-anchor' | 'ruggedness-flag' | 'swamp-marker' | 'road' | 'building' | 'poi'
+
+export type PoiType = 'mine' | 'bridge' | 'cave'
+
+export interface PoiEntry {
+  id: string
+  x: number
+  y: number
+  type: PoiType
+  color: string
+  mineSize?: number          // meters
+  bridgeLength?: number      // meters
+  bridgeSeparation?: number  // meters
+  bridgeStrokeWeight?: number // px relative to heightmap coords
+  bridgeRotation?: number    // degrees
+  caveSize?: number          // meters
+  caveFontFamily?: string
+  label?: string
+  labelColor?: string
+  labelSizeM?: number        // meters
+  labelFontFamily?: string
+}
+
+export interface PoiDefaults {
+  type: PoiType
+  mineColor: string
+  mineSizeM: number
+  bridgeColor: string
+  bridgeLengthM: number
+  bridgeSeparationM: number
+  bridgeStrokeWeight: number
+  bridgeRotation: number
+  caveColor: string
+  caveSizeM: number
+  caveFontFamily: string
+  mineSignificanceLabel: string
+  bridgeSignificanceLabel: string
+  caveSignificanceLabel: string
+  labelColor: string
+  labelSizeM: number
+  labelFontFamily: string
+  label: string
+}
+
+export const defaultPoiDefaults: PoiDefaults = {
+  type: 'mine',
+  mineColor: '#2C2C2C',
+  mineSizeM: 8,
+  bridgeColor: '#444444',
+  bridgeLengthM: 30,
+  bridgeSeparationM: 6,
+  bridgeStrokeWeight: 2.5,
+  bridgeRotation: 0,
+  caveColor: '#1A1A3E',
+  caveSizeM: 12,
+  caveFontFamily: 'serif',
+  mineSignificanceLabel: '',
+  bridgeSignificanceLabel: '',
+  caveSignificanceLabel: '',
+  labelColor: '#2E2412',
+  labelSizeM: 8,
+  labelFontFamily: 'serif',
+  label: '',
+}
 
 export type BuildingShape = 'rectangle' | 'circle' | 'bow-sided' | 'apsidal' | 'courtyard' | 'L-shape' | 'U-shape' | 'octagon'
 
@@ -295,6 +358,7 @@ export interface LegendConfig {
   showTrails: boolean
   showBuildings: boolean
   buildingLabels: Record<string, string>  // key: `${templateId}::${color}`
+  showPois: boolean
   minorLabel: string
   majorLabel: string
   seaLevelLabel: string
@@ -331,6 +395,7 @@ export const defaultLegendConfig: LegendConfig = {
   showTrails: true,
   showBuildings: true,
   buildingLabels: {},
+  showPois: true,
   minorLabel: 'Minor contour',
   majorLabel: 'Major contour',
   seaLevelLabel: 'Sea level',
@@ -499,6 +564,10 @@ export interface ProjectState {
   buildings: BuildingEntry[]
   buildingsVisible: boolean
   buildingDefaults: BuildingDefaults
+  pois: PoiEntry[]
+  poisVisible: boolean
+  poiDefaults: PoiDefaults
+  selectedPoiId: string | null
   mapTool: MapTool
   snapshotParams: ContourParameters | null
   snapshotStyle: ContourStyle | null

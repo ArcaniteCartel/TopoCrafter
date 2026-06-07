@@ -4,7 +4,7 @@ import type { ContourMultiPolygon } from 'd3-contour'
 import { useStore } from '../../store/useStore'
 import { generateContours, contourToSvgPath } from '../../utils/contour'
 import type { ContourSet } from '../../utils/contour'
-import type { ElevationFlag, SlopeArrow, RuggednessFlag, SwampMarker, Road, BuildingEntry, BuildingShape, FrameConfig, CompassConfig, LegendConfig, ContourStyle, FramePosition, MeasureBarConfig, ElevationCalibration, HeightmapInfo, GridConfig } from '../../types'
+import type { ElevationFlag, SlopeArrow, RuggednessFlag, SwampMarker, Road, BuildingEntry, BuildingShape, PoiEntry, PoiType, PoiDefaults, FrameConfig, CompassConfig, LegendConfig, ContourStyle, FramePosition, MeasureBarConfig, ElevationCalibration, HeightmapInfo, GridConfig } from '../../types'
 import { BUILDING_CATALOG } from '../../data/buildings'
 import { TRI_THRESHOLDS, TRI_COLORS, TRI_LABELS, getTriSeverity, triRangeLabel } from '../../types'
 import { catmullRomPath, catmullRomOffsetPath } from '../../utils/spline'
@@ -46,6 +46,67 @@ function buildingPath(shape: BuildingShape, cx: number, cy: number, w: number, d
   }
 }
 
+function PoiMineSymbol({ cx, cy, sizePx, color, sw }: { cx: number; cy: number; sizePx: number; color: string; sw: number }): JSX.Element {
+  const s = sizePx / 2
+  const c = Math.SQRT2 / 2
+  const t = s * 0.32
+  // \ shaft
+  const ax1 = cx - s*c, ay1 = cy - s*c, ax2 = cx + s*c, ay2 = cy + s*c
+  // / shaft
+  const bx1 = cx - s*c, by1 = cy + s*c, bx2 = cx + s*c, by2 = cy - s*c
+  // ticks perpendicular to \ (= along / direction): at upper-left and lower-right ends
+  const t1x1 = ax1 - t*c, t1y1 = ay1 + t*c, t1x2 = ax1 + t*c, t1y2 = ay1 - t*c
+  const t2x1 = ax2 - t*c, t2y1 = ay2 + t*c, t2x2 = ax2 + t*c, t2y2 = ay2 - t*c
+  // ticks perpendicular to / (= along \ direction): at lower-left and upper-right ends
+  const t3x1 = bx1 - t*c, t3y1 = by1 - t*c, t3x2 = bx1 + t*c, t3y2 = by1 + t*c
+  const t4x1 = bx2 - t*c, t4y1 = by2 - t*c, t4x2 = bx2 + t*c, t4y2 = by2 + t*c
+  return (
+    <g stroke={color} strokeWidth={sw} strokeLinecap="round" fill="none" style={{ pointerEvents: 'none' }}>
+      <line x1={ax1} y1={ay1} x2={ax2} y2={ay2} />
+      <line x1={bx1} y1={by1} x2={bx2} y2={by2} />
+      <line x1={t1x1} y1={t1y1} x2={t1x2} y2={t1y2} />
+      <line x1={t2x1} y1={t2y1} x2={t2x2} y2={t2y2} />
+      <line x1={t3x1} y1={t3y1} x2={t3x2} y2={t3y2} />
+      <line x1={t4x1} y1={t4y1} x2={t4x2} y2={t4y2} />
+    </g>
+  )
+}
+
+function PoiBridgeSymbol({ cx, cy, lengthPx, sepPx, sw, color, rotation }: { cx: number; cy: number; lengthPx: number; sepPx: number; sw: number; color: string; rotation: number }): JSX.Element {
+  const hl = lengthPx / 2, hs = sepPx / 2
+  return (
+    <g transform={`rotate(${rotation},${cx},${cy})`} stroke={color} strokeWidth={sw} strokeLinecap="square" fill="none" style={{ pointerEvents: 'none' }}>
+      <line x1={cx - hl} y1={cy - hs} x2={cx + hl} y2={cy - hs} />
+      <line x1={cx - hl} y1={cy + hs} x2={cx + hl} y2={cy + hs} />
+    </g>
+  )
+}
+
+function renderPoiSymbol(poi: PoiEntry, pixelsPerMeter: number, opacity?: number): JSX.Element {
+  const sw = 1.2 + (pixelsPerMeter * 0.0005)
+  const op = opacity ?? 1
+  if (poi.type === 'mine') {
+    const sizePx = (poi.mineSize ?? 8) * pixelsPerMeter
+    return <g opacity={op}><PoiMineSymbol cx={poi.x} cy={poi.y} sizePx={sizePx} color={poi.color} sw={sw} /></g>
+  }
+  if (poi.type === 'bridge') {
+    const lengthPx = (poi.bridgeLength ?? 30) * pixelsPerMeter
+    const sepPx = (poi.bridgeSeparation ?? 6) * pixelsPerMeter
+    const bsw = poi.bridgeStrokeWeight ?? 2.5
+    return <g opacity={op}><PoiBridgeSymbol cx={poi.x} cy={poi.y} lengthPx={lengthPx} sepPx={sepPx} sw={bsw} color={poi.color} rotation={poi.bridgeRotation ?? 0} /></g>
+  }
+  // cave
+  const sizePx = (poi.caveSize ?? 12) * pixelsPerMeter
+  return (
+    <g opacity={op} style={{ pointerEvents: 'none' }}>
+      <text x={poi.x} y={poi.y} fontFamily={poi.caveFontFamily ?? 'serif'} fontSize={sizePx}
+        fill={poi.color} textAnchor="middle" dominantBaseline="middle">
+        Ω
+      </text>
+    </g>
+  )
+}
+
 function getLabelPoint(poly: ContourMultiPolygon): [number, number] | null {
   let best: [number, number][] | null = null
   for (const polygon of poly.coordinates) {
@@ -68,8 +129,8 @@ interface ContourState {
   maxElevation: number
 }
 
-type SelectedItem = { type: 'flag' | 'slope-arrow' | 'ruggedness-flag' | 'swamp-marker' | 'road' | 'building'; id: string }
-type DragRef = { type: 'flag' | 'slope-arrow' | 'ruggedness-flag' | 'swamp-marker' | 'building'; itemId: string; startX: number; startY: number; moved: boolean }
+type SelectedItem = { type: 'flag' | 'slope-arrow' | 'ruggedness-flag' | 'swamp-marker' | 'road' | 'building' | 'poi'; id: string }
+type DragRef = { type: 'flag' | 'slope-arrow' | 'ruggedness-flag' | 'swamp-marker' | 'building' | 'poi'; itemId: string; startX: number; startY: number; moved: boolean }
 type DragPos = { x: number; y: number; elevation?: number; angleDeg?: number; slopeDeg?: number; triNorm?: number }
 
 // ---------------------------------------------------------------------------
@@ -436,7 +497,7 @@ function GridCanvas({ grid, measureBar, calibration, mapW, mapH }: {
 // Legend overlay
 // ---------------------------------------------------------------------------
 
-function LegendOverlay({ legend, frame, style, hasElevationFlags, hasSlopeArrows, measureBar, hasRuggednessFlags, ruggednessColorBySeverity, ruggednessSeverityColors, hasSwampMarkers, swampMarkerDefaults, roads, roadDefaults, buildings, elevationCalibration }: {
+function LegendOverlay({ legend, frame, style, hasElevationFlags, hasSlopeArrows, measureBar, hasRuggednessFlags, ruggednessColorBySeverity, ruggednessSeverityColors, hasSwampMarkers, swampMarkerDefaults, roads, roadDefaults, buildings, pois, poiDefaults, elevationCalibration }: {
   legend: LegendConfig; frame: FrameConfig; style: ContourStyle
   hasElevationFlags: boolean; hasSlopeArrows: boolean; measureBar?: MeasureBarConfig
   hasRuggednessFlags: boolean; ruggednessColorBySeverity: boolean; ruggednessSeverityColors: string[]
@@ -444,6 +505,8 @@ function LegendOverlay({ legend, frame, style, hasElevationFlags, hasSlopeArrows
   roads: Road[]
   roadDefaults: { dirtColor: string; gravelColor: string; pavedColor: string; footpathColor: string; trailColor: string }
   buildings: BuildingEntry[]
+  pois: PoiEntry[]
+  poiDefaults: PoiDefaults
   elevationCalibration: ElevationCalibration
 }): JSX.Element | null {
   const hasGeoAnchor = legend.showGeoAnchor && !!measureBar?.enabled && !!measureBar?.geoEnabled
@@ -492,6 +555,25 @@ function LegendOverlay({ legend, frame, style, hasElevationFlags, hasSlopeArrows
     }
     for (const [label, shapes] of byLabel) {
       items.push({ type: 'building', label, color: shapes[0].color, buildingShapes: shapes })
+    }
+  }
+
+  // POI legend items: one entry per type present on the map
+  if (legend.showPois && pois.length > 0) {
+    const seen = new Set<PoiType>()
+    for (const p of pois) {
+      if (!seen.has(p.type)) {
+        seen.add(p.type)
+        const label = p.type === 'mine'
+          ? (poiDefaults.mineSignificanceLabel || 'Mine Entrance')
+          : p.type === 'bridge'
+          ? (poiDefaults.bridgeSignificanceLabel || 'Bridge')
+          : (poiDefaults.caveSignificanceLabel || 'Cave Entrance')
+        const color = p.type === 'mine' ? poiDefaults.mineColor
+          : p.type === 'bridge' ? poiDefaults.bridgeColor
+          : poiDefaults.caveColor
+        items.push({ type: `poi-${p.type}`, label, color })
+      }
     }
   }
 
@@ -661,6 +743,38 @@ function LegendOverlay({ legend, frame, style, hasElevationFlags, hasSlopeArrows
                 )
               })}
             </g>
+          )
+        } else if (type === 'poi-mine') {
+          const cx_m = sx1 + sampW / 2
+          const sz = rowH * 0.62
+          const s = sz / 2, c = Math.SQRT2 / 2, t = s * 0.32
+          const ax1 = cx_m - s*c, ay1 = midY - s*c, ax2 = cx_m + s*c, ay2 = midY + s*c
+          const bx1 = cx_m - s*c, by1 = midY + s*c, bx2 = cx_m + s*c, by2 = midY - s*c
+          sample = (
+            <g stroke={color} strokeWidth={0.9} strokeLinecap="round" fill="none">
+              <line x1={ax1} y1={ay1} x2={ax2} y2={ay2} />
+              <line x1={bx1} y1={by1} x2={bx2} y2={by2} />
+              <line x1={ax1 - t*c} y1={ay1 + t*c} x2={ax1 + t*c} y2={ay1 - t*c} />
+              <line x1={ax2 - t*c} y1={ay2 + t*c} x2={ax2 + t*c} y2={ay2 - t*c} />
+              <line x1={bx1 - t*c} y1={by1 - t*c} x2={bx1 + t*c} y2={by1 + t*c} />
+              <line x1={bx2 - t*c} y1={by2 - t*c} x2={bx2 + t*c} y2={by2 + t*c} />
+            </g>
+          )
+        } else if (type === 'poi-bridge') {
+          const gap = rowH * 0.24
+          sample = (
+            <g stroke={color} strokeWidth={1.4} strokeLinecap="square" fill="none">
+              <line x1={sx1} y1={midY - gap} x2={sx2} y2={midY - gap} />
+              <line x1={sx1} y1={midY + gap} x2={sx2} y2={midY + gap} />
+            </g>
+          )
+        } else if (type === 'poi-cave') {
+          sample = (
+            <text x={sx1 + sampW / 2} y={midY}
+              fontFamily={poiDefaults.caveFontFamily} fontSize={rowH * 0.78}
+              fill={color} textAnchor="middle" dominantBaseline="middle">
+              Ω
+            </text>
           )
         } else {
           const w = sampW * 0.6, hw = w * 0.28, hl = w * 0.3
@@ -1028,6 +1142,14 @@ export function MapCanvas(): JSX.Element {
   const removeBuilding = useStore((s) => s.removeBuilding)
   const buildingsVisible = useStore((s) => s.buildingsVisible)
   const buildingDefaults = useStore((s) => s.buildingDefaults)
+  const pois = useStore((s) => s.pois)
+  const addPoi = useStore((s) => s.addPoi)
+  const updatePoi = useStore((s) => s.updatePoi)
+  const removePoi = useStore((s) => s.removePoi)
+  const poisVisible = useStore((s) => s.poisVisible)
+  const poiDefaults = useStore((s) => s.poiDefaults)
+  const selectedPoiId = useStore((s) => s.selectedPoiId)
+  const setSelectedPoiId = useStore((s) => s.setSelectedPoiId)
   const elevationFlagDefaults = useStore((s) => s.elevationFlagDefaults)
   const slopeArrowDefaults = useStore((s) => s.slopeArrowDefaults)
   const ruggednessFlagDefaults = useStore((s) => s.ruggednessFlagDefaults)
@@ -1087,6 +1209,8 @@ export function MapCanvas(): JSX.Element {
   roadDefaultsRef.current = roadDefaults
   const buildingDefaultsRef = useRef(buildingDefaults)
   buildingDefaultsRef.current = buildingDefaults
+  const poiDefaultsRef = useRef(poiDefaults)
+  poiDefaultsRef.current = poiDefaults
   const inProgressPtsRef = useRef(inProgressPts)
   inProgressPtsRef.current = inProgressPts
 
@@ -1200,6 +1324,7 @@ export function MapCanvas(): JSX.Element {
         }
         setMapTool('none')
         setSelectedItem(null)
+        setSelectedPoiId(null)
         dragRef.current = null
         setDragPos(null)
         setHoverPos(null)
@@ -1215,7 +1340,9 @@ export function MapCanvas(): JSX.Element {
         else if (type === 'swamp-marker') removeSwampMarker(id)
         else if (type === 'road') { removeRoad(id); setSelectedRoadId(null) }
         else if (type === 'building') removeBuilding(id)
+        else if (type === 'poi') removePoi(id)
         setSelectedItem(null)
+        setSelectedPoiId(null)
       }
     }
     document.addEventListener('keydown', handleKeyDown)
@@ -1266,10 +1393,13 @@ export function MapCanvas(): JSX.Element {
             updateSwampMarker(itemId, { x: pt.x, y: pt.y })
           } else if (type === 'building') {
             updateBuilding(itemId, { x: pt.x, y: pt.y })
+          } else if (type === 'poi') {
+            updatePoi(itemId, { x: pt.x, y: pt.y })
           }
         }
       } else {
         setSelectedItem({ type, id: itemId })
+        setSelectedPoiId(type === 'poi' ? itemId : null)
       }
       dragRef.current = null
       setDragPos(null)
@@ -1280,7 +1410,7 @@ export function MapCanvas(): JSX.Element {
       document.removeEventListener('mousemove', onMove)
       document.removeEventListener('mouseup', onUp)
     }
-  }, [getSvgPoint, computeElevationAt, computeSlopeAt, computeTriAt, updateElevationFlag, updateSlopeArrow, updateRuggednessFlag, updateSwampMarker, updateBuilding])
+  }, [getSvgPoint, computeElevationAt, computeSlopeAt, computeTriAt, updateElevationFlag, updateSlopeArrow, updateRuggednessFlag, updateSwampMarker, updateBuilding, updatePoi, setSelectedPoiId])
 
   // Road anchor point drag — document-level so drag continues outside SVG
   useEffect(() => {
@@ -1367,6 +1497,8 @@ export function MapCanvas(): JSX.Element {
       setHoverPos({ x: pt.x, y: pt.y })
     } else if (mapTool === 'building') {
       setHoverPos({ x: pt.x, y: pt.y })
+    } else if (mapTool === 'poi') {
+      setHoverPos({ x: pt.x, y: pt.y })
     }
   }
 
@@ -1375,7 +1507,7 @@ export function MapCanvas(): JSX.Element {
     setRoadHoverPt(null)
   }
 
-  function handleItemMouseDown(e: React.MouseEvent, type: 'flag' | 'slope-arrow' | 'ruggedness-flag' | 'swamp-marker' | 'building', itemId: string) {
+  function handleItemMouseDown(e: React.MouseEvent, type: 'flag' | 'slope-arrow' | 'ruggedness-flag' | 'swamp-marker' | 'building' | 'poi', itemId: string) {
     e.stopPropagation()
     const pt = getSvgPoint(e.clientX, e.clientY)
     if (!pt) return
@@ -1410,6 +1542,7 @@ export function MapCanvas(): JSX.Element {
       return
     }
     setSelectedItem(null)
+    setSelectedPoiId(null)
   }
 
   // Fires for background mouseup — drag/select is handled by the document listener
@@ -1456,6 +1589,25 @@ export function MapCanvas(): JSX.Element {
         opacity: d.opacity,
         templateId: d.buildingTemplateId,
       })
+    } else if (mapTool === 'poi') {
+      const d = poiDefaultsRef.current
+      const entry: PoiEntry = {
+        id: crypto.randomUUID(),
+        x: pt.x,
+        y: pt.y,
+        type: d.type,
+        color: d.type === 'mine' ? d.mineColor : d.type === 'bridge' ? d.bridgeColor : d.caveColor,
+        ...(d.type === 'mine' ? { mineSize: d.mineSizeM } : {}),
+        ...(d.type === 'bridge' ? {
+          bridgeLength: d.bridgeLengthM,
+          bridgeSeparation: d.bridgeSeparationM,
+          bridgeStrokeWeight: d.bridgeStrokeWeight,
+          bridgeRotation: d.bridgeRotation,
+        } : {}),
+        ...(d.type === 'cave' ? { caveSize: d.caveSizeM, caveFontFamily: d.caveFontFamily } : {}),
+        ...(d.label ? { label: d.label, labelColor: d.labelColor, labelSizeM: d.labelSizeM, labelFontFamily: d.labelFontFamily } : {}),
+      }
+      addPoi(entry)
     }
   }
 
@@ -1483,8 +1635,8 @@ export function MapCanvas(): JSX.Element {
     ? getLabelPoint(contourState.contourSet.seaLevelPath)
     : null
 
-  const toolActive = mapTool === 'elevation-flag' || mapTool === 'slope-arrow' || mapTool === 'measure-anchor' || mapTool === 'ruggedness-flag' || mapTool === 'swamp-marker' || mapTool === 'road' || mapTool === 'building'
-  const flagSvgInteractive = toolActive || elevationFlags.length > 0 || slopeArrows.length > 0 || ruggednessFlags.length > 0 || swampMarkers.length > 0 || roads.length > 0 || buildings.length > 0
+  const toolActive = mapTool === 'elevation-flag' || mapTool === 'slope-arrow' || mapTool === 'measure-anchor' || mapTool === 'ruggedness-flag' || mapTool === 'swamp-marker' || mapTool === 'road' || mapTool === 'building' || mapTool === 'poi'
+  const flagSvgInteractive = toolActive || elevationFlags.length > 0 || slopeArrows.length > 0 || ruggednessFlags.length > 0 || swampMarkers.length > 0 || roads.length > 0 || buildings.length > 0 || pois.length > 0
 
   const pixelsPerMeter = (() => {
     if (!heightmap || !elevationCalibration.mapWidth || elevationCalibration.mapWidth <= 0) {
@@ -2090,6 +2242,53 @@ export function MapCanvas(): JSX.Element {
             )
           })}
 
+          {/* Points of Interest */}
+          {poisVisible && pois.map((poi) => {
+            const isDragging = dragPos !== null && dragRef.current?.itemId === poi.id && dragRef.current.type === 'poi'
+            const fx = isDragging ? dragPos!.x : poi.x
+            const fy = isDragging ? dragPos!.y : poi.y
+            const isSelected = selectedPoiId === poi.id
+            const displayPoi: PoiEntry = { ...poi, x: fx, y: fy }
+            const labelSizePx = (poi.labelSizeM ?? 8) * pixelsPerMeter
+            const symbolRadius = poi.type === 'mine'
+              ? (poi.mineSize ?? 8) * pixelsPerMeter * 0.55
+              : poi.type === 'bridge'
+              ? Math.max((poi.bridgeSeparation ?? 6) * pixelsPerMeter * 0.6 + (poi.bridgeStrokeWeight ?? 2.5),
+                         (poi.bridgeLength ?? 30) * pixelsPerMeter * 0.5)
+              : (poi.caveSize ?? 12) * pixelsPerMeter * 0.6
+            const hitR = Math.max(symbolRadius * 1.1, 8)
+            return (
+              <g key={poi.id}
+                onMouseDown={(e) => handleItemMouseDown(e, 'poi', poi.id)}
+                style={{ cursor: isSelected ? 'grab' : 'pointer' }}>
+                {/* Transparent hit area — SVG stroked lines have no filled area to click */}
+                <circle cx={fx} cy={fy} r={hitR} fill="transparent" />
+                {renderPoiSymbol(displayPoi, pixelsPerMeter)}
+                {poi.label && (
+                  <text
+                    x={fx} y={fy + symbolRadius + labelSizePx * 0.3}
+                    fontFamily={poi.labelFontFamily ?? 'serif'}
+                    fontSize={labelSizePx}
+                    fill={poi.labelColor ?? '#2E2412'}
+                    textAnchor="middle" dominantBaseline="hanging"
+                    style={{ pointerEvents: 'none' }}>
+                    {poi.label}
+                  </text>
+                )}
+                {isSelected && (
+                  <>
+                    <circle cx={fx} cy={fy} r={hitR + 2}
+                      fill="none" stroke="rgba(0,0,0,0.55)" strokeWidth={3}
+                      vectorEffect="non-scaling-stroke" />
+                    <circle cx={fx} cy={fy} r={hitR + 2}
+                      fill="none" stroke="white" strokeWidth={1.5} strokeDasharray="5 4"
+                      vectorEffect="non-scaling-stroke" />
+                  </>
+                )}
+              </g>
+            )
+          })}
+
           {/* Measure anchor crosshair */}
           {(() => {
             const showAnchor = mapTool === 'measure-anchor'
@@ -2283,6 +2482,18 @@ export function MapCanvas(): JSX.Element {
                 </g>
               )
             }
+            if (mapTool === 'poi') {
+              const d = poiDefaultsRef.current
+              const hoverEntry: PoiEntry = {
+                id: '', x: hoverPos.x, y: hoverPos.y, type: d.type,
+                color: d.type === 'mine' ? d.mineColor : d.type === 'bridge' ? d.bridgeColor : d.caveColor,
+                mineSize: d.mineSizeM,
+                bridgeLength: d.bridgeLengthM, bridgeSeparation: d.bridgeSeparationM,
+                bridgeStrokeWeight: d.bridgeStrokeWeight, bridgeRotation: d.bridgeRotation,
+                caveSize: d.caveSizeM, caveFontFamily: d.caveFontFamily,
+              }
+              return <g opacity={0.7}>{renderPoiSymbol(hoverEntry, pixelsPerMeter)}</g>
+            }
             if (mapTool === 'slope-arrow' && hoverPos.angleDeg !== undefined && hoverPos.slopeDeg !== undefined) {
               const angleRad = (hoverPos.angleDeg * Math.PI) / 180
               const cos = Math.cos(angleRad)
@@ -2365,6 +2576,8 @@ export function MapCanvas(): JSX.Element {
           roads={roads}
           roadDefaults={roadDefaults}
           buildings={buildings}
+          pois={pois}
+          poiDefaults={poiDefaults}
           elevationCalibration={elevationCalibration}
         />
       )}

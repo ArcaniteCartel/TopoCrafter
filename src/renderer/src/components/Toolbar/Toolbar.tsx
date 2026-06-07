@@ -86,6 +86,20 @@ function RoadIcon(): JSX.Element {
   )
 }
 
+function PoiIcon(): JSX.Element {
+  return (
+    <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round">
+      {/* X crossed lines with end ticks — mine / POI symbol */}
+      <line x1="3" y1="3" x2="13" y2="13" />
+      <line x1="13" y1="3" x2="3" y2="13" />
+      <line x1="1.5" y1="4.5" x2="4.5" y2="1.5" />
+      <line x1="11.5" y1="14.5" x2="14.5" y2="11.5" />
+      <line x1="1.5" y1="11.5" x2="4.5" y2="14.5" />
+      <line x1="11.5" y1="1.5" x2="14.5" y2="4.5" />
+    </svg>
+  )
+}
+
 function BuildingIcon(): JSX.Element {
   return (
     <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor" fillOpacity={0.7} stroke="currentColor" strokeWidth="1.1">
@@ -308,6 +322,17 @@ export function Toolbar(): JSX.Element {
                     aria-label="Building tool"
                   >
                     <BuildingIcon />
+                  </ActionIcon>
+                </Tooltip>
+                <Tooltip label="Place a point of interest (mine, bridge, cave)" position="bottom" withArrow>
+                  <ActionIcon
+                    variant={mapTool === 'poi' ? 'filled' : 'subtle'}
+                    size="md"
+                    disabled={!heightmap}
+                    onClick={() => setMapTool(mapTool === 'poi' ? 'none' : 'poi')}
+                    aria-label="Points of interest tool"
+                  >
+                    <PoiIcon />
                   </ActionIcon>
                 </Tooltip>
               </Group>

@@ -6,8 +6,9 @@ import type {
   ElevationFlag, SlopeArrow, RuggednessFlag, SwampMarker, MarkerDefaults, SwampMarkerDefaults,
   MapTool, FrameConfig, TitleConfig, CompassConfig, LegendConfig, MeasureBarConfig,
   Road, RoadDefaults, GridConfig, BuildingEntry, BuildingDefaults,
+  PoiEntry, PoiDefaults,
 } from '../types'
-import { defaultParameters, defaultStyle, defaultHillshadeParameters, defaultElevationCalibration, defaultFrameConfig, defaultTitleConfig, defaultCompassConfig, defaultLegendConfig, defaultMeasureBarConfig, TRI_COLORS, defaultRoadDefaults, defaultGridConfig, defaultBuildingDefaults } from '../types'
+import { defaultParameters, defaultStyle, defaultHillshadeParameters, defaultElevationCalibration, defaultFrameConfig, defaultTitleConfig, defaultCompassConfig, defaultLegendConfig, defaultMeasureBarConfig, TRI_COLORS, defaultRoadDefaults, defaultGridConfig, defaultBuildingDefaults, defaultPoiDefaults } from '../types'
 
 function calToMeters(value: number, cal: ElevationCalibration): number {
   if (cal.unitType === 'feet') return value * 0.3048
@@ -85,6 +86,12 @@ interface AppActions {
   removeBuilding: (id: string) => void
   setBuildingsVisible: (v: boolean) => void
   updateBuildingDefaults: (d: Partial<BuildingDefaults>) => void
+  addPoi: (p: PoiEntry) => void
+  updatePoi: (id: string, updates: Partial<Omit<PoiEntry, 'id'>>) => void
+  removePoi: (id: string) => void
+  setPoisVisible: (v: boolean) => void
+  updatePoiDefaults: (d: Partial<PoiDefaults>) => void
+  setSelectedPoiId: (id: string | null) => void
   setRuggednessSeverityColor: (index: number, color: string) => void
   setMapTool: (tool: MapTool) => void
   setActiveTab: (tab: 'terrain' | 'hillshade') => void
@@ -143,6 +150,10 @@ const initialState: ProjectState = {
   buildings: [],
   buildingsVisible: true,
   buildingDefaults: defaultBuildingDefaults,
+  pois: [],
+  poisVisible: true,
+  poiDefaults: defaultPoiDefaults,
+  selectedPoiId: null,
   mapTool: 'none',
   snapshotParams: null,
   snapshotStyle: null,
@@ -425,6 +436,18 @@ export const useStore = create<ProjectState & AppActions>()(
       setBuildingsVisible: (v) => set({ buildingsVisible: v }),
       updateBuildingDefaults: (d) => set((state) => ({ buildingDefaults: { ...state.buildingDefaults, ...d } })),
 
+      addPoi: (p) => set((state) => ({ pois: [...state.pois, p], isDirty: true })),
+      updatePoi: (id, updates) => set((state) => ({
+        pois: state.pois.map((p) => p.id === id ? { ...p, ...updates } : p), isDirty: true,
+      })),
+      removePoi: (id) => set((state) => ({
+        pois: state.pois.filter((p) => p.id !== id), isDirty: true,
+        selectedPoiId: state.selectedPoiId === id ? null : state.selectedPoiId,
+      })),
+      setPoisVisible: (v) => set({ poisVisible: v }),
+      updatePoiDefaults: (d) => set((state) => ({ poiDefaults: { ...state.poiDefaults, ...d } })),
+      setSelectedPoiId: (id) => set({ selectedPoiId: id }),
+
       setRuggednessSeverityColor: (index, color) =>
         set((state) => ({
           ruggednessSeverityColors: state.ruggednessSeverityColors.map((c, i) => i === index ? color : c),
@@ -504,6 +527,7 @@ export const useStore = create<ProjectState & AppActions>()(
           swampMarkerDefaults:    merge(current.swampMarkerDefaults,    ps.swampMarkerDefaults),
           roadDefaults:           merge(current.roadDefaults,           ps.roadDefaults),
           buildingDefaults:       merge(current.buildingDefaults,       ps.buildingDefaults),
+          poiDefaults:            merge(current.poiDefaults,            ps.poiDefaults),
           grid:                   merge(current.grid,                   ps.grid),
         }
       },
@@ -543,6 +567,9 @@ export const useStore = create<ProjectState & AppActions>()(
         buildings: state.buildings,
         buildingsVisible: state.buildingsVisible,
         buildingDefaults: state.buildingDefaults,
+        pois: state.pois,
+        poisVisible: state.poisVisible,
+        poiDefaults: state.poiDefaults,
         grid: state.grid,
       }),
     }
