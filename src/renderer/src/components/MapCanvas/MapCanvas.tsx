@@ -470,25 +470,25 @@ function LegendOverlay({ legend, frame, style, hasElevationFlags, hasSlopeArrows
     legend.showPavedRoads && roads.some(r => r.type === 'paved')   ? { type: 'road-paved',   label: legend.pavedRoadsLabel, color: roadDefaults.pavedColor   } : null,
     legend.showFootpaths && roads.some(r => r.type === 'footpath') ? { type: 'road-footpath',label: legend.footpathsLabel,  color: roadDefaults.footpathColor} : null,
     legend.showTrails && roads.some(r => r.type === 'trail')       ? { type: 'road-trail',   label: legend.trailsLabel,     color: roadDefaults.trailColor   } : null,
-  ].filter(Boolean) as { type: string; label: string; color: string; buildingShapes?: Array<{ shape: BuildingShape; color: string }> }[]
+  ].filter(Boolean) as { type: string; label: string; color: string; buildingShapes?: Array<{ shape: BuildingShape; color: string; widthM: number; depthM: number }> }[]
 
   // Building legend items: group by (templateId, color), then merge same-label entries
   if (legend.showBuildings && buildings.length > 0) {
-    const seen = new Map<string, { shape: BuildingShape; color: string; label: string }>()
+    const seen = new Map<string, { shape: BuildingShape; color: string; label: string; widthM: number; depthM: number }>()
     for (const b of buildings) {
       const tid = b.templateId ?? ''
       const key = `${tid}::${b.color}`
       if (!seen.has(key)) {
         const tpl = BUILDING_CATALOG.flatMap(g => g.buildings).find(t => t.id === tid)
         const label = legend.buildingLabels[key] || tpl?.name || tid || b.shape
-        seen.set(key, { shape: b.shape, color: b.color, label })
+        seen.set(key, { shape: b.shape, color: b.color, label, widthM: b.widthM, depthM: b.depthM })
       }
     }
     // Group entries that share the same label into one row
-    const byLabel = new Map<string, Array<{ shape: BuildingShape; color: string }>>()
-    for (const { shape, color, label } of seen.values()) {
+    const byLabel = new Map<string, Array<{ shape: BuildingShape; color: string; widthM: number; depthM: number }>>()
+    for (const { shape, color, label, widthM, depthM } of seen.values()) {
       if (!byLabel.has(label)) byLabel.set(label, [])
-      byLabel.get(label)!.push({ shape, color })
+      byLabel.get(label)!.push({ shape, color, widthM, depthM })
     }
     for (const [label, shapes] of byLabel) {
       items.push({ type: 'building', label, color: shapes[0].color, buildingShapes: shapes })
@@ -524,7 +524,20 @@ function LegendOverlay({ legend, frame, style, hasElevationFlags, hasSlopeArrows
     <svg width={boxW} height={boxH} style={getElementPositionStyle(legend.position, frame, boxW, boxH, edgeGap)} overflow="visible">
       <rect x={0.5} y={0.5} width={boxW-1} height={boxH-1}
         fill={frame.marginColor} stroke={legend.color} strokeWidth={0.5} rx={1.5} />
-      {items.map(({ type, label, color, buildingShapes }, i) => {
+      {(() => {
+        // One shared scale for all building icons — largest building fills the box,
+        // all others are drawn proportionally smaller.
+        const bBh = rowH * 0.72
+        let buildingGlobalScale = 1
+        const allBuildingShapes = items.flatMap(it => it.buildingShapes ?? [])
+        if (allBuildingShapes.length > 0) {
+          let gs = Infinity
+          for (const { widthM, depthM } of allBuildingShapes) {
+            gs = Math.min(gs, sampW * 0.88 / widthM, bBh / depthM)
+          }
+          buildingGlobalScale = isFinite(gs) ? gs : 1
+        }
+        return items.map(({ type, label, color, buildingShapes }, i) => {
         const col = Math.floor(i / rows)
         const row = i % rows
         const sx1 = pad + col * (colW + colGap)
@@ -633,13 +646,13 @@ function LegendOverlay({ legend, frame, style, hasElevationFlags, hasSlopeArrows
         } else if (type === 'building' && buildingShapes && buildingShapes.length > 0) {
           const n = buildingShapes.length
           const slotW = sampW / n
-          const bh = rowH * 0.72
           sample = (
             <g>
-              {buildingShapes.map(({ shape, color: bc }, si) => {
+              {buildingShapes.map(({ shape, color: bc, widthM, depthM }, si) => {
                 const cx = sx1 + si * slotW + slotW / 2
-                const bw = slotW * 0.88
-                const d = buildingPath(shape, cx, midY, bw, bh)
+                const pw = widthM * buildingGlobalScale
+                const pd = depthM * buildingGlobalScale
+                const d = buildingPath(shape, cx, midY, pw, pd)
                 return (
                   <path key={si} d={d}
                     fill={bc} fillOpacity={0.6}
@@ -668,7 +681,8 @@ function LegendOverlay({ legend, frame, style, hasElevationFlags, hasSlopeArrows
             </text>
           </g>
         )
-      })}
+      })
+    })()}
 
       {/* TRI severity color bar */}
       {showColorBar && (() => {
