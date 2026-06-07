@@ -1742,7 +1742,8 @@ export function ParameterPanel(): JSX.Element {
           { key: 'showPavedRoads',   labelKey: 'pavedRoadsLabel',   label: 'Paved road',    requiresData: roads.some(r => r.type === 'paved') },
           { key: 'showFootpaths',    labelKey: 'footpathsLabel',    label: 'Footpath',      requiresData: roads.some(r => r.type === 'footpath') },
           { key: 'showTrails',       labelKey: 'trailsLabel',       label: 'Trail',         requiresData: roads.some(r => r.type === 'trail') },
-        ] as { key: keyof typeof legend; labelKey: keyof typeof legend; label: string; requiresData?: boolean }[]).map(({ key, labelKey, label, requiresData }) => (
+          { key: 'showBuildings',                                   label: 'Buildings',     requiresData: buildings.length > 0 },
+        ] as { key: keyof typeof legend; labelKey?: keyof typeof legend; label: string; requiresData?: boolean }[]).map(({ key, labelKey, label, requiresData }) => (
           <Group key={key as string} gap="xs" align="center" wrap="nowrap">
             <Switch
               size="xs"
@@ -1752,16 +1753,58 @@ export function ParameterPanel(): JSX.Element {
               label={label}
               style={{ flex: '0 0 auto' }}
             />
-            <TextInput
-              size="xs"
-              placeholder={label}
-              value={legend[labelKey] as string}
-              onChange={(e) => updateLegend({ [labelKey]: e.currentTarget.value })}
-              disabled={!frame.enabled || !legend.enabled || !(legend[key] as boolean)}
-              style={{ flex: 1, minWidth: 0 }}
-            />
+            {labelKey && (
+              <TextInput
+                size="xs"
+                placeholder={label}
+                value={legend[labelKey] as string}
+                onChange={(e) => updateLegend({ [labelKey!]: e.currentTarget.value })}
+                disabled={!frame.enabled || !legend.enabled || !(legend[key] as boolean)}
+                style={{ flex: 1, minWidth: 0 }}
+              />
+            )}
           </Group>
         ))}
+
+        {/* Dynamic building label fields — one per unique (templateId, color) on the map */}
+        {legend.showBuildings && buildings.length > 0 && frame.enabled && legend.enabled && (() => {
+          const seen = new Map<string, { shape: BuildingShape; color: string; tplName: string }>()
+          for (const b of buildings) {
+            const tid = b.templateId ?? ''
+            const key = `${tid}::${b.color}`
+            if (!seen.has(key)) {
+              const tpl = BUILDING_CATALOG.flatMap(g => g.buildings).find(t => t.id === tid)
+              seen.set(key, { shape: b.shape, color: b.color, tplName: tpl?.name ?? tid ?? b.shape })
+            }
+          }
+          return (
+            <Stack gap={6} pl={4}>
+              <Text size="xs" c="dimmed">Building legend labels</Text>
+              {[...seen.entries()].map(([key, { shape, color, tplName }]) => (
+                <Group key={key} gap="xs" align="center" wrap="nowrap">
+                  <svg width={32} height={20} style={{ flexShrink: 0, overflow: 'visible' }}>
+                    <path d={buildingPreviewPath(shape, 16, 10, 28, 17)}
+                      fill={color} fillOpacity={0.6}
+                      stroke={color} strokeWidth={1}
+                      fillRule={shape === 'courtyard' ? 'evenodd' : undefined} />
+                  </svg>
+                  <TextInput
+                    size="xs"
+                    placeholder={tplName}
+                    value={legend.buildingLabels[key] ?? ''}
+                    onChange={(e) => {
+                      const val = e.currentTarget.value
+                      const newLabels = { ...legend.buildingLabels }
+                      if (val) { newLabels[key] = val } else { delete newLabels[key] }
+                      updateLegend({ buildingLabels: newLabels })
+                    }}
+                    style={{ flex: 1, minWidth: 0 }}
+                  />
+                </Group>
+              ))}
+            </Stack>
+          )
+        })()}
           <Divider label="Measure bars" labelPosition="left" />
           <Switch
             label="Show measure bars"

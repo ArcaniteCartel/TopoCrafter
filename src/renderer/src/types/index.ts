@@ -193,6 +193,7 @@ export interface BuildingEntry {
   shape: BuildingShape
   color: string
   opacity: number
+  templateId: string
 }
 
 export interface BuildingDefaults {
@@ -292,6 +293,8 @@ export interface LegendConfig {
   showPavedRoads: boolean
   showFootpaths: boolean
   showTrails: boolean
+  showBuildings: boolean
+  buildingLabels: Record<string, string>  // key: `${templateId}::${color}`
   minorLabel: string
   majorLabel: string
   seaLevelLabel: string
@@ -326,6 +329,8 @@ export const defaultLegendConfig: LegendConfig = {
   showPavedRoads: true,
   showFootpaths: true,
   showTrails: true,
+  showBuildings: true,
+  buildingLabels: {},
   minorLabel: 'Minor contour',
   majorLabel: 'Major contour',
   seaLevelLabel: 'Sea level',

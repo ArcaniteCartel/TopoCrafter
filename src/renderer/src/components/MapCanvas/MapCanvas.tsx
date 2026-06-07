@@ -436,13 +436,14 @@ function GridCanvas({ grid, measureBar, calibration, mapW, mapH }: {
 // Legend overlay
 // ---------------------------------------------------------------------------
 
-function LegendOverlay({ legend, frame, style, hasElevationFlags, hasSlopeArrows, measureBar, hasRuggednessFlags, ruggednessColorBySeverity, ruggednessSeverityColors, hasSwampMarkers, swampMarkerDefaults, roads, roadDefaults, elevationCalibration }: {
+function LegendOverlay({ legend, frame, style, hasElevationFlags, hasSlopeArrows, measureBar, hasRuggednessFlags, ruggednessColorBySeverity, ruggednessSeverityColors, hasSwampMarkers, swampMarkerDefaults, roads, roadDefaults, buildings, elevationCalibration }: {
   legend: LegendConfig; frame: FrameConfig; style: ContourStyle
   hasElevationFlags: boolean; hasSlopeArrows: boolean; measureBar?: MeasureBarConfig
   hasRuggednessFlags: boolean; ruggednessColorBySeverity: boolean; ruggednessSeverityColors: string[]
   hasSwampMarkers: boolean; swampMarkerDefaults: { color: string; boldness: 1|2|3 }
   roads: Road[]
   roadDefaults: { dirtColor: string; gravelColor: string; pavedColor: string; footpathColor: string; trailColor: string }
+  buildings: BuildingEntry[]
   elevationCalibration: ElevationCalibration
 }): JSX.Element | null {
   const hasGeoAnchor = legend.showGeoAnchor && !!measureBar?.enabled && !!measureBar?.geoEnabled
@@ -469,7 +470,30 @@ function LegendOverlay({ legend, frame, style, hasElevationFlags, hasSlopeArrows
     legend.showPavedRoads && roads.some(r => r.type === 'paved')   ? { type: 'road-paved',   label: legend.pavedRoadsLabel, color: roadDefaults.pavedColor   } : null,
     legend.showFootpaths && roads.some(r => r.type === 'footpath') ? { type: 'road-footpath',label: legend.footpathsLabel,  color: roadDefaults.footpathColor} : null,
     legend.showTrails && roads.some(r => r.type === 'trail')       ? { type: 'road-trail',   label: legend.trailsLabel,     color: roadDefaults.trailColor   } : null,
-  ].filter(Boolean) as { type: string; label: string; color: string }[]
+  ].filter(Boolean) as { type: string; label: string; color: string; buildingShapes?: Array<{ shape: BuildingShape; color: string }> }[]
+
+  // Building legend items: group by (templateId, color), then merge same-label entries
+  if (legend.showBuildings && buildings.length > 0) {
+    const seen = new Map<string, { shape: BuildingShape; color: string; label: string }>()
+    for (const b of buildings) {
+      const tid = b.templateId ?? ''
+      const key = `${tid}::${b.color}`
+      if (!seen.has(key)) {
+        const tpl = BUILDING_CATALOG.flatMap(g => g.buildings).find(t => t.id === tid)
+        const label = legend.buildingLabels[key] || tpl?.name || tid || b.shape
+        seen.set(key, { shape: b.shape, color: b.color, label })
+      }
+    }
+    // Group entries that share the same label into one row
+    const byLabel = new Map<string, Array<{ shape: BuildingShape; color: string }>>()
+    for (const { shape, color, label } of seen.values()) {
+      if (!byLabel.has(label)) byLabel.set(label, [])
+      byLabel.get(label)!.push({ shape, color })
+    }
+    for (const [label, shapes] of byLabel) {
+      items.push({ type: 'building', label, color: shapes[0].color, buildingShapes: shapes })
+    }
+  }
 
   if (items.length === 0) return null
 
@@ -500,7 +524,7 @@ function LegendOverlay({ legend, frame, style, hasElevationFlags, hasSlopeArrows
     <svg width={boxW} height={boxH} style={getElementPositionStyle(legend.position, frame, boxW, boxH, edgeGap)} overflow="visible">
       <rect x={0.5} y={0.5} width={boxW-1} height={boxH-1}
         fill={frame.marginColor} stroke={legend.color} strokeWidth={0.5} rx={1.5} />
-      {items.map(({ type, label, color }, i) => {
+      {items.map(({ type, label, color, buildingShapes }, i) => {
         const col = Math.floor(i / rows)
         const row = i % rows
         const sx1 = pad + col * (colW + colGap)
@@ -605,6 +629,25 @@ function LegendOverlay({ legend, frame, style, hasElevationFlags, hasSlopeArrows
           sample = (
             <line x1={sx1} y1={midY} x2={sx2} y2={midY}
               stroke={color} strokeWidth={1.2} strokeLinecap="round" strokeDasharray="1 2 5 2" />
+          )
+        } else if (type === 'building' && buildingShapes && buildingShapes.length > 0) {
+          const n = buildingShapes.length
+          const slotW = sampW / n
+          const bh = rowH * 0.72
+          sample = (
+            <g>
+              {buildingShapes.map(({ shape, color: bc }, si) => {
+                const cx = sx1 + si * slotW + slotW / 2
+                const bw = slotW * 0.88
+                const d = buildingPath(shape, cx, midY, bw, bh)
+                return (
+                  <path key={si} d={d}
+                    fill={bc} fillOpacity={0.6}
+                    stroke={bc} strokeWidth={0.8}
+                    fillRule={shape === 'courtyard' ? 'evenodd' : undefined} />
+                )
+              })}
+            </g>
           )
         } else {
           const w = sampW * 0.6, hw = w * 0.28, hl = w * 0.3
@@ -1397,6 +1440,7 @@ export function MapCanvas(): JSX.Element {
         shape: tpl?.shape ?? 'rectangle',
         color: d.color,
         opacity: d.opacity,
+        templateId: d.buildingTemplateId,
       })
     }
   }
@@ -2306,6 +2350,7 @@ export function MapCanvas(): JSX.Element {
           swampMarkerDefaults={swampMarkerDefaults}
           roads={roads}
           roadDefaults={roadDefaults}
+          buildings={buildings}
           elevationCalibration={elevationCalibration}
         />
       )}
