@@ -200,16 +200,29 @@ export function ParameterPanel(): JSX.Element {
   const [intervalStr, setIntervalStr] = useState<string>(
     realInterval !== null ? String(realInterval) : ''
   )
-  const [hillshadeOpen, setHillshadeOpen] = useState(true)
-  const [contoursOpen, setContoursOpen] = useState(true)
-  const [styleOpen, setStyleOpen] = useState(true)
-  const [labelStylingOpen, setLabelStylingOpen] = useState(true)
-  const [seaLevelOpen, setSeaLevelOpen] = useState(true)
-  const [markersOpen, setMarkersOpen] = useState(true)
-  const [roadsOpen, setRoadsOpen] = useState(true)
-  const [buildingsOpen, setBuildingsOpen] = useState(true)
-  const [gridsOpen, setGridsOpen] = useState(true)
-  const [framingOpen, setFramingOpen] = useState(true)
+  const [hillshadeOpen, setHillshadeOpen] = useState(false)
+  const [contoursOpen, setContoursOpen] = useState(false)
+  const [styleOpen, setStyleOpen] = useState(false)
+  const [labelStylingOpen, setLabelStylingOpen] = useState(false)
+  const [seaLevelOpen, setSeaLevelOpen] = useState(false)
+  const [markersOpen, setMarkersOpen] = useState(false)
+  const [roadsOpen, setRoadsOpen] = useState(false)
+  const [buildingsOpen, setBuildingsOpen] = useState(false)
+  const [gridsOpen, setGridsOpen] = useState(false)
+  const [framingOpen, setFramingOpen] = useState(false)
+  // Marker subgroups
+  const [elevFlagsSubOpen, setElevFlagsSubOpen] = useState(false)
+  const [slopeArrowsSubOpen, setSlopeArrowsSubOpen] = useState(false)
+  const [ruggedSubOpen, setRuggedSubOpen] = useState(false)
+  const [swampSubOpen, setSwampSubOpen] = useState(false)
+  const [poisSubOpen, setPoisSubOpen] = useState(false)
+  // Grid subgroups
+  const [majorLinesOpen, setMajorLinesOpen] = useState(false)
+  const [minorLinesOpen, setMinorLinesOpen] = useState(false)
+  // Framing subgroups
+  const [titleSubOpen, setTitleSubOpen] = useState(false)
+  const [compassSubOpen, setCompassSubOpen] = useState(false)
+  const [legendSubOpen, setLegendSubOpen] = useState(false)
 
   const [createCustomOpen, setCreateCustomOpen] = useState(false)
   const [newCustomName, setNewCustomName] = useState('')
@@ -222,10 +235,16 @@ export function ParameterPanel(): JSX.Element {
   const [newCustomStrokeWeight, setNewCustomStrokeWeight] = useState(1.5)
 
   const allOpen = hillshadeOpen && contoursOpen && styleOpen && labelStylingOpen && seaLevelOpen && markersOpen && roadsOpen && buildingsOpen && gridsOpen && framingOpen
+    && elevFlagsSubOpen && slopeArrowsSubOpen && ruggedSubOpen && swampSubOpen && poisSubOpen
+    && majorLinesOpen && minorLinesOpen
+    && titleSubOpen && compassSubOpen && legendSubOpen
   const toggleAll = () => {
     const next = !allOpen
     setHillshadeOpen(next); setContoursOpen(next); setStyleOpen(next)
     setLabelStylingOpen(next); setSeaLevelOpen(next); setMarkersOpen(next); setRoadsOpen(next); setBuildingsOpen(next); setGridsOpen(next); setFramingOpen(next)
+    setElevFlagsSubOpen(next); setSlopeArrowsSubOpen(next); setRuggedSubOpen(next); setSwampSubOpen(next); setPoisSubOpen(next)
+    setMajorLinesOpen(next); setMinorLinesOpen(next)
+    setTitleSubOpen(next); setCompassSubOpen(next); setLegendSubOpen(next)
   }
 
   const poiUnitLabel = abbr || 'm'
@@ -825,7 +844,13 @@ export function ParameterPanel(): JSX.Element {
       <Collapse in={markersOpen}>
         <Stack gap="md">
 
-          <Divider label="Elevation Flags" labelPosition="left" />
+          <Group justify="space-between" style={{ cursor: 'pointer', userSelect: 'none' }}
+            onClick={() => setElevFlagsSubOpen((o) => !o)}>
+            <Text fw={500} size="xs" c="dimmed" tt="uppercase" style={{ letterSpacing: 0.5 }}>Elevation Flags</Text>
+            <Text size="sm" c="dimmed">{elevFlagsSubOpen ? '▾' : '▸'}</Text>
+          </Group>
+          <Collapse in={elevFlagsSubOpen}>
+          <Stack gap="md" pt={4}>
           <Switch size="sm" label="Show on map"
             checked={elevationFlagsVisible}
             onChange={(e) => setElevationFlagsVisible(e.currentTarget.checked)} />
@@ -842,7 +867,16 @@ export function ParameterPanel(): JSX.Element {
               label={(v) => `${Math.round(v * 100)}%`} />
           </Stack>
 
-          <Divider label="Slope Arrows" labelPosition="left" />
+          </Stack>
+          </Collapse>
+
+          <Group justify="space-between" style={{ cursor: 'pointer', userSelect: 'none' }}
+            onClick={() => setSlopeArrowsSubOpen((o) => !o)}>
+            <Text fw={500} size="xs" c="dimmed" tt="uppercase" style={{ letterSpacing: 0.5 }}>Slope Arrows</Text>
+            <Text size="sm" c="dimmed">{slopeArrowsSubOpen ? '▾' : '▸'}</Text>
+          </Group>
+          <Collapse in={slopeArrowsSubOpen}>
+          <Stack gap="md" pt={4}>
           <Switch size="sm" label="Show on map"
             checked={slopeArrowsVisible}
             onChange={(e) => setSlopeArrowsVisible(e.currentTarget.checked)} />
@@ -859,7 +893,16 @@ export function ParameterPanel(): JSX.Element {
               label={(v) => `${Math.round(v * 100)}%`} />
           </Stack>
 
-          <Divider label="Ruggedness Flags" labelPosition="left" />
+          </Stack>
+          </Collapse>
+
+          <Group justify="space-between" style={{ cursor: 'pointer', userSelect: 'none' }}
+            onClick={() => setRuggedSubOpen((o) => !o)}>
+            <Text fw={500} size="xs" c="dimmed" tt="uppercase" style={{ letterSpacing: 0.5 }}>Ruggedness Flags</Text>
+            <Text size="sm" c="dimmed">{ruggedSubOpen ? '▾' : '▸'}</Text>
+          </Group>
+          <Collapse in={ruggedSubOpen}>
+          <Stack gap="md" pt={4}>
           <Switch size="sm" label="Show on map"
             checked={ruggednessFlagsVisible}
             onChange={(e) => setRuggednessFlagsVisible(e.currentTarget.checked)} />
@@ -900,7 +943,16 @@ export function ParameterPanel(): JSX.Element {
               label={(v) => `${Math.round(v * 100)}%`} />
           </Stack>
 
-          <Divider label="Swamp Markers" labelPosition="left" />
+          </Stack>
+          </Collapse>
+
+          <Group justify="space-between" style={{ cursor: 'pointer', userSelect: 'none' }}
+            onClick={() => setSwampSubOpen((o) => !o)}>
+            <Text fw={500} size="xs" c="dimmed" tt="uppercase" style={{ letterSpacing: 0.5 }}>Swamp Markers</Text>
+            <Text size="sm" c="dimmed">{swampSubOpen ? '▾' : '▸'}</Text>
+          </Group>
+          <Collapse in={swampSubOpen}>
+          <Stack gap="md" pt={4}>
           <Switch size="sm" label="Show on map"
             checked={swampMarkersVisible}
             onChange={(e) => setSwampMarkersVisible(e.currentTarget.checked)} />
@@ -933,7 +985,16 @@ export function ParameterPanel(): JSX.Element {
               label={(v) => `${Math.round(v * 100)}%`} />
           </Stack>
 
-          <Divider label="Points of Interest" labelPosition="left" />
+          </Stack>
+          </Collapse>
+
+          <Group justify="space-between" style={{ cursor: 'pointer', userSelect: 'none' }}
+            onClick={() => setPoisSubOpen((o) => !o)}>
+            <Text fw={500} size="xs" c="dimmed" tt="uppercase" style={{ letterSpacing: 0.5 }}>Points of Interest</Text>
+            <Text size="sm" c="dimmed">{poisSubOpen ? '▾' : '▸'}</Text>
+          </Group>
+          <Collapse in={poisSubOpen}>
+          <Stack gap="md" pt={4}>
           <Group gap="xs" align="center">
             <Switch size="sm" label="Show on map"
               checked={poisVisible}
@@ -1261,6 +1322,8 @@ export function ParameterPanel(): JSX.Element {
               </>
             )
           })()}
+          </Stack>
+          </Collapse>
 
         </Stack>
       </Collapse>
@@ -1625,8 +1688,13 @@ export function ParameterPanel(): JSX.Element {
             />
           )}
 
-          {/* Major lines */}
-          <Divider label="Major lines" labelPosition="left" />
+          <Group justify="space-between" style={{ cursor: 'pointer', userSelect: 'none' }}
+            onClick={() => setMajorLinesOpen((o) => !o)}>
+            <Text fw={500} size="xs" c="dimmed" tt="uppercase" style={{ letterSpacing: 0.5 }}>Major lines</Text>
+            <Text size="sm" c="dimmed">{majorLinesOpen ? '▾' : '▸'}</Text>
+          </Group>
+          <Collapse in={majorLinesOpen}>
+          <Stack gap="md" pt={4}>
           <Group grow align="flex-end">
             <ColorInput
               label="Color"
@@ -1673,10 +1741,19 @@ export function ParameterPanel(): JSX.Element {
             </Stack>
           </Group>
 
+          </Stack>
+          </Collapse>
+
           {/* Minor lines (square and measured only) */}
           {(grid.type === 'square' || grid.type === 'measured') && (
             <>
-              <Divider label="Minor lines" labelPosition="left" />
+              <Group justify="space-between" style={{ cursor: 'pointer', userSelect: 'none' }}
+                onClick={() => setMinorLinesOpen((o) => !o)}>
+                <Text fw={500} size="xs" c="dimmed" tt="uppercase" style={{ letterSpacing: 0.5 }}>Minor lines</Text>
+                <Text size="sm" c="dimmed">{minorLinesOpen ? '▾' : '▸'}</Text>
+              </Group>
+              <Collapse in={minorLinesOpen}>
+              <Stack gap="md" pt={4}>
               <Switch
                 size="xs"
                 label="Show minor lines"
@@ -1739,6 +1816,8 @@ export function ParameterPanel(): JSX.Element {
                   </Group>
                 </Stack>
               </Group>
+              </Stack>
+              </Collapse>
             </>
           )}
 
@@ -1865,7 +1944,13 @@ export function ParameterPanel(): JSX.Element {
             ]}
           />
 
-          <Divider label="Title" labelPosition="left" />
+          <Group justify="space-between" style={{ cursor: 'pointer', userSelect: 'none' }}
+            onClick={() => setTitleSubOpen((o) => !o)}>
+            <Text fw={500} size="xs" c="dimmed" tt="uppercase" style={{ letterSpacing: 0.5 }}>Title</Text>
+            <Text size="sm" c="dimmed">{titleSubOpen ? '▾' : '▸'}</Text>
+          </Group>
+          <Collapse in={titleSubOpen}>
+          <Stack gap="md" pt={4}>
 
           <Switch
             label="Show title"
@@ -1939,7 +2024,16 @@ export function ParameterPanel(): JSX.Element {
             />
           </Group>
 
-          <Divider label="Compass" labelPosition="left" />
+          </Stack>
+          </Collapse>
+
+          <Group justify="space-between" style={{ cursor: 'pointer', userSelect: 'none' }}
+            onClick={() => setCompassSubOpen((o) => !o)}>
+            <Text fw={500} size="xs" c="dimmed" tt="uppercase" style={{ letterSpacing: 0.5 }}>Compass</Text>
+            <Text size="sm" c="dimmed">{compassSubOpen ? '▾' : '▸'}</Text>
+          </Group>
+          <Collapse in={compassSubOpen}>
+          <Stack gap="md" pt={4}>
 
           <Switch
             label="Show compass"
@@ -2035,7 +2129,16 @@ export function ParameterPanel(): JSX.Element {
               )}
             </Group>
           ))}
-        <Divider label="Legend" labelPosition="left" />
+          </Stack>
+          </Collapse>
+
+          <Group justify="space-between" style={{ cursor: 'pointer', userSelect: 'none' }}
+            onClick={() => setLegendSubOpen((o) => !o)}>
+            <Text fw={500} size="xs" c="dimmed" tt="uppercase" style={{ letterSpacing: 0.5 }}>Legend</Text>
+            <Text size="sm" c="dimmed">{legendSubOpen ? '▾' : '▸'}</Text>
+          </Group>
+          <Collapse in={legendSubOpen}>
+          <Stack gap="md" pt={4}>
         <Switch
           label="Show legend"
           size="sm"
@@ -2353,6 +2456,9 @@ export function ParameterPanel(): JSX.Element {
               />
             </>
           )}
+          </Stack>
+          </Collapse>
+
         </Stack>
       </Collapse>
     </Stack>
