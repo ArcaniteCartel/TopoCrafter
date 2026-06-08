@@ -223,6 +223,14 @@ export function ParameterPanel(): JSX.Element {
   const [titleSubOpen, setTitleSubOpen] = useState(false)
   const [compassSubOpen, setCompassSubOpen] = useState(false)
   const [legendSubOpen, setLegendSubOpen] = useState(false)
+  // POI sub-subgroups
+  const [poiEditMapLabelOpen, setPoiEditMapLabelOpen] = useState(false)
+  const [poiNewDefaultsOpen, setPoiNewDefaultsOpen] = useState(false)
+  const [poiNewMapLabelOpen, setPoiNewMapLabelOpen] = useState(false)
+  const [poiCustomLibOpen, setPoiCustomLibOpen] = useState(false)
+  // Legend sub-subgroups
+  const [legendItemsOpen, setLegendItemsOpen] = useState(false)
+  const [measureBarsOpen, setMeasureBarsOpen] = useState(false)
 
   const [createCustomOpen, setCreateCustomOpen] = useState(false)
   const [newCustomName, setNewCustomName] = useState('')
@@ -238,6 +246,8 @@ export function ParameterPanel(): JSX.Element {
     && elevFlagsSubOpen && slopeArrowsSubOpen && ruggedSubOpen && swampSubOpen && poisSubOpen
     && majorLinesOpen && minorLinesOpen
     && titleSubOpen && compassSubOpen && legendSubOpen
+    && poiEditMapLabelOpen && poiNewDefaultsOpen && poiNewMapLabelOpen && poiCustomLibOpen
+    && legendItemsOpen && measureBarsOpen
   const toggleAll = () => {
     const next = !allOpen
     setHillshadeOpen(next); setContoursOpen(next); setStyleOpen(next)
@@ -245,6 +255,8 @@ export function ParameterPanel(): JSX.Element {
     setElevFlagsSubOpen(next); setSlopeArrowsSubOpen(next); setRuggedSubOpen(next); setSwampSubOpen(next); setPoisSubOpen(next)
     setMajorLinesOpen(next); setMinorLinesOpen(next)
     setTitleSubOpen(next); setCompassSubOpen(next); setLegendSubOpen(next)
+    setPoiEditMapLabelOpen(next); setPoiNewDefaultsOpen(next); setPoiNewMapLabelOpen(next); setPoiCustomLibOpen(next)
+    setLegendItemsOpen(next); setMeasureBarsOpen(next)
   }
 
   const poiUnitLabel = abbr || 'm'
@@ -844,9 +856,9 @@ export function ParameterPanel(): JSX.Element {
       <Collapse in={markersOpen}>
         <Stack gap="md">
 
-          <Group justify="space-between" style={{ cursor: 'pointer', userSelect: 'none' }}
+          <Group justify="space-between" style={{ cursor: 'pointer', userSelect: 'none', paddingLeft: 10 }}
             onClick={() => setElevFlagsSubOpen((o) => !o)}>
-            <Text fw={500} size="xs" c="dimmed" tt="uppercase" style={{ letterSpacing: 0.5 }}>Elevation Flags</Text>
+            <Text fw={500} size="xs" c="dimmed">Elevation flags</Text>
             <Text size="sm" c="dimmed">{elevFlagsSubOpen ? '▾' : '▸'}</Text>
           </Group>
           <Collapse in={elevFlagsSubOpen}>
@@ -870,9 +882,9 @@ export function ParameterPanel(): JSX.Element {
           </Stack>
           </Collapse>
 
-          <Group justify="space-between" style={{ cursor: 'pointer', userSelect: 'none' }}
+          <Group justify="space-between" style={{ cursor: 'pointer', userSelect: 'none', paddingLeft: 10 }}
             onClick={() => setSlopeArrowsSubOpen((o) => !o)}>
-            <Text fw={500} size="xs" c="dimmed" tt="uppercase" style={{ letterSpacing: 0.5 }}>Slope Arrows</Text>
+            <Text fw={500} size="xs" c="dimmed">Slope arrows</Text>
             <Text size="sm" c="dimmed">{slopeArrowsSubOpen ? '▾' : '▸'}</Text>
           </Group>
           <Collapse in={slopeArrowsSubOpen}>
@@ -896,9 +908,9 @@ export function ParameterPanel(): JSX.Element {
           </Stack>
           </Collapse>
 
-          <Group justify="space-between" style={{ cursor: 'pointer', userSelect: 'none' }}
+          <Group justify="space-between" style={{ cursor: 'pointer', userSelect: 'none', paddingLeft: 10 }}
             onClick={() => setRuggedSubOpen((o) => !o)}>
-            <Text fw={500} size="xs" c="dimmed" tt="uppercase" style={{ letterSpacing: 0.5 }}>Ruggedness Flags</Text>
+            <Text fw={500} size="xs" c="dimmed">Ruggedness flags</Text>
             <Text size="sm" c="dimmed">{ruggedSubOpen ? '▾' : '▸'}</Text>
           </Group>
           <Collapse in={ruggedSubOpen}>
@@ -946,9 +958,9 @@ export function ParameterPanel(): JSX.Element {
           </Stack>
           </Collapse>
 
-          <Group justify="space-between" style={{ cursor: 'pointer', userSelect: 'none' }}
+          <Group justify="space-between" style={{ cursor: 'pointer', userSelect: 'none', paddingLeft: 10 }}
             onClick={() => setSwampSubOpen((o) => !o)}>
-            <Text fw={500} size="xs" c="dimmed" tt="uppercase" style={{ letterSpacing: 0.5 }}>Swamp Markers</Text>
+            <Text fw={500} size="xs" c="dimmed">Swamp markers</Text>
             <Text size="sm" c="dimmed">{swampSubOpen ? '▾' : '▸'}</Text>
           </Group>
           <Collapse in={swampSubOpen}>
@@ -988,9 +1000,9 @@ export function ParameterPanel(): JSX.Element {
           </Stack>
           </Collapse>
 
-          <Group justify="space-between" style={{ cursor: 'pointer', userSelect: 'none' }}
+          <Group justify="space-between" style={{ cursor: 'pointer', userSelect: 'none', paddingLeft: 10 }}
             onClick={() => setPoisSubOpen((o) => !o)}>
-            <Text fw={500} size="xs" c="dimmed" tt="uppercase" style={{ letterSpacing: 0.5 }}>Points of Interest</Text>
+            <Text fw={500} size="xs" c="dimmed">Points of interest</Text>
             <Text size="sm" c="dimmed">{poisSubOpen ? '▾' : '▸'}</Text>
           </Group>
           <Collapse in={poisSubOpen}>
@@ -1065,7 +1077,13 @@ export function ParameterPanel(): JSX.Element {
                         onChange={(v) => v && updatePoi(sel.id, { fontFamily: v })} />
                     )}
 
-                    <Divider label="Map label" labelPosition="left" />
+                    <Group justify="space-between" style={{ cursor: 'pointer', userSelect: 'none', paddingLeft: 20 }}
+                      onClick={() => setPoiEditMapLabelOpen((o) => !o)}>
+                      <Text fw={400} size="xs" c="dimmed">map label</Text>
+                      <Text size="xs" c="dimmed">{poiEditMapLabelOpen ? '▾' : '▸'}</Text>
+                    </Group>
+                    <Collapse in={poiEditMapLabelOpen}>
+                    <Stack gap="md" pt={4}>
                     <TextInput size="xs" label="Label text"
                       placeholder="Optional place name"
                       value={sel.label ?? ''}
@@ -1085,6 +1103,8 @@ export function ParameterPanel(): JSX.Element {
                           onChange={(v) => v && updatePoi(sel.id, { labelFontFamily: v })} />
                       </>
                     )}
+                    </Stack>
+                    </Collapse>
 
                     <Button size="xs" color="red" variant="light"
                       onClick={() => { removePoi(sel.id); setSelectedPoiId(null) }}>
@@ -1107,8 +1127,13 @@ export function ParameterPanel(): JSX.Element {
 
             return (
               <>
-                <Divider label="New Marker Defaults" labelPosition="left" />
-
+                <Group justify="space-between" style={{ cursor: 'pointer', userSelect: 'none', paddingLeft: 20 }}
+                  onClick={() => setPoiNewDefaultsOpen((o) => !o)}>
+                  <Text fw={400} size="xs" c="dimmed">new marker defaults</Text>
+                  <Text size="xs" c="dimmed">{poiNewDefaultsOpen ? '▾' : '▸'}</Text>
+                </Group>
+                <Collapse in={poiNewDefaultsOpen}>
+                <Stack gap="md" pt={4}>
                 <Select
                   label="Type"
                   size="xs"
@@ -1173,8 +1198,16 @@ export function ParameterPanel(): JSX.Element {
                     value={poiNewMarker.fontFamily}
                     onChange={(v) => v && updatePoiNewMarker({ fontFamily: v })} />
                 )}
+                </Stack>
+                </Collapse>
 
-                <Divider label="Map label" labelPosition="left" />
+                <Group justify="space-between" style={{ cursor: 'pointer', userSelect: 'none', paddingLeft: 20 }}
+                  onClick={() => setPoiNewMapLabelOpen((o) => !o)}>
+                  <Text fw={400} size="xs" c="dimmed">map label</Text>
+                  <Text size="xs" c="dimmed">{poiNewMapLabelOpen ? '▾' : '▸'}</Text>
+                </Group>
+                <Collapse in={poiNewMapLabelOpen}>
+                <Stack gap="md" pt={4}>
                 <TextInput size="xs" label="Label text"
                   description="Stamped on next placed marker"
                   placeholder="Optional"
@@ -1191,10 +1224,18 @@ export function ParameterPanel(): JSX.Element {
                 <Select size="xs" label="Label font" data={FONT_OPTIONS}
                   value={poiNewMarker.labelFontFamily}
                   onChange={(v) => v && updatePoiNewMarker({ labelFontFamily: v })} />
+                </Stack>
+                </Collapse>
 
                 {customMarkerDefs.length > 0 && (
                   <>
-                    <Divider label="Custom Marker Library" labelPosition="left" />
+                    <Group justify="space-between" style={{ cursor: 'pointer', userSelect: 'none', paddingLeft: 20 }}
+                      onClick={() => setPoiCustomLibOpen((o) => !o)}>
+                      <Text fw={400} size="xs" c="dimmed">custom marker library</Text>
+                      <Text size="xs" c="dimmed">{poiCustomLibOpen ? '▾' : '▸'}</Text>
+                    </Group>
+                    <Collapse in={poiCustomLibOpen}>
+                    <Stack gap="md" pt={4}>
                     <Stack gap={6}>
                       {customMarkerDefs.map(def => {
                         const inUse = pois.some(p => p.typeId === def.id)
@@ -1222,14 +1263,16 @@ export function ParameterPanel(): JSX.Element {
                         )
                       })}
                     </Stack>
+                    </Stack>
+                    </Collapse>
                   </>
                 )}
 
-                <Divider label="Create Custom Marker" labelPosition="left" />
-                <Button size="xs" variant="light"
+                <Group justify="space-between" style={{ cursor: 'pointer', userSelect: 'none', paddingLeft: 20 }}
                   onClick={() => setCreateCustomOpen((o) => !o)}>
-                  {createCustomOpen ? 'Cancel' : '+ New marker type'}
-                </Button>
+                  <Text fw={400} size="xs" c="dimmed">create custom marker</Text>
+                  <Text size="xs" c="dimmed">{createCustomOpen ? '▾' : '▸'}</Text>
+                </Group>
 
                 <Collapse in={createCustomOpen}>
                   <Stack gap="md" pt={4}>
@@ -1688,9 +1731,9 @@ export function ParameterPanel(): JSX.Element {
             />
           )}
 
-          <Group justify="space-between" style={{ cursor: 'pointer', userSelect: 'none' }}
+          <Group justify="space-between" style={{ cursor: 'pointer', userSelect: 'none', paddingLeft: 10 }}
             onClick={() => setMajorLinesOpen((o) => !o)}>
-            <Text fw={500} size="xs" c="dimmed" tt="uppercase" style={{ letterSpacing: 0.5 }}>Major lines</Text>
+            <Text fw={500} size="xs" c="dimmed">Major lines</Text>
             <Text size="sm" c="dimmed">{majorLinesOpen ? '▾' : '▸'}</Text>
           </Group>
           <Collapse in={majorLinesOpen}>
@@ -1747,9 +1790,9 @@ export function ParameterPanel(): JSX.Element {
           {/* Minor lines (square and measured only) */}
           {(grid.type === 'square' || grid.type === 'measured') && (
             <>
-              <Group justify="space-between" style={{ cursor: 'pointer', userSelect: 'none' }}
+              <Group justify="space-between" style={{ cursor: 'pointer', userSelect: 'none', paddingLeft: 10 }}
                 onClick={() => setMinorLinesOpen((o) => !o)}>
-                <Text fw={500} size="xs" c="dimmed" tt="uppercase" style={{ letterSpacing: 0.5 }}>Minor lines</Text>
+                <Text fw={500} size="xs" c="dimmed">Minor lines</Text>
                 <Text size="sm" c="dimmed">{minorLinesOpen ? '▾' : '▸'}</Text>
               </Group>
               <Collapse in={minorLinesOpen}>
@@ -1944,9 +1987,9 @@ export function ParameterPanel(): JSX.Element {
             ]}
           />
 
-          <Group justify="space-between" style={{ cursor: 'pointer', userSelect: 'none' }}
+          <Group justify="space-between" style={{ cursor: 'pointer', userSelect: 'none', paddingLeft: 10 }}
             onClick={() => setTitleSubOpen((o) => !o)}>
-            <Text fw={500} size="xs" c="dimmed" tt="uppercase" style={{ letterSpacing: 0.5 }}>Title</Text>
+            <Text fw={500} size="xs" c="dimmed">Title</Text>
             <Text size="sm" c="dimmed">{titleSubOpen ? '▾' : '▸'}</Text>
           </Group>
           <Collapse in={titleSubOpen}>
@@ -2027,9 +2070,9 @@ export function ParameterPanel(): JSX.Element {
           </Stack>
           </Collapse>
 
-          <Group justify="space-between" style={{ cursor: 'pointer', userSelect: 'none' }}
+          <Group justify="space-between" style={{ cursor: 'pointer', userSelect: 'none', paddingLeft: 10 }}
             onClick={() => setCompassSubOpen((o) => !o)}>
-            <Text fw={500} size="xs" c="dimmed" tt="uppercase" style={{ letterSpacing: 0.5 }}>Compass</Text>
+            <Text fw={500} size="xs" c="dimmed">Compass</Text>
             <Text size="sm" c="dimmed">{compassSubOpen ? '▾' : '▸'}</Text>
           </Group>
           <Collapse in={compassSubOpen}>
@@ -2132,9 +2175,9 @@ export function ParameterPanel(): JSX.Element {
           </Stack>
           </Collapse>
 
-          <Group justify="space-between" style={{ cursor: 'pointer', userSelect: 'none' }}
+          <Group justify="space-between" style={{ cursor: 'pointer', userSelect: 'none', paddingLeft: 10 }}
             onClick={() => setLegendSubOpen((o) => !o)}>
-            <Text fw={500} size="xs" c="dimmed" tt="uppercase" style={{ letterSpacing: 0.5 }}>Legend</Text>
+            <Text fw={500} size="xs" c="dimmed">Legend</Text>
             <Text size="sm" c="dimmed">{legendSubOpen ? '▾' : '▸'}</Text>
           </Group>
           <Collapse in={legendSubOpen}>
@@ -2184,7 +2227,13 @@ export function ParameterPanel(): JSX.Element {
             format="hex"
           />
         </Group>
-        <Divider label="Items" labelPosition="left" />
+        <Group justify="space-between" style={{ cursor: 'pointer', userSelect: 'none', paddingLeft: 20 }}
+          onClick={() => setLegendItemsOpen((o) => !o)}>
+          <Text fw={400} size="xs" c="dimmed">items</Text>
+          <Text size="xs" c="dimmed">{legendItemsOpen ? '▾' : '▸'}</Text>
+        </Group>
+        <Collapse in={legendItemsOpen}>
+        <Stack gap="md" pt={4}>
         {([
           { key: 'showMinorContour', labelKey: 'minorLabel', label: 'Minor contour' },
           { key: 'showMajorContour', labelKey: 'majorLabel', label: 'Major contour' },
@@ -2314,7 +2363,15 @@ export function ParameterPanel(): JSX.Element {
             </Stack>
           )
         })()}
-          <Divider label="Measure bars" labelPosition="left" />
+        </Stack>
+        </Collapse>
+        <Group justify="space-between" style={{ cursor: 'pointer', userSelect: 'none', paddingLeft: 20 }}
+          onClick={() => setMeasureBarsOpen((o) => !o)}>
+          <Text fw={400} size="xs" c="dimmed">measure bars</Text>
+          <Text size="xs" c="dimmed">{measureBarsOpen ? '▾' : '▸'}</Text>
+        </Group>
+        <Collapse in={measureBarsOpen}>
+        <Stack gap="md" pt={4}>
           <Switch
             label="Show measure bars"
             size="sm"
@@ -2456,6 +2513,8 @@ export function ParameterPanel(): JSX.Element {
               />
             </>
           )}
+        </Stack>
+        </Collapse>
           </Stack>
           </Collapse>
 
