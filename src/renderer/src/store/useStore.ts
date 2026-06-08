@@ -6,9 +6,9 @@ import type {
   ElevationFlag, SlopeArrow, RuggednessFlag, SwampMarker, MarkerDefaults, SwampMarkerDefaults,
   MapTool, FrameConfig, TitleConfig, CompassConfig, LegendConfig, MeasureBarConfig,
   Road, RoadDefaults, GridConfig, BuildingEntry, BuildingDefaults,
-  PoiEntry, PoiDefaults,
+  PoiEntry, PoiNewMarkerState,
 } from '../types'
-import { defaultParameters, defaultStyle, defaultHillshadeParameters, defaultElevationCalibration, defaultFrameConfig, defaultTitleConfig, defaultCompassConfig, defaultLegendConfig, defaultMeasureBarConfig, TRI_COLORS, defaultRoadDefaults, defaultGridConfig, defaultBuildingDefaults, defaultPoiDefaults } from '../types'
+import { defaultParameters, defaultStyle, defaultHillshadeParameters, defaultElevationCalibration, defaultFrameConfig, defaultTitleConfig, defaultCompassConfig, defaultLegendConfig, defaultMeasureBarConfig, TRI_COLORS, defaultRoadDefaults, defaultGridConfig, defaultBuildingDefaults, defaultPoiNewMarkerState } from '../types'
 
 function calToMeters(value: number, cal: ElevationCalibration): number {
   if (cal.unitType === 'feet') return value * 0.3048
@@ -90,7 +90,7 @@ interface AppActions {
   updatePoi: (id: string, updates: Partial<Omit<PoiEntry, 'id'>>) => void
   removePoi: (id: string) => void
   setPoisVisible: (v: boolean) => void
-  updatePoiDefaults: (d: Partial<PoiDefaults>) => void
+  updatePoiNewMarker: (d: Partial<PoiNewMarkerState>) => void
   setSelectedPoiId: (id: string | null) => void
   setRuggednessSeverityColor: (index: number, color: string) => void
   setMapTool: (tool: MapTool) => void
@@ -152,7 +152,7 @@ const initialState: ProjectState = {
   buildingDefaults: defaultBuildingDefaults,
   pois: [],
   poisVisible: true,
-  poiDefaults: defaultPoiDefaults,
+  poiNewMarker: defaultPoiNewMarkerState,
   selectedPoiId: null,
   mapTool: 'none',
   snapshotParams: null,
@@ -445,7 +445,7 @@ export const useStore = create<ProjectState & AppActions>()(
         selectedPoiId: state.selectedPoiId === id ? null : state.selectedPoiId,
       })),
       setPoisVisible: (v) => set({ poisVisible: v }),
-      updatePoiDefaults: (d) => set((state) => ({ poiDefaults: { ...state.poiDefaults, ...d } })),
+      updatePoiNewMarker: (d) => set((state) => ({ poiNewMarker: { ...state.poiNewMarker, ...d } })),
       setSelectedPoiId: (id) => set({ selectedPoiId: id }),
 
       setRuggednessSeverityColor: (index, color) =>
@@ -502,7 +502,56 @@ export const useStore = create<ProjectState & AppActions>()(
     }),
     {
       name: 'topocrafter-state',
+      version: 1,
       storage: createJSONStorage(() => localStorage),
+      migrate: (persistedState: unknown, version: number) => {
+        const ps = persistedState as Record<string, unknown>
+        if (version < 1) {
+          // Migrate PoiEntry objects: old fields → new unified fields
+          if (Array.isArray(ps.pois)) {
+            ps.pois = (ps.pois as Record<string, unknown>[]).map((p) => {
+              if ('type' in p && !('typeId' in p)) {
+                return {
+                  id: p.id, x: p.x, y: p.y,
+                  typeId: p.type,
+                  color: (p.color as string) ?? '#2C2C2C',
+                  sizeM: (p.mineSize as number) ?? (p.caveSize as number) ?? 8,
+                  strokeWeight: (p.bridgeStrokeWeight as number) ?? 2.5,
+                  bridgeLengthM: p.bridgeLength,
+                  bridgeSeparationM: p.bridgeSeparation,
+                  bridgeRotation: p.bridgeRotation,
+                  fontFamily: p.caveFontFamily,
+                  label: p.label,
+                  labelColor: p.labelColor,
+                  labelSizeM: p.labelSizeM,
+                  labelFontFamily: p.labelFontFamily,
+                }
+              }
+              return p
+            })
+          }
+          // Migrate poiDefaults → poiNewMarker
+          if (ps.poiDefaults && !ps.poiNewMarker) {
+            const d = ps.poiDefaults as Record<string, unknown>
+            ps.poiNewMarker = {
+              typeId: (d.type as string) ?? 'mine',
+              color: (d.mineColor as string) ?? '#2C2C2C',
+              sizeM: (d.mineSizeM as number) ?? 8,
+              strokeWeight: (d.bridgeStrokeWeight as number) ?? 1.5,
+              bridgeLengthM: (d.bridgeLengthM as number) ?? 30,
+              bridgeSeparationM: (d.bridgeSeparationM as number) ?? 6,
+              bridgeRotation: (d.bridgeRotation as number) ?? 0,
+              fontFamily: (d.caveFontFamily as string) ?? 'serif',
+              label: (d.label as string) ?? '',
+              labelColor: (d.labelColor as string) ?? '#2E2412',
+              labelSizeM: (d.labelSizeM as number) ?? 8,
+              labelFontFamily: (d.labelFontFamily as string) ?? 'serif',
+            }
+            delete ps.poiDefaults
+          }
+        }
+        return ps
+      },
       // Deep-merge so that new fields added to nested config objects (legend, frame, etc.)
       // are backfilled from defaults when loading an older persisted state.
       merge: (persisted, current) => {
@@ -527,7 +576,7 @@ export const useStore = create<ProjectState & AppActions>()(
           swampMarkerDefaults:    merge(current.swampMarkerDefaults,    ps.swampMarkerDefaults),
           roadDefaults:           merge(current.roadDefaults,           ps.roadDefaults),
           buildingDefaults:       merge(current.buildingDefaults,       ps.buildingDefaults),
-          poiDefaults:            merge(current.poiDefaults,            ps.poiDefaults),
+          poiNewMarker:           merge(current.poiNewMarker,           ps.poiNewMarker),
           grid:                   merge(current.grid,                   ps.grid),
         }
       },
@@ -569,7 +618,7 @@ export const useStore = create<ProjectState & AppActions>()(
         buildingDefaults: state.buildingDefaults,
         pois: state.pois,
         poisVisible: state.poisVisible,
-        poiDefaults: state.poiDefaults,
+        poiNewMarker: state.poiNewMarker,
         grid: state.grid,
       }),
     }

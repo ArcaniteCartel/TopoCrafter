@@ -4,7 +4,9 @@ import type { ContourMultiPolygon } from 'd3-contour'
 import { useStore } from '../../store/useStore'
 import { generateContours, contourToSvgPath } from '../../utils/contour'
 import type { ContourSet } from '../../utils/contour'
-import type { ElevationFlag, SlopeArrow, RuggednessFlag, SwampMarker, Road, BuildingEntry, BuildingShape, PoiEntry, PoiType, PoiDefaults, FrameConfig, CompassConfig, LegendConfig, ContourStyle, FramePosition, MeasureBarConfig, ElevationCalibration, HeightmapInfo, GridConfig } from '../../types'
+import type { ElevationFlag, SlopeArrow, RuggednessFlag, SwampMarker, Road, BuildingEntry, BuildingShape, PoiEntry, PoiNewMarkerState, CustomMarkerDef, MarkerPrimitiveId, BuiltinMarkerTypeId, FrameConfig, CompassConfig, LegendConfig, ContourStyle, FramePosition, MeasureBarConfig, ElevationCalibration, HeightmapInfo, GridConfig } from '../../types'
+import { BUILTIN_MARKER_SPECS } from '../../types'
+import { useGlobalStore } from '../../store/useGlobalStore'
 import { BUILDING_CATALOG } from '../../data/buildings'
 import { TRI_THRESHOLDS, TRI_COLORS, TRI_LABELS, getTriSeverity, triRangeLabel } from '../../types'
 import { catmullRomPath, catmullRomOffsetPath } from '../../utils/spline'
@@ -46,18 +48,16 @@ function buildingPath(shape: BuildingShape, cx: number, cy: number, w: number, d
   }
 }
 
+// ── Builtin POI symbols ────────────────────────────────────────────────────
+
 function PoiMineSymbol({ cx, cy, sizePx, color, sw }: { cx: number; cy: number; sizePx: number; color: string; sw: number }): JSX.Element {
   const s = sizePx / 2
   const c = Math.SQRT2 / 2
   const t = s * 0.32
-  // \ shaft
   const ax1 = cx - s*c, ay1 = cy - s*c, ax2 = cx + s*c, ay2 = cy + s*c
-  // / shaft
   const bx1 = cx - s*c, by1 = cy + s*c, bx2 = cx + s*c, by2 = cy - s*c
-  // ticks perpendicular to \ (= along / direction): at upper-left and lower-right ends
   const t1x1 = ax1 - t*c, t1y1 = ay1 + t*c, t1x2 = ax1 + t*c, t1y2 = ay1 - t*c
   const t2x1 = ax2 - t*c, t2y1 = ay2 + t*c, t2x2 = ax2 + t*c, t2y2 = ay2 - t*c
-  // ticks perpendicular to / (= along \ direction): at lower-left and upper-right ends
   const t3x1 = bx1 - t*c, t3y1 = by1 - t*c, t3x2 = bx1 + t*c, t3y2 = by1 + t*c
   const t4x1 = bx2 - t*c, t4y1 = by2 - t*c, t4x2 = bx2 + t*c, t4y2 = by2 + t*c
   return (
@@ -82,29 +82,118 @@ function PoiBridgeSymbol({ cx, cy, lengthPx, sepPx, sw, color, rotation }: { cx:
   )
 }
 
-function renderPoiSymbol(poi: PoiEntry, pixelsPerMeter: number, opacity?: number): JSX.Element {
-  const sw = 1.2 + (pixelsPerMeter * 0.0005)
+// ── Primitive symbols ──────────────────────────────────────────────────────
+
+function PrimSymbol({ cx, cy, s, color, sw, id }: { cx: number; cy: number; s: number; color: string; sw: number; id: MarkerPrimitiveId }): JSX.Element {
+  const g: React.SVGProps<SVGGElement> = { stroke: color, strokeWidth: sw, fill: 'none', strokeLinecap: 'round', style: { pointerEvents: 'none' } }
+  const r = s * 0.5
+  switch (id) {
+    case 'cross-plus':
+      return <g {...g}><line x1={cx} y1={cy-s} x2={cx} y2={cy+s} /><line x1={cx-s} y1={cy} x2={cx+s} y2={cy} /></g>
+    case 'cross-x': {
+      const d = s * Math.SQRT2 / 2
+      return <g {...g}><line x1={cx-d} y1={cy-d} x2={cx+d} y2={cy+d} /><line x1={cx-d} y1={cy+d} x2={cx+d} y2={cy-d} /></g>
+    }
+    case 'cross-star': {
+      const d = s * Math.SQRT2 / 2
+      return <g {...g}>
+        <line x1={cx} y1={cy-s} x2={cx} y2={cy+s} /><line x1={cx-s} y1={cy} x2={cx+s} y2={cy} />
+        <line x1={cx-d} y1={cy-d} x2={cx+d} y2={cy+d} /><line x1={cx-d} y1={cy+d} x2={cx+d} y2={cy-d} />
+      </g>
+    }
+    case 'circle-tri-open':
+      return <g {...g}>
+        <circle cx={cx} cy={cy} r={r} />
+        <polygon points={`${cx},${cy-r*0.65} ${cx-r*0.55},${cy+r*0.42} ${cx+r*0.55},${cy+r*0.42}`} />
+      </g>
+    case 'circle-tri-filled':
+      return <g {...g}>
+        <circle cx={cx} cy={cy} r={r} />
+        <polygon points={`${cx},${cy-r*0.65} ${cx-r*0.55},${cy+r*0.42} ${cx+r*0.55},${cy+r*0.42}`} fill={color} />
+      </g>
+    case 'circle-crossbar':
+      return <g {...g}><circle cx={cx} cy={cy} r={r} /><line x1={cx-r} y1={cy} x2={cx+r} y2={cy} /></g>
+    case 'circle-hatched': {
+      const clipId = `hatch-${cx.toFixed(0)}-${cy.toFixed(0)}`
+      return <g style={{ pointerEvents: 'none' }}>
+        <defs><clipPath id={clipId}><circle cx={cx} cy={cy} r={r} /></clipPath></defs>
+        <circle cx={cx} cy={cy} r={r} stroke={color} strokeWidth={sw} fill="none" />
+        <g clipPath={`url(#${clipId})`}>
+          {[-1, -0.33, 0.33, 1].map((t, i) => {
+            const ox = t * r * 0.7
+            return <line key={i} x1={cx+ox-r} y1={cy+r} x2={cx+ox+r} y2={cy-r} stroke={color} strokeWidth={sw * 0.7} />
+          })}
+        </g>
+      </g>
+    }
+    case 'mountains':
+      return <g {...g} strokeLinejoin="round">
+        <polyline points={`${cx-s*0.85},${cy+s*0.5} ${cx-s*0.2},${cy-s*0.5} ${cx+s*0.15},${cy+s*0.1}`} />
+        <polyline points={`${cx-s*0.1},${cy+s*0.1} ${cx+s*0.35},${cy-s*0.32} ${cx+s*0.85},${cy+s*0.5}`} />
+      </g>
+    case 'pin': {
+      const pr = s * 0.45
+      return <g style={{ pointerEvents: 'none' }}>
+        <path d={`M ${cx},${cy+s*0.7} L ${cx-pr},${cy-pr*0.55} A ${pr},${pr} 0 1,1 ${cx+pr},${cy-pr*0.55} Z`}
+          stroke={color} strokeWidth={sw} fill={color} fillOpacity={0.35} />
+        <circle cx={cx} cy={cy-pr*0.3} r={pr*0.35} fill={color} />
+      </g>
+    }
+    case 'flagpost-left':
+      return <g {...g}>
+        <line x1={cx+s*0.25} y1={cy-s} x2={cx+s*0.25} y2={cy+s} />
+        <polygon points={`${cx+s*0.25},${cy-s} ${cx-s*0.5},${cy-s*0.65} ${cx+s*0.25},${cy-s*0.28}`} fill={color} strokeLinejoin="round" />
+      </g>
+    default:
+      return <circle cx={cx} cy={cy} r={r} stroke={color} strokeWidth={sw} fill="none" style={{ pointerEvents: 'none' }} />
+  }
+}
+
+// ── Universal POI symbol renderer ──────────────────────────────────────────
+
+function renderPoiSymbol(poi: PoiEntry, pixelsPerMeter: number, customDefs: CustomMarkerDef[], opacity?: number): JSX.Element {
+  const sw = Math.max(1.0, poi.strokeWeight)
   const op = opacity ?? 1
-  if (poi.type === 'mine') {
-    const sizePx = (poi.mineSize ?? 8) * pixelsPerMeter
-    return <g opacity={op}><PoiMineSymbol cx={poi.x} cy={poi.y} sizePx={sizePx} color={poi.color} sw={sw} /></g>
+  const { x, y, color } = poi
+
+  if (poi.typeId === 'mine') {
+    const sizePx = poi.sizeM * pixelsPerMeter
+    return <g opacity={op}><PoiMineSymbol cx={x} cy={y} sizePx={sizePx} color={color} sw={sw} /></g>
   }
-  if (poi.type === 'bridge') {
-    const lengthPx = (poi.bridgeLength ?? 30) * pixelsPerMeter
-    const sepPx = (poi.bridgeSeparation ?? 6) * pixelsPerMeter
-    const bsw = poi.bridgeStrokeWeight ?? 2.5
-    return <g opacity={op}><PoiBridgeSymbol cx={poi.x} cy={poi.y} lengthPx={lengthPx} sepPx={sepPx} sw={bsw} color={poi.color} rotation={poi.bridgeRotation ?? 0} /></g>
+  if (poi.typeId === 'bridge') {
+    const lengthPx = (poi.bridgeLengthM ?? 30) * pixelsPerMeter
+    const sepPx = (poi.bridgeSeparationM ?? 6) * pixelsPerMeter
+    return <g opacity={op}><PoiBridgeSymbol cx={x} cy={y} lengthPx={lengthPx} sepPx={sepPx} sw={sw} color={color} rotation={poi.bridgeRotation ?? 0} /></g>
   }
-  // cave
-  const sizePx = (poi.caveSize ?? 12) * pixelsPerMeter
-  return (
-    <g opacity={op} style={{ pointerEvents: 'none' }}>
-      <text x={poi.x} y={poi.y} fontFamily={poi.caveFontFamily ?? 'serif'} fontSize={sizePx}
-        fill={poi.color} textAnchor="middle" dominantBaseline="middle">
-        Ω
-      </text>
-    </g>
-  )
+  if (poi.typeId === 'cave') {
+    const sizePx = poi.sizeM * pixelsPerMeter
+    return (
+      <g opacity={op} style={{ pointerEvents: 'none' }}>
+        <text x={x} y={y} fontFamily={poi.fontFamily ?? 'serif'} fontSize={sizePx}
+          fill={color} textAnchor="middle" dominantBaseline="middle">Ω</text>
+      </g>
+    )
+  }
+  // Custom type
+  const def = customDefs.find((d) => d.id === poi.typeId)
+  if (!def) return <circle cx={x} cy={y} r={8} stroke={color} strokeWidth={sw} fill="none" opacity={op} style={{ pointerEvents: 'none' }} />
+
+  const sizePx = poi.sizeM * pixelsPerMeter
+
+  if (def.symbol.kind === 'unicode') {
+    return (
+      <g opacity={op} style={{ pointerEvents: 'none' }}>
+        <text x={x} y={y} fontFamily={poi.fontFamily ?? 'serif'} fontSize={sizePx}
+          fill={color} textAnchor="middle" dominantBaseline="middle">{def.symbol.chars}</text>
+      </g>
+    )
+  }
+  if (def.symbol.kind === 'primitive') {
+    return <g opacity={op}><PrimSymbol cx={x} cy={y} s={sizePx * 0.5} color={color} sw={sw} id={def.symbol.primitiveId} /></g>
+  }
+  // kind === 'builtin' — re-use the builtin renderer
+  const builtinPoi: PoiEntry = { ...poi, typeId: def.symbol.builtinId }
+  return renderPoiSymbol(builtinPoi, pixelsPerMeter, customDefs, opacity)
 }
 
 function getLabelPoint(poly: ContourMultiPolygon): [number, number] | null {
@@ -497,7 +586,7 @@ function GridCanvas({ grid, measureBar, calibration, mapW, mapH }: {
 // Legend overlay
 // ---------------------------------------------------------------------------
 
-function LegendOverlay({ legend, frame, style, hasElevationFlags, hasSlopeArrows, measureBar, hasRuggednessFlags, ruggednessColorBySeverity, ruggednessSeverityColors, hasSwampMarkers, swampMarkerDefaults, roads, roadDefaults, buildings, pois, poiDefaults, elevationCalibration }: {
+function LegendOverlay({ legend, frame, style, hasElevationFlags, hasSlopeArrows, measureBar, hasRuggednessFlags, ruggednessColorBySeverity, ruggednessSeverityColors, hasSwampMarkers, swampMarkerDefaults, roads, roadDefaults, buildings, pois, customMarkerDefs, elevationCalibration }: {
   legend: LegendConfig; frame: FrameConfig; style: ContourStyle
   hasElevationFlags: boolean; hasSlopeArrows: boolean; measureBar?: MeasureBarConfig
   hasRuggednessFlags: boolean; ruggednessColorBySeverity: boolean; ruggednessSeverityColors: string[]
@@ -506,7 +595,7 @@ function LegendOverlay({ legend, frame, style, hasElevationFlags, hasSlopeArrows
   roadDefaults: { dirtColor: string; gravelColor: string; pavedColor: string; footpathColor: string; trailColor: string }
   buildings: BuildingEntry[]
   pois: PoiEntry[]
-  poiDefaults: PoiDefaults
+  customMarkerDefs: CustomMarkerDef[]
   elevationCalibration: ElevationCalibration
 }): JSX.Element | null {
   const hasGeoAnchor = legend.showGeoAnchor && !!measureBar?.enabled && !!measureBar?.geoEnabled
@@ -533,7 +622,7 @@ function LegendOverlay({ legend, frame, style, hasElevationFlags, hasSlopeArrows
     legend.showPavedRoads && roads.some(r => r.type === 'paved')   ? { type: 'road-paved',   label: legend.pavedRoadsLabel, color: roadDefaults.pavedColor   } : null,
     legend.showFootpaths && roads.some(r => r.type === 'footpath') ? { type: 'road-footpath',label: legend.footpathsLabel,  color: roadDefaults.footpathColor} : null,
     legend.showTrails && roads.some(r => r.type === 'trail')       ? { type: 'road-trail',   label: legend.trailsLabel,     color: roadDefaults.trailColor   } : null,
-  ].filter(Boolean) as { type: string; label: string; color: string; buildingShapes?: Array<{ shape: BuildingShape; color: string; widthM: number; depthM: number }> }[]
+  ].filter(Boolean) as { type: string; label: string; color: string; buildingShapes?: Array<{ shape: BuildingShape; color: string; widthM: number; depthM: number }>; poiSample?: PoiEntry }[]
 
   // Building legend items: group by (templateId, color), then merge same-label entries
   if (legend.showBuildings && buildings.length > 0) {
@@ -558,21 +647,18 @@ function LegendOverlay({ legend, frame, style, hasElevationFlags, hasSlopeArrows
     }
   }
 
-  // POI legend items: one entry per type present on the map
+  // POI legend items: one entry per typeId present on the map
   if (legend.showPois && pois.length > 0) {
-    const seen = new Set<PoiType>()
+    const seen = new Set<string>()
     for (const p of pois) {
-      if (!seen.has(p.type)) {
-        seen.add(p.type)
-        const label = p.type === 'mine'
-          ? (poiDefaults.mineSignificanceLabel || 'Mine Entrance')
-          : p.type === 'bridge'
-          ? (poiDefaults.bridgeSignificanceLabel || 'Bridge')
-          : (poiDefaults.caveSignificanceLabel || 'Cave Entrance')
-        const color = p.type === 'mine' ? poiDefaults.mineColor
-          : p.type === 'bridge' ? poiDefaults.bridgeColor
-          : poiDefaults.caveColor
-        items.push({ type: `poi-${p.type}`, label, color })
+      if (!seen.has(p.typeId)) {
+        seen.add(p.typeId)
+        const defaultName = p.typeId === 'mine' ? BUILTIN_MARKER_SPECS.mine.name
+          : p.typeId === 'bridge' ? BUILTIN_MARKER_SPECS.bridge.name
+          : p.typeId === 'cave' ? BUILTIN_MARKER_SPECS.cave.name
+          : (customMarkerDefs.find((d) => d.id === p.typeId)?.name ?? p.typeId)
+        const label = legend.poiLabels[p.typeId] || defaultName
+        items.push({ type: 'poi', label, color: p.color, poiSample: p })
       }
     }
   }
@@ -619,7 +705,7 @@ function LegendOverlay({ legend, frame, style, hasElevationFlags, hasSlopeArrows
           }
           buildingGlobalScale = isFinite(gs) ? gs : 1
         }
-        return items.map(({ type, label, color, buildingShapes }, i) => {
+        return items.map(({ type, label, color, buildingShapes, poiSample }, i) => {
         const col = Math.floor(i / rows)
         const row = i % rows
         const sx1 = pad + col * (colW + colGap)
@@ -744,38 +830,13 @@ function LegendOverlay({ legend, frame, style, hasElevationFlags, hasSlopeArrows
               })}
             </g>
           )
-        } else if (type === 'poi-mine') {
-          const cx_m = sx1 + sampW / 2
-          const sz = rowH * 0.62
-          const s = sz / 2, c = Math.SQRT2 / 2, t = s * 0.32
-          const ax1 = cx_m - s*c, ay1 = midY - s*c, ax2 = cx_m + s*c, ay2 = midY + s*c
-          const bx1 = cx_m - s*c, by1 = midY + s*c, bx2 = cx_m + s*c, by2 = midY - s*c
-          sample = (
-            <g stroke={color} strokeWidth={0.9} strokeLinecap="round" fill="none">
-              <line x1={ax1} y1={ay1} x2={ax2} y2={ay2} />
-              <line x1={bx1} y1={by1} x2={bx2} y2={by2} />
-              <line x1={ax1 - t*c} y1={ay1 + t*c} x2={ax1 + t*c} y2={ay1 - t*c} />
-              <line x1={ax2 - t*c} y1={ay2 + t*c} x2={ax2 + t*c} y2={ay2 - t*c} />
-              <line x1={bx1 - t*c} y1={by1 - t*c} x2={bx1 + t*c} y2={by1 + t*c} />
-              <line x1={bx2 - t*c} y1={by2 - t*c} x2={bx2 + t*c} y2={by2 + t*c} />
-            </g>
-          )
-        } else if (type === 'poi-bridge') {
-          const gap = rowH * 0.24
-          sample = (
-            <g stroke={color} strokeWidth={1.4} strokeLinecap="square" fill="none">
-              <line x1={sx1} y1={midY - gap} x2={sx2} y2={midY - gap} />
-              <line x1={sx1} y1={midY + gap} x2={sx2} y2={midY + gap} />
-            </g>
-          )
-        } else if (type === 'poi-cave') {
-          sample = (
-            <text x={sx1 + sampW / 2} y={midY}
-              fontFamily={poiDefaults.caveFontFamily} fontSize={rowH * 0.78}
-              fill={color} textAnchor="middle" dominantBaseline="middle">
-              Ω
-            </text>
-          )
+        } else if (type === 'poi' && poiSample) {
+          // Scale the sample to fit in the legend slot
+          const legendSample: PoiEntry = { ...poiSample, x: sx1 + sampW / 2, y: midY }
+          const targetPx = poiSample.typeId === 'bridge'
+            ? sampW * 0.88 / Math.max(poiSample.bridgeLengthM ?? 30, 0.1)
+            : rowH * 0.68 / Math.max(poiSample.sizeM, 0.1)
+          sample = renderPoiSymbol(legendSample, targetPx, customMarkerDefs)
         } else {
           const w = sampW * 0.6, hw = w * 0.28, hl = w * 0.3
           const ax1 = sx1 + (sampW-w)/2, ax2 = ax1 + w, ab = ax2 - hl
@@ -1147,9 +1208,10 @@ export function MapCanvas(): JSX.Element {
   const updatePoi = useStore((s) => s.updatePoi)
   const removePoi = useStore((s) => s.removePoi)
   const poisVisible = useStore((s) => s.poisVisible)
-  const poiDefaults = useStore((s) => s.poiDefaults)
+  const poiNewMarker = useStore((s) => s.poiNewMarker)
   const selectedPoiId = useStore((s) => s.selectedPoiId)
   const setSelectedPoiId = useStore((s) => s.setSelectedPoiId)
+  const customMarkerDefs = useGlobalStore((s) => s.customMarkerDefs)
   const elevationFlagDefaults = useStore((s) => s.elevationFlagDefaults)
   const slopeArrowDefaults = useStore((s) => s.slopeArrowDefaults)
   const ruggednessFlagDefaults = useStore((s) => s.ruggednessFlagDefaults)
@@ -1209,8 +1271,8 @@ export function MapCanvas(): JSX.Element {
   roadDefaultsRef.current = roadDefaults
   const buildingDefaultsRef = useRef(buildingDefaults)
   buildingDefaultsRef.current = buildingDefaults
-  const poiDefaultsRef = useRef(poiDefaults)
-  poiDefaultsRef.current = poiDefaults
+  const poiNewMarkerRef = useRef(poiNewMarker)
+  poiNewMarkerRef.current = poiNewMarker
   const inProgressPtsRef = useRef(inProgressPts)
   inProgressPtsRef.current = inProgressPts
 
@@ -1590,21 +1652,21 @@ export function MapCanvas(): JSX.Element {
         templateId: d.buildingTemplateId,
       })
     } else if (mapTool === 'poi') {
-      const d = poiDefaultsRef.current
+      const d = poiNewMarkerRef.current
       const entry: PoiEntry = {
         id: crypto.randomUUID(),
         x: pt.x,
         y: pt.y,
-        type: d.type,
-        color: d.type === 'mine' ? d.mineColor : d.type === 'bridge' ? d.bridgeColor : d.caveColor,
-        ...(d.type === 'mine' ? { mineSize: d.mineSizeM } : {}),
-        ...(d.type === 'bridge' ? {
-          bridgeLength: d.bridgeLengthM,
-          bridgeSeparation: d.bridgeSeparationM,
-          bridgeStrokeWeight: d.bridgeStrokeWeight,
+        typeId: d.typeId,
+        color: d.color,
+        sizeM: d.sizeM,
+        strokeWeight: d.strokeWeight,
+        ...(d.typeId === 'bridge' ? {
+          bridgeLengthM: d.bridgeLengthM,
+          bridgeSeparationM: d.bridgeSeparationM,
           bridgeRotation: d.bridgeRotation,
         } : {}),
-        ...(d.type === 'cave' ? { caveSize: d.caveSizeM, caveFontFamily: d.caveFontFamily } : {}),
+        ...((d.typeId === 'cave' || customMarkerDefs.find(cd => cd.id === d.typeId)?.symbol.kind === 'unicode') ? { fontFamily: d.fontFamily } : {}),
         ...(d.label ? { label: d.label, labelColor: d.labelColor, labelSizeM: d.labelSizeM, labelFontFamily: d.labelFontFamily } : {}),
       }
       addPoi(entry)
@@ -2250,12 +2312,10 @@ export function MapCanvas(): JSX.Element {
             const isSelected = selectedPoiId === poi.id
             const displayPoi: PoiEntry = { ...poi, x: fx, y: fy }
             const labelSizePx = (poi.labelSizeM ?? 8) * pixelsPerMeter
-            const symbolRadius = poi.type === 'mine'
-              ? (poi.mineSize ?? 8) * pixelsPerMeter * 0.55
-              : poi.type === 'bridge'
-              ? Math.max((poi.bridgeSeparation ?? 6) * pixelsPerMeter * 0.6 + (poi.bridgeStrokeWeight ?? 2.5),
-                         (poi.bridgeLength ?? 30) * pixelsPerMeter * 0.5)
-              : (poi.caveSize ?? 12) * pixelsPerMeter * 0.6
+            const symbolRadius = poi.typeId === 'bridge'
+              ? Math.max((poi.bridgeSeparationM ?? 6) * pixelsPerMeter * 0.6 + poi.strokeWeight,
+                         (poi.bridgeLengthM ?? 30) * pixelsPerMeter * 0.5)
+              : poi.sizeM * pixelsPerMeter * 0.6
             const hitR = Math.max(symbolRadius * 1.1, 8)
             return (
               <g key={poi.id}
@@ -2263,7 +2323,7 @@ export function MapCanvas(): JSX.Element {
                 style={{ cursor: isSelected ? 'grab' : 'pointer' }}>
                 {/* Transparent hit area — SVG stroked lines have no filled area to click */}
                 <circle cx={fx} cy={fy} r={hitR} fill="transparent" />
-                {renderPoiSymbol(displayPoi, pixelsPerMeter)}
+                {renderPoiSymbol(displayPoi, pixelsPerMeter, customMarkerDefs)}
                 {poi.label && (
                   <text
                     x={fx} y={fy + symbolRadius + labelSizePx * 0.3}
@@ -2483,16 +2543,14 @@ export function MapCanvas(): JSX.Element {
               )
             }
             if (mapTool === 'poi') {
-              const d = poiDefaultsRef.current
+              const d = poiNewMarkerRef.current
               const hoverEntry: PoiEntry = {
-                id: '', x: hoverPos.x, y: hoverPos.y, type: d.type,
-                color: d.type === 'mine' ? d.mineColor : d.type === 'bridge' ? d.bridgeColor : d.caveColor,
-                mineSize: d.mineSizeM,
-                bridgeLength: d.bridgeLengthM, bridgeSeparation: d.bridgeSeparationM,
-                bridgeStrokeWeight: d.bridgeStrokeWeight, bridgeRotation: d.bridgeRotation,
-                caveSize: d.caveSizeM, caveFontFamily: d.caveFontFamily,
+                id: '', x: hoverPos.x, y: hoverPos.y, typeId: d.typeId,
+                color: d.color, sizeM: d.sizeM, strokeWeight: d.strokeWeight,
+                bridgeLengthM: d.bridgeLengthM, bridgeSeparationM: d.bridgeSeparationM,
+                bridgeRotation: d.bridgeRotation, fontFamily: d.fontFamily,
               }
-              return <g opacity={0.7}>{renderPoiSymbol(hoverEntry, pixelsPerMeter)}</g>
+              return <g opacity={0.7}>{renderPoiSymbol(hoverEntry, pixelsPerMeter, customMarkerDefs)}</g>
             }
             if (mapTool === 'slope-arrow' && hoverPos.angleDeg !== undefined && hoverPos.slopeDeg !== undefined) {
               const angleRad = (hoverPos.angleDeg * Math.PI) / 180
@@ -2577,7 +2635,7 @@ export function MapCanvas(): JSX.Element {
           roadDefaults={roadDefaults}
           buildings={buildings}
           pois={pois}
-          poiDefaults={poiDefaults}
+          customMarkerDefs={customMarkerDefs}
           elevationCalibration={elevationCalibration}
         />
       )}

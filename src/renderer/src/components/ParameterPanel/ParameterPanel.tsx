@@ -1,8 +1,9 @@
 import { useEffect, useRef, useState } from 'react'
 import { Stack, Text, Slider, NumberInput, ColorInput, Switch, Divider, Group, Select, TextInput, Collapse, Checkbox, SegmentedControl, Box, Button, Radio, Tooltip } from '@mantine/core'
 import { useStore } from '../../store/useStore'
-import type { FrameBorderStyle, TitleConfig, CompassConfig, FramePosition, RoadType, GridType, GridLinePattern, GridConfig, PoiType } from '../../types'
-import { TRI_LABELS, TRI_THRESHOLDS, triRangeLabel } from '../../types'
+import { useGlobalStore } from '../../store/useGlobalStore'
+import type { FrameBorderStyle, TitleConfig, CompassConfig, FramePosition, RoadType, GridType, GridLinePattern, GridConfig, BuiltinMarkerTypeId, MarkerPrimitiveId, MarkerSymbolDescriptor } from '../../types'
+import { TRI_LABELS, TRI_THRESHOLDS, triRangeLabel, BUILTIN_MARKER_SPECS } from '../../types'
 import { BUILDING_CATALOG } from '../../data/buildings'
 import type { BuildingShape } from '../../data/buildings'
 
@@ -165,12 +166,15 @@ export function ParameterPanel(): JSX.Element {
   const pois = useStore((s) => s.pois)
   const poisVisible = useStore((s) => s.poisVisible)
   const setPoisVisible = useStore((s) => s.setPoisVisible)
-  const poiDefaults = useStore((s) => s.poiDefaults)
-  const updatePoiDefaults = useStore((s) => s.updatePoiDefaults)
+  const poiNewMarker = useStore((s) => s.poiNewMarker)
+  const updatePoiNewMarker = useStore((s) => s.updatePoiNewMarker)
   const updatePoi = useStore((s) => s.updatePoi)
   const removePoi = useStore((s) => s.removePoi)
   const selectedPoiId = useStore((s) => s.selectedPoiId)
   const setSelectedPoiId = useStore((s) => s.setSelectedPoiId)
+  const customMarkerDefs = useGlobalStore((s) => s.customMarkerDefs)
+  const addCustomMarkerDef = useGlobalStore((s) => s.addCustomMarkerDef)
+  const removeCustomMarkerDef = useGlobalStore((s) => s.removeCustomMarkerDef)
 
   const { unitType, customName, customAbbr, customBase, customRatio, realMin, realMax, realInterval, mapWidth } = elevationCalibration
 
@@ -206,6 +210,16 @@ export function ParameterPanel(): JSX.Element {
   const [buildingsOpen, setBuildingsOpen] = useState(true)
   const [gridsOpen, setGridsOpen] = useState(true)
   const [framingOpen, setFramingOpen] = useState(true)
+
+  const [createCustomOpen, setCreateCustomOpen] = useState(false)
+  const [newCustomName, setNewCustomName] = useState('')
+  const [newCustomSymbolKind, setNewCustomSymbolKind] = useState<'builtin' | 'primitive' | 'unicode'>('primitive')
+  const [newCustomBuiltinId, setNewCustomBuiltinId] = useState<BuiltinMarkerTypeId>('mine')
+  const [newCustomPrimitiveId, setNewCustomPrimitiveId] = useState<MarkerPrimitiveId>('cross-plus')
+  const [newCustomUnicodeChars, setNewCustomUnicodeChars] = useState('')
+  const [newCustomColor, setNewCustomColor] = useState('#555555')
+  const [newCustomSizeM, setNewCustomSizeM] = useState(10)
+  const [newCustomStrokeWeight, setNewCustomStrokeWeight] = useState(1.5)
 
   const allOpen = hillshadeOpen && contoursOpen && styleOpen && labelStylingOpen && seaLevelOpen && markersOpen && roadsOpen && buildingsOpen && gridsOpen && framingOpen
   const toggleAll = () => {
@@ -931,7 +945,15 @@ export function ParameterPanel(): JSX.Element {
             const sel = selectedPoiId ? pois.find(p => p.id === selectedPoiId) : null
 
             if (sel) {
-              const typeName = sel.type === 'mine' ? 'Mine Entrance' : sel.type === 'bridge' ? 'Bridge' : 'Cave Entrance'
+              const isBuiltin = sel.typeId in BUILTIN_MARKER_SPECS
+              const typeName = isBuiltin
+                ? BUILTIN_MARKER_SPECS[sel.typeId as BuiltinMarkerTypeId].name
+                : customMarkerDefs.find(d => d.id === sel.typeId)?.name ?? sel.typeId
+              const isBridge = sel.typeId === 'bridge'
+              const isCustom = !isBuiltin
+              const customDef = isCustom ? customMarkerDefs.find(d => d.id === sel.typeId) : null
+              const showFont = sel.typeId === 'cave' || (isCustom && customDef?.symbol.kind === 'unicode')
+
               return (
                 <Box style={{
                   background: 'rgba(34,139,230,0.07)',
@@ -949,25 +971,24 @@ export function ParameterPanel(): JSX.Element {
                       value={sel.color}
                       onChange={(v) => updatePoi(sel.id, { color: v })} format="hex" />
 
-                    {sel.type === 'mine' && (
-                      <NumberInput label={`Size (${poiUnitLabel})`} size="xs"
-                        value={sel.mineSize ?? 8} min={1} step={1}
-                        onChange={(v) => { const n = Number(v); if (n > 0) updatePoi(sel.id, { mineSize: n }) }} />
-                    )}
+                    <NumberInput label={`Size (${poiUnitLabel})`} size="xs"
+                      value={sel.sizeM} min={1} step={1}
+                      onChange={(v) => { const n = Number(v); if (n > 0) updatePoi(sel.id, { sizeM: n }) }} />
 
-                    {sel.type === 'bridge' && (
+                    <NumberInput label="Stroke weight (px)" size="xs"
+                      value={sel.strokeWeight} min={0.5} step={0.5}
+                      onChange={(v) => { const n = Number(v); if (n > 0) updatePoi(sel.id, { strokeWeight: n }) }} />
+
+                    {isBridge && (
                       <>
                         <Group grow>
                           <NumberInput label={`Length (${poiUnitLabel})`} size="xs"
-                            value={sel.bridgeLength ?? 30} min={1} step={5}
-                            onChange={(v) => { const n = Number(v); if (n > 0) updatePoi(sel.id, { bridgeLength: n }) }} />
+                            value={sel.bridgeLengthM ?? 30} min={1} step={5}
+                            onChange={(v) => { const n = Number(v); if (n > 0) updatePoi(sel.id, { bridgeLengthM: n }) }} />
                           <NumberInput label={`Separation (${poiUnitLabel})`} size="xs"
-                            value={sel.bridgeSeparation ?? 6} min={0.5} step={1}
-                            onChange={(v) => { const n = Number(v); if (n > 0) updatePoi(sel.id, { bridgeSeparation: n }) }} />
+                            value={sel.bridgeSeparationM ?? 6} min={0.5} step={1}
+                            onChange={(v) => { const n = Number(v); if (n > 0) updatePoi(sel.id, { bridgeSeparationM: n }) }} />
                         </Group>
-                        <NumberInput label="Stroke weight (px)" size="xs"
-                          value={sel.bridgeStrokeWeight ?? 2.5} min={0.5} step={0.5}
-                          onChange={(v) => { const n = Number(v); if (n > 0) updatePoi(sel.id, { bridgeStrokeWeight: n }) }} />
                         <Stack gap={4}>
                           <Text size="xs" fw={500}>Rotation (°)</Text>
                           <Slider min={0} max={355} step={5} value={sel.bridgeRotation ?? 0}
@@ -977,15 +998,10 @@ export function ParameterPanel(): JSX.Element {
                       </>
                     )}
 
-                    {sel.type === 'cave' && (
-                      <>
-                        <NumberInput label={`Symbol size (${poiUnitLabel})`} size="xs"
-                          value={sel.caveSize ?? 12} min={1} step={1}
-                          onChange={(v) => { const n = Number(v); if (n > 0) updatePoi(sel.id, { caveSize: n }) }} />
-                        <Select label="Font" size="xs" data={FONT_OPTIONS}
-                          value={sel.caveFontFamily ?? 'serif'}
-                          onChange={(v) => v && updatePoi(sel.id, { caveFontFamily: v })} />
-                      </>
+                    {showFont && (
+                      <Select label="Font" size="xs" data={FONT_OPTIONS}
+                        value={sel.fontFamily ?? 'serif'}
+                        onChange={(v) => v && updatePoi(sel.id, { fontFamily: v })} />
                     )}
 
                     <Divider label="Map label" labelPosition="left" />
@@ -1018,115 +1034,230 @@ export function ParameterPanel(): JSX.Element {
               )
             }
 
+            // No-selection: new marker defaults + library
+            const typeOptions = [
+              ...Object.entries(BUILTIN_MARKER_SPECS).map(([id, spec]) => ({ value: id, label: spec.name })),
+              ...customMarkerDefs.map(def => ({ value: def.id, label: def.name })),
+            ]
+            const isNmBridge = poiNewMarker.typeId === 'bridge'
+            const isNmCustom = !(poiNewMarker.typeId in BUILTIN_MARKER_SPECS)
+            const nmCustomDef = isNmCustom ? customMarkerDefs.find(d => d.id === poiNewMarker.typeId) : null
+            const showNmFont = poiNewMarker.typeId === 'cave' || (isNmCustom && nmCustomDef?.symbol.kind === 'unicode')
+
             return (
               <>
                 <Divider label="New Marker Defaults" labelPosition="left" />
 
-                <Text size="xs" fw={500}>Type</Text>
-                <SegmentedControl size="xs"
-                  value={poiDefaults.type}
-                  onChange={(v) => updatePoiDefaults({ type: v as PoiType })}
-                  data={[
-                    { value: 'mine',   label: 'Mine' },
-                    { value: 'bridge', label: 'Bridge' },
-                    { value: 'cave',   label: 'Cave' },
-                  ]}
+                <Select
+                  label="Type"
+                  size="xs"
+                  data={typeOptions}
+                  value={poiNewMarker.typeId}
+                  onChange={(v) => {
+                    if (!v) return
+                    if (v in BUILTIN_MARKER_SPECS) {
+                      const spec = BUILTIN_MARKER_SPECS[v as BuiltinMarkerTypeId]
+                      updatePoiNewMarker({
+                        typeId: v,
+                        color: spec.defaultColor,
+                        sizeM: spec.defaultSizeM,
+                        strokeWeight: spec.defaultStrokeWeight,
+                        ...(v === 'bridge' ? {
+                          bridgeLengthM: spec.defaultBridgeLengthM ?? 30,
+                          bridgeSeparationM: spec.defaultBridgeSeparationM ?? 6,
+                          bridgeRotation: spec.defaultBridgeRotation ?? 0,
+                        } : {}),
+                        ...(v === 'cave' ? { fontFamily: spec.defaultFontFamily ?? 'serif' } : {}),
+                      })
+                    } else {
+                      const def = customMarkerDefs.find(d => d.id === v)
+                      if (def) updatePoiNewMarker({ typeId: v, color: def.defaultColor, sizeM: def.defaultSizeM, strokeWeight: def.defaultStrokeWeight })
+                    }
+                  }}
                 />
 
-                {poiDefaults.type === 'mine' && (
-                  <>
-                    <Text size="xs" fw={500}>Color</Text>
-                    <ColorInput size="xs" value={poiDefaults.mineColor}
-                      onChange={(v) => updatePoiDefaults({ mineColor: v })} format="hex" />
-                    <NumberInput
-                      label={`Size (${poiUnitLabel})`} size="xs"
-                      value={poiDefaults.mineSizeM} min={1} step={1}
-                      onChange={(v) => { const n = Number(v); if (n > 0) updatePoiDefaults({ mineSizeM: n }) }}
-                    />
-                  </>
-                )}
+                <ColorInput size="xs" label="Color"
+                  value={poiNewMarker.color}
+                  onChange={(v) => updatePoiNewMarker({ color: v })} format="hex" />
 
-                {poiDefaults.type === 'bridge' && (
+                <NumberInput label={`Size (${poiUnitLabel})`} size="xs"
+                  value={poiNewMarker.sizeM} min={1} step={1}
+                  onChange={(v) => { const n = Number(v); if (n > 0) updatePoiNewMarker({ sizeM: n }) }} />
+
+                <NumberInput label="Stroke weight (px)" size="xs"
+                  value={poiNewMarker.strokeWeight} min={0.5} step={0.5}
+                  onChange={(v) => { const n = Number(v); if (n > 0) updatePoiNewMarker({ strokeWeight: n }) }} />
+
+                {isNmBridge && (
                   <>
-                    <Text size="xs" fw={500}>Color</Text>
-                    <ColorInput size="xs" value={poiDefaults.bridgeColor}
-                      onChange={(v) => updatePoiDefaults({ bridgeColor: v })} format="hex" />
                     <Group grow>
-                      <NumberInput
-                        label={`Length (${poiUnitLabel})`} size="xs"
-                        value={poiDefaults.bridgeLengthM} min={1} step={5}
-                        onChange={(v) => { const n = Number(v); if (n > 0) updatePoiDefaults({ bridgeLengthM: n }) }}
-                      />
-                      <NumberInput
-                        label={`Separation (${poiUnitLabel})`} size="xs"
-                        value={poiDefaults.bridgeSeparationM} min={0.5} step={1}
-                        onChange={(v) => { const n = Number(v); if (n > 0) updatePoiDefaults({ bridgeSeparationM: n }) }}
-                      />
+                      <NumberInput label={`Length (${poiUnitLabel})`} size="xs"
+                        value={poiNewMarker.bridgeLengthM} min={1} step={5}
+                        onChange={(v) => { const n = Number(v); if (n > 0) updatePoiNewMarker({ bridgeLengthM: n }) }} />
+                      <NumberInput label={`Separation (${poiUnitLabel})`} size="xs"
+                        value={poiNewMarker.bridgeSeparationM} min={0.5} step={1}
+                        onChange={(v) => { const n = Number(v); if (n > 0) updatePoiNewMarker({ bridgeSeparationM: n }) }} />
                     </Group>
-                    <NumberInput
-                      label="Stroke weight (px)" size="xs"
-                      value={poiDefaults.bridgeStrokeWeight} min={0.5} step={0.5}
-                      onChange={(v) => { const n = Number(v); if (n > 0) updatePoiDefaults({ bridgeStrokeWeight: n }) }}
-                    />
                     <Stack gap={4}>
                       <Text size="xs" fw={500}>Rotation (°)</Text>
-                      <Slider min={0} max={355} step={5} value={poiDefaults.bridgeRotation}
-                        onChange={(v) => updatePoiDefaults({ bridgeRotation: v })}
+                      <Slider min={0} max={355} step={5} value={poiNewMarker.bridgeRotation}
+                        onChange={(v) => updatePoiNewMarker({ bridgeRotation: v })}
                         label={(v) => `${v}°`} />
                     </Stack>
                   </>
                 )}
 
-                {poiDefaults.type === 'cave' && (
-                  <>
-                    <Text size="xs" fw={500}>Color</Text>
-                    <ColorInput size="xs" value={poiDefaults.caveColor}
-                      onChange={(v) => updatePoiDefaults({ caveColor: v })} format="hex" />
-                    <NumberInput
-                      label={`Symbol size (${poiUnitLabel})`} size="xs"
-                      value={poiDefaults.caveSizeM} min={1} step={1}
-                      onChange={(v) => { const n = Number(v); if (n > 0) updatePoiDefaults({ caveSizeM: n }) }}
-                    />
-                    <Select label="Font" size="xs" data={FONT_OPTIONS}
-                      value={poiDefaults.caveFontFamily}
-                      onChange={(v) => v && updatePoiDefaults({ caveFontFamily: v })} />
-                  </>
+                {showNmFont && (
+                  <Select label="Font" size="xs" data={FONT_OPTIONS}
+                    value={poiNewMarker.fontFamily}
+                    onChange={(v) => v && updatePoiNewMarker({ fontFamily: v })} />
                 )}
 
                 <Divider label="Map label" labelPosition="left" />
                 <TextInput size="xs" label="Label text"
-                  description="Stamped on next placed marker. Place name, etc."
+                  description="Stamped on next placed marker"
                   placeholder="Optional"
-                  value={poiDefaults.label}
-                  onChange={(e) => updatePoiDefaults({ label: e.currentTarget.value })}
+                  value={poiNewMarker.label}
+                  onChange={(e) => updatePoiNewMarker({ label: e.currentTarget.value })}
                 />
                 <Group grow>
-                  <ColorInput size="xs" label="Label color" value={poiDefaults.labelColor}
-                    onChange={(v) => updatePoiDefaults({ labelColor: v })} format="hex" />
+                  <ColorInput size="xs" label="Label color" value={poiNewMarker.labelColor}
+                    onChange={(v) => updatePoiNewMarker({ labelColor: v })} format="hex" />
                   <NumberInput size="xs" label={`Label size (${poiUnitLabel})`}
-                    value={poiDefaults.labelSizeM} min={1} step={1}
-                    onChange={(v) => { const n = Number(v); if (n > 0) updatePoiDefaults({ labelSizeM: n }) }} />
+                    value={poiNewMarker.labelSizeM} min={1} step={1}
+                    onChange={(v) => { const n = Number(v); if (n > 0) updatePoiNewMarker({ labelSizeM: n }) }} />
                 </Group>
                 <Select size="xs" label="Label font" data={FONT_OPTIONS}
-                  value={poiDefaults.labelFontFamily}
-                  onChange={(v) => v && updatePoiDefaults({ labelFontFamily: v })} />
+                  value={poiNewMarker.labelFontFamily}
+                  onChange={(v) => v && updatePoiNewMarker({ labelFontFamily: v })} />
 
-                <Divider label="Legend" labelPosition="left" />
-                <TextInput size="xs"
-                  label={`Legend label for "${poiDefaults.type === 'mine' ? 'Mine' : poiDefaults.type === 'bridge' ? 'Bridge' : 'Cave'}"`}
-                  placeholder={poiDefaults.type === 'mine' ? 'Mine Entrance' : poiDefaults.type === 'bridge' ? 'Bridge' : 'Cave Entrance'}
-                  value={
-                    poiDefaults.type === 'mine' ? poiDefaults.mineSignificanceLabel
-                    : poiDefaults.type === 'bridge' ? poiDefaults.bridgeSignificanceLabel
-                    : poiDefaults.caveSignificanceLabel
-                  }
-                  onChange={(e) => {
-                    const v = e.currentTarget.value
-                    if (poiDefaults.type === 'mine') updatePoiDefaults({ mineSignificanceLabel: v })
-                    else if (poiDefaults.type === 'bridge') updatePoiDefaults({ bridgeSignificanceLabel: v })
-                    else updatePoiDefaults({ caveSignificanceLabel: v })
-                  }}
-                />
+                {customMarkerDefs.length > 0 && (
+                  <>
+                    <Divider label="Custom Marker Library" labelPosition="left" />
+                    <Stack gap={6}>
+                      {customMarkerDefs.map(def => {
+                        const inUse = pois.some(p => p.typeId === def.id)
+                        return (
+                          <Group key={def.id} justify="space-between" align="center" wrap="nowrap">
+                            <Text size="xs" style={{ flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                              {def.name}
+                            </Text>
+                            <Tooltip
+                              label={inUse ? 'In use on map — remove instances first' : 'Delete definition'}
+                              position="left"
+                            >
+                              <Button size="compact-xs" color="red" variant="subtle"
+                                disabled={inUse}
+                                onClick={() => {
+                                  removeCustomMarkerDef(def.id)
+                                  if (poiNewMarker.typeId === def.id) {
+                                    updatePoiNewMarker({ typeId: 'mine', color: BUILTIN_MARKER_SPECS.mine.defaultColor, sizeM: BUILTIN_MARKER_SPECS.mine.defaultSizeM, strokeWeight: BUILTIN_MARKER_SPECS.mine.defaultStrokeWeight })
+                                  }
+                                }}>
+                                ✕
+                              </Button>
+                            </Tooltip>
+                          </Group>
+                        )
+                      })}
+                    </Stack>
+                  </>
+                )}
+
+                <Divider label="Create Custom Marker" labelPosition="left" />
+                <Button size="xs" variant="light"
+                  onClick={() => setCreateCustomOpen((o) => !o)}>
+                  {createCustomOpen ? 'Cancel' : '+ New marker type'}
+                </Button>
+
+                <Collapse in={createCustomOpen}>
+                  <Stack gap="md" pt={4}>
+                    <TextInput size="xs" label="Name"
+                      placeholder="e.g. Waypoint, Danger zone…"
+                      value={newCustomName}
+                      onChange={(e) => setNewCustomName(e.currentTarget.value)} />
+
+                    <Text size="xs" fw={500}>Symbol</Text>
+                    <SegmentedControl size="xs"
+                      value={newCustomSymbolKind}
+                      onChange={(v) => setNewCustomSymbolKind(v as 'builtin' | 'primitive' | 'unicode')}
+                      data={[
+                        { value: 'primitive', label: 'Primitive' },
+                        { value: 'builtin',   label: 'Built-in' },
+                        { value: 'unicode',   label: 'Unicode' },
+                      ]}
+                    />
+
+                    {newCustomSymbolKind === 'builtin' && (
+                      <Select size="xs" label="Built-in symbol"
+                        data={Object.entries(BUILTIN_MARKER_SPECS).map(([id, spec]) => ({ value: id, label: spec.name }))}
+                        value={newCustomBuiltinId}
+                        onChange={(v) => v && setNewCustomBuiltinId(v as BuiltinMarkerTypeId)} />
+                    )}
+
+                    {newCustomSymbolKind === 'primitive' && (
+                      <Select size="xs" label="Primitive symbol"
+                        data={[
+                          { value: 'cross-plus',        label: '+ Cross (plus)' },
+                          { value: 'cross-x',           label: '× Cross (X)' },
+                          { value: 'cross-star',        label: '✳ Cross (star)' },
+                          { value: 'circle-tri-open',   label: '◬ Circle + open triangle' },
+                          { value: 'circle-tri-filled', label: '◭ Circle + filled triangle' },
+                          { value: 'circle-crossbar',   label: '⊖ Circle + crossbar' },
+                          { value: 'circle-hatched',    label: '⊗ Circle hatched' },
+                          { value: 'mountains',         label: '⛰ Mountains' },
+                          { value: 'pin',               label: '📍 Pin' },
+                          { value: 'flagpost-left',     label: '⚑ Flagpost (flag left)' },
+                        ] as { value: MarkerPrimitiveId; label: string }[]}
+                        value={newCustomPrimitiveId}
+                        onChange={(v) => v && setNewCustomPrimitiveId(v as MarkerPrimitiveId)} />
+                    )}
+
+                    {newCustomSymbolKind === 'unicode' && (
+                      <TextInput size="xs" label="Character(s) — max 2"
+                        placeholder="e.g. ★ or ⚑"
+                        maxLength={2}
+                        value={newCustomUnicodeChars}
+                        onChange={(e) => setNewCustomUnicodeChars(e.currentTarget.value)} />
+                    )}
+
+                    <ColorInput size="xs" label="Default color"
+                      value={newCustomColor}
+                      onChange={setNewCustomColor} format="hex" />
+
+                    <Group grow>
+                      <NumberInput size="xs" label={`Default size (${poiUnitLabel})`}
+                        value={newCustomSizeM} min={1} step={1}
+                        onChange={(v) => { const n = Number(v); if (n > 0) setNewCustomSizeM(n) }} />
+                      <NumberInput size="xs" label="Stroke weight (px)"
+                        value={newCustomStrokeWeight} min={0.5} step={0.5}
+                        onChange={(v) => { const n = Number(v); if (n > 0) setNewCustomStrokeWeight(n) }} />
+                    </Group>
+
+                    <Button size="xs" variant="filled"
+                      disabled={!newCustomName.trim() || (newCustomSymbolKind === 'unicode' && !newCustomUnicodeChars.trim())}
+                      onClick={() => {
+                        const symbol: MarkerSymbolDescriptor =
+                          newCustomSymbolKind === 'builtin'   ? { kind: 'builtin',   builtinId: newCustomBuiltinId }
+                          : newCustomSymbolKind === 'primitive' ? { kind: 'primitive', primitiveId: newCustomPrimitiveId }
+                          : { kind: 'unicode', chars: newCustomUnicodeChars.trim() }
+                        addCustomMarkerDef({
+                          id: crypto.randomUUID(),
+                          name: newCustomName.trim(),
+                          symbol,
+                          defaultColor: newCustomColor,
+                          defaultSizeM: newCustomSizeM,
+                          defaultStrokeWeight: newCustomStrokeWeight,
+                          createdAt: Date.now(),
+                        })
+                        setCreateCustomOpen(false)
+                        setNewCustomName('')
+                        setNewCustomUnicodeChars('')
+                      }}>
+                      Create marker type
+                    </Button>
+                  </Stack>
+                </Collapse>
               </>
             )
           })()}
@@ -1965,8 +2096,6 @@ export function ParameterPanel(): JSX.Element {
           { key: 'showPavedRoads',   labelKey: 'pavedRoadsLabel',   label: 'Paved road',    requiresData: roads.some(r => r.type === 'paved') },
           { key: 'showFootpaths',    labelKey: 'footpathsLabel',    label: 'Footpath',      requiresData: roads.some(r => r.type === 'footpath') },
           { key: 'showTrails',       labelKey: 'trailsLabel',       label: 'Trail',         requiresData: roads.some(r => r.type === 'trail') },
-          { key: 'showBuildings',                                   label: 'Buildings',     requiresData: buildings.length > 0 },
-          { key: 'showPois',                                       label: 'Points of interest', requiresData: pois.length > 0 },
         ] as { key: keyof typeof legend; labelKey?: keyof typeof legend; label: string; requiresData?: boolean }[]).map(({ key, labelKey, label, requiresData }) => (
           <Group key={key as string} gap="xs" align="center" wrap="nowrap">
             <Switch
@@ -1990,7 +2119,17 @@ export function ParameterPanel(): JSX.Element {
           </Group>
         ))}
 
-        {/* Dynamic building label fields — one per unique (templateId, color) on the map */}
+        {/* Buildings toggle + per-(templateId,color) label overrides */}
+        <Group gap="xs" align="center" wrap="nowrap">
+          <Switch
+            size="xs"
+            checked={legend.showBuildings as boolean}
+            onChange={(e) => updateLegend({ showBuildings: e.currentTarget.checked })}
+            disabled={!frame.enabled || !legend.enabled || buildings.length === 0}
+            label="Buildings"
+            style={{ flex: '0 0 auto' }}
+          />
+        </Group>
         {legend.showBuildings && buildings.length > 0 && frame.enabled && legend.enabled && (() => {
           const seen = new Map<string, { shape: BuildingShape; color: string; tplName: string }>()
           for (const b of buildings) {
@@ -2025,6 +2164,49 @@ export function ParameterPanel(): JSX.Element {
                     style={{ flex: 1, minWidth: 0 }}
                   />
                 </Group>
+              ))}
+            </Stack>
+          )
+        })()}
+
+        {/* POI toggle + per-typeId label overrides */}
+        <Group gap="xs" align="center" wrap="nowrap">
+          <Switch
+            size="xs"
+            checked={legend.showPois as boolean}
+            onChange={(e) => updateLegend({ showPois: e.currentTarget.checked })}
+            disabled={!frame.enabled || !legend.enabled || pois.length === 0}
+            label="Points of interest"
+            style={{ flex: '0 0 auto' }}
+          />
+        </Group>
+        {legend.showPois && pois.length > 0 && frame.enabled && legend.enabled && (() => {
+          const seenTypes = new Map<string, string>()
+          for (const p of pois) {
+            if (!seenTypes.has(p.typeId)) {
+              const name = p.typeId in BUILTIN_MARKER_SPECS
+                ? BUILTIN_MARKER_SPECS[p.typeId as BuiltinMarkerTypeId].name
+                : customMarkerDefs.find(d => d.id === p.typeId)?.name ?? p.typeId
+              seenTypes.set(p.typeId, name)
+            }
+          }
+          return (
+            <Stack gap={6} pl={4}>
+              <Text size="xs" c="dimmed">POI legend labels</Text>
+              {[...seenTypes.entries()].map(([typeId, name]) => (
+                <TextInput
+                  key={typeId}
+                  size="xs"
+                  label={name}
+                  placeholder={name}
+                  value={legend.poiLabels[typeId] ?? ''}
+                  onChange={(e) => {
+                    const val = e.currentTarget.value
+                    const newLabels = { ...legend.poiLabels }
+                    if (val) { newLabels[typeId] = val } else { delete newLabels[typeId] }
+                    updateLegend({ poiLabels: newLabels })
+                  }}
+                />
               ))}
             </Stack>
           )

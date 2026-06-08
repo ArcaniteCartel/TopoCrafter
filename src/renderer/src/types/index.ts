@@ -181,67 +181,100 @@ export function triRangeLabel(i: number, elevRange?: number, unitAbbr?: string):
 
 export type MapTool = 'none' | 'elevation-flag' | 'slope-arrow' | 'measure-anchor' | 'ruggedness-flag' | 'swamp-marker' | 'road' | 'building' | 'poi'
 
-export type PoiType = 'mine' | 'bridge' | 'cave'
+export type BuiltinMarkerTypeId = 'mine' | 'bridge' | 'cave'
+
+export type MarkerPrimitiveId =
+  | 'cross-plus'
+  | 'cross-x'
+  | 'cross-star'
+  | 'circle-tri-open'
+  | 'circle-tri-filled'
+  | 'circle-crossbar'
+  | 'circle-hatched'
+  | 'mountains'
+  | 'pin'
+  | 'flagpost-left'
+
+export type MarkerSymbolDescriptor =
+  | { kind: 'builtin'; builtinId: BuiltinMarkerTypeId }
+  | { kind: 'primitive'; primitiveId: MarkerPrimitiveId }
+  | { kind: 'unicode'; chars: string }
+
+export interface CustomMarkerDef {
+  id: string
+  name: string
+  symbol: MarkerSymbolDescriptor
+  defaultColor: string
+  defaultSizeM: number
+  defaultStrokeWeight: number
+  createdAt: number
+}
+
+export interface BuiltinMarkerSpec {
+  name: string
+  defaultColor: string
+  defaultSizeM: number
+  defaultStrokeWeight: number
+  defaultBridgeLengthM?: number
+  defaultBridgeSeparationM?: number
+  defaultBridgeRotation?: number
+  defaultFontFamily?: string
+}
+
+export const BUILTIN_MARKER_SPECS: Record<BuiltinMarkerTypeId, BuiltinMarkerSpec> = {
+  mine:   { name: 'Mine Entrance', defaultColor: '#2C2C2C', defaultSizeM: 8,  defaultStrokeWeight: 1.5 },
+  bridge: { name: 'Bridge',        defaultColor: '#444444', defaultSizeM: 6,  defaultStrokeWeight: 2.5,
+    defaultBridgeLengthM: 30, defaultBridgeSeparationM: 6, defaultBridgeRotation: 0 },
+  cave:   { name: 'Cave Entrance', defaultColor: '#1A1A3E', defaultSizeM: 12, defaultStrokeWeight: 1.5,
+    defaultFontFamily: 'serif' },
+}
 
 export interface PoiEntry {
   id: string
   x: number
   y: number
-  type: PoiType
+  typeId: string        // 'mine' | 'bridge' | 'cave' | UUID for custom
   color: string
-  mineSize?: number          // meters
-  bridgeLength?: number      // meters
-  bridgeSeparation?: number  // meters
-  bridgeStrokeWeight?: number // px relative to heightmap coords
-  bridgeRotation?: number    // degrees
-  caveSize?: number          // meters
-  caveFontFamily?: string
+  sizeM: number         // meters — mine, cave, custom symbols
+  strokeWeight: number  // px — bridge, custom primitives
+  bridgeLengthM?: number
+  bridgeSeparationM?: number
+  bridgeRotation?: number
+  fontFamily?: string   // cave Ω font and unicode custom types
   label?: string
   labelColor?: string
-  labelSizeM?: number        // meters
+  labelSizeM?: number
   labelFontFamily?: string
 }
 
-export interface PoiDefaults {
-  type: PoiType
-  mineColor: string
-  mineSizeM: number
-  bridgeColor: string
+export interface PoiNewMarkerState {
+  typeId: string
+  color: string
+  sizeM: number
+  strokeWeight: number
   bridgeLengthM: number
   bridgeSeparationM: number
-  bridgeStrokeWeight: number
   bridgeRotation: number
-  caveColor: string
-  caveSizeM: number
-  caveFontFamily: string
-  mineSignificanceLabel: string
-  bridgeSignificanceLabel: string
-  caveSignificanceLabel: string
+  fontFamily: string
+  label: string
   labelColor: string
   labelSizeM: number
   labelFontFamily: string
-  label: string
 }
 
-export const defaultPoiDefaults: PoiDefaults = {
-  type: 'mine',
-  mineColor: '#2C2C2C',
-  mineSizeM: 8,
-  bridgeColor: '#444444',
+export const defaultPoiNewMarkerState: PoiNewMarkerState = {
+  typeId: 'mine',
+  color: '#2C2C2C',
+  sizeM: 8,
+  strokeWeight: 1.5,
   bridgeLengthM: 30,
   bridgeSeparationM: 6,
-  bridgeStrokeWeight: 2.5,
   bridgeRotation: 0,
-  caveColor: '#1A1A3E',
-  caveSizeM: 12,
-  caveFontFamily: 'serif',
-  mineSignificanceLabel: '',
-  bridgeSignificanceLabel: '',
-  caveSignificanceLabel: '',
+  fontFamily: 'serif',
+  label: '',
   labelColor: '#2E2412',
   labelSizeM: 8,
   labelFontFamily: 'serif',
-  label: '',
 }
 
 export type BuildingShape = 'rectangle' | 'circle' | 'bow-sided' | 'apsidal' | 'courtyard' | 'L-shape' | 'U-shape' | 'octagon'
@@ -359,6 +392,7 @@ export interface LegendConfig {
   showBuildings: boolean
   buildingLabels: Record<string, string>  // key: `${templateId}::${color}`
   showPois: boolean
+  poiLabels: Record<string, string>       // key: typeId → legend label override
   minorLabel: string
   majorLabel: string
   seaLevelLabel: string
@@ -396,6 +430,7 @@ export const defaultLegendConfig: LegendConfig = {
   showBuildings: true,
   buildingLabels: {},
   showPois: true,
+  poiLabels: {},
   minorLabel: 'Minor contour',
   majorLabel: 'Major contour',
   seaLevelLabel: 'Sea level',
@@ -566,7 +601,7 @@ export interface ProjectState {
   buildingDefaults: BuildingDefaults
   pois: PoiEntry[]
   poisVisible: boolean
-  poiDefaults: PoiDefaults
+  poiNewMarker: PoiNewMarkerState
   selectedPoiId: string | null
   mapTool: MapTool
   snapshotParams: ContourParameters | null
