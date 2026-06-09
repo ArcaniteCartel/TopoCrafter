@@ -196,8 +196,12 @@ export function ParameterPanel(): JSX.Element {
     ? Math.abs(realMax! - realMin!) / (mapWidth / heightmap.width)
     : null
   const hasGroundResolution = correctZFactor !== null
+  const hasGeoInfo = hasGroundResolution && (
+    measureBar.anchorLat !== 0 || measureBar.anchorLon !== 0 ||
+    measureBar.anchorX !== null || measureBar.anchorY !== null
+  )
 
-  const effectivePrecision: PrecisionSetting = (measureBar.enabled && measureBar.geoEnabled) ? precisionSetting : 'medium'
+  const effectivePrecision: PrecisionSetting = measureBar.geoEnabled ? precisionSetting : 'medium'
   const effectiveCapM = PRECISION_CAPS[effectivePrecision]
   const sagittalErrorM = (mapWidth && mapWidth > 0 && heightmap)
     ? computeSagittalErrorM(mapWidth, heightmap.width, heightmap.height, unitType, measureBar.planetRadius)
@@ -221,6 +225,7 @@ export function ParameterPanel(): JSX.Element {
   const [roadsOpen, setRoadsOpen] = useState(false)
   const [buildingsOpen, setBuildingsOpen] = useState(false)
   const [gridsOpen, setGridsOpen] = useState(false)
+  const [geoOpen, setGeoOpen] = useState(false)
   const [framingOpen, setFramingOpen] = useState(false)
   // Marker subgroups
   const [elevFlagsSubOpen, setElevFlagsSubOpen] = useState(false)
@@ -254,7 +259,7 @@ export function ParameterPanel(): JSX.Element {
   const [newCustomSizeM, setNewCustomSizeM] = useState(10)
   const [newCustomStrokeWeight, setNewCustomStrokeWeight] = useState(1.5)
 
-  const allOpen = hillshadeOpen && contoursOpen && styleOpen && labelStylingOpen && seaLevelOpen && markersOpen && roadsOpen && buildingsOpen && gridsOpen && framingOpen
+  const allOpen = hillshadeOpen && contoursOpen && styleOpen && labelStylingOpen && seaLevelOpen && markersOpen && roadsOpen && buildingsOpen && gridsOpen && geoOpen && framingOpen
     && elevFlagsSubOpen && slopeArrowsSubOpen && ruggedSubOpen && swampSubOpen && poisSubOpen
     && majorLinesOpen && minorLinesOpen
     && titleSubOpen && compassSubOpen && legendSubOpen
@@ -263,7 +268,7 @@ export function ParameterPanel(): JSX.Element {
   const toggleAll = () => {
     const next = !allOpen
     setHillshadeOpen(next); setContoursOpen(next); setStyleOpen(next)
-    setLabelStylingOpen(next); setSeaLevelOpen(next); setMarkersOpen(next); setRoadsOpen(next); setBuildingsOpen(next); setGridsOpen(next); setFramingOpen(next)
+    setLabelStylingOpen(next); setSeaLevelOpen(next); setMarkersOpen(next); setRoadsOpen(next); setBuildingsOpen(next); setGridsOpen(next); setGeoOpen(next); setFramingOpen(next)
     setElevFlagsSubOpen(next); setSlopeArrowsSubOpen(next); setRuggedSubOpen(next); setSwampSubOpen(next); setPoisSubOpen(next)
     setMajorLinesOpen(next); setMinorLinesOpen(next)
     setTitleSubOpen(next); setCompassSubOpen(next); setLegendSubOpen(next)
@@ -584,6 +589,21 @@ export function ParameterPanel(): JSX.Element {
             />
           </Stack>
         </Alert>
+      )}
+
+      {sagittalErrorM !== null && (
+        <Select
+          label="Precision setting"
+          description="Sagittal error cap for this project"
+          size="xs"
+          data={[
+            { value: 'high',   label: 'High — ≤ 2 m (local / tactical)' },
+            { value: 'medium', label: 'Medium — ≤ 10 m (balanced)' },
+            { value: 'low',    label: 'Low — ≤ 30 m (macro / regional)' },
+          ]}
+          value={precisionSetting}
+          onChange={(v) => v && setPrecisionSetting(v as PrecisionSetting)}
+        />
       )}
 
       <Group grow>
@@ -1724,6 +1744,55 @@ export function ParameterPanel(): JSX.Element {
       <Group
         justify="space-between"
         style={{ cursor: 'pointer', userSelect: 'none' }}
+        onClick={() => setGeoOpen((o) => !o)}
+      >
+        <Text fw={600} size="sm" c="dimmed" tt="uppercase" style={{ letterSpacing: 1 }}>
+          Geolocation
+        </Text>
+        <Text size="lg" c="dimmed">{geoOpen ? '▾' : '▸'}</Text>
+      </Group>
+
+      <Collapse in={geoOpen}>
+        <Stack gap="md">
+          <Group grow>
+            <NumberInput
+              label="Anchor latitude (°)"
+              size="xs"
+              value={measureBar.anchorLat}
+              onChange={(v) => typeof v === 'number' && updateMeasureBar({ anchorLat: v })}
+              min={-90}
+              max={90}
+              step={0.001}
+              decimalScale={6}
+            />
+            <NumberInput
+              label="Anchor longitude (°)"
+              size="xs"
+              value={measureBar.anchorLon}
+              onChange={(v) => typeof v === 'number' && updateMeasureBar({ anchorLon: v })}
+              min={-180}
+              max={180}
+              step={0.001}
+              decimalScale={6}
+            />
+          </Group>
+          <NumberInput
+            label="Planet radius (km)"
+            size="xs"
+            value={measureBar.planetRadius}
+            onChange={(v) => typeof v === 'number' && updateMeasureBar({ planetRadius: v })}
+            min={100}
+            max={100000}
+            step={100}
+          />
+        </Stack>
+      </Collapse>
+
+      <Divider />
+
+      <Group
+        justify="space-between"
+        style={{ cursor: 'pointer', userSelect: 'none' }}
         onClick={() => setGridsOpen((o) => !o)}
       >
         <Group gap="xs" align="center">
@@ -2513,72 +2582,33 @@ export function ParameterPanel(): JSX.Element {
               format="hex"
             />
           </Group>
-          <Switch
-            label="Show geo coordinates"
-            size="sm"
-            description={!hasGroundResolution ? 'Set map width in calibration to enable' : 'Use anchor tool in toolbar to set reference point'}
-            checked={measureBar.geoEnabled}
-            onChange={(e) => updateMeasureBar({ geoEnabled: e.currentTarget.checked })}
-            disabled={!frame.enabled || !measureBar.enabled || !hasGroundResolution}
-          />
-          {measureBar.geoEnabled && hasGroundResolution && (
-            <>
-              <Select
-                label="Precision setting"
-                description="Sets the sagittal error cap for this project"
-                size="xs"
-                data={[
-                  { value: 'high',   label: 'High — ≤ 2 m (local / tactical)' },
-                  { value: 'medium', label: 'Medium — ≤ 10 m (balanced)' },
-                  { value: 'low',    label: 'Low — ≤ 30 m (macro / regional)' },
-                ]}
-                value={precisionSetting}
-                onChange={(v) => v && setPrecisionSetting(v as PrecisionSetting)}
-                disabled={!frame.enabled || !measureBar.enabled}
-              />
-              <Group grow>
-                <NumberInput
-                  label="Anchor latitude (°)"
-                  size="xs"
-                  value={measureBar.anchorLat}
-                  onChange={(v) => typeof v === 'number' && updateMeasureBar({ anchorLat: v })}
-                  min={-90}
-                  max={90}
-                  step={0.001}
-                  decimalScale={6}
-                  disabled={!frame.enabled || !measureBar.enabled}
-                />
-                <NumberInput
-                  label="Anchor longitude (°)"
-                  size="xs"
-                  value={measureBar.anchorLon}
-                  onChange={(v) => typeof v === 'number' && updateMeasureBar({ anchorLon: v })}
-                  min={-180}
-                  max={180}
-                  step={0.001}
-                  decimalScale={6}
-                  disabled={!frame.enabled || !measureBar.enabled}
-                />
-              </Group>
-              <NumberInput
-                label="Planet radius (km)"
-                size="xs"
-                value={measureBar.planetRadius}
-                onChange={(v) => typeof v === 'number' && updateMeasureBar({ planetRadius: v })}
-                min={100}
-                max={100000}
-                step={100}
-                disabled={!frame.enabled || !measureBar.enabled}
-              />
+          <Tooltip
+            label="Configure geolocation settings in the Geolocation group to enable this control"
+            disabled={hasGeoInfo}
+            withArrow
+            position="right"
+            multiline
+            maw={220}
+          >
+            <Box>
               <Switch
-                label="Horizontal axis = latitude"
-                description="Swap which axis shows lat vs lon"
+                label="Show geo coordinates"
                 size="sm"
-                checked={measureBar.horizontalAxisIsLat}
-                onChange={(e) => updateMeasureBar({ horizontalAxisIsLat: e.currentTarget.checked })}
-                disabled={!frame.enabled || !measureBar.enabled}
+                checked={measureBar.geoEnabled}
+                onChange={(e) => updateMeasureBar({ geoEnabled: e.currentTarget.checked })}
+                disabled={!frame.enabled || !measureBar.enabled || !hasGeoInfo}
               />
-            </>
+            </Box>
+          </Tooltip>
+          {measureBar.geoEnabled && (
+            <Switch
+              label="Horizontal axis = latitude"
+              description="Swap which axis shows lat vs lon"
+              size="sm"
+              checked={measureBar.horizontalAxisIsLat}
+              onChange={(e) => updateMeasureBar({ horizontalAxisIsLat: e.currentTarget.checked })}
+              disabled={!frame.enabled || !measureBar.enabled}
+            />
           )}
         </Stack>
         </Collapse>
