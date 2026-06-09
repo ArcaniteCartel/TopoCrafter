@@ -173,6 +173,11 @@ export function ParameterPanel(): JSX.Element {
   const removePoi = useStore((s) => s.removePoi)
   const selectedPoiId = useStore((s) => s.selectedPoiId)
   const setSelectedPoiId = useStore((s) => s.setSelectedPoiId)
+  const curvedLabels = useStore((s) => s.curvedLabels)
+  const updateCurvedLabel = useStore((s) => s.updateCurvedLabel)
+  const removeCurvedLabel = useStore((s) => s.removeCurvedLabel)
+  const selectedCurvedLabelId = useStore((s) => s.selectedCurvedLabelId)
+  const setSelectedCurvedLabelId = useStore((s) => s.setSelectedCurvedLabelId)
   const customMarkerDefs = useGlobalStore((s) => s.customMarkerDefs)
   const addCustomMarkerDef = useGlobalStore((s) => s.addCustomMarkerDef)
   const removeCustomMarkerDef = useGlobalStore((s) => s.removeCustomMarkerDef)
@@ -233,6 +238,7 @@ export function ParameterPanel(): JSX.Element {
   const [ruggedSubOpen, setRuggedSubOpen] = useState(false)
   const [swampSubOpen, setSwampSubOpen] = useState(false)
   const [poisSubOpen, setPoisSubOpen] = useState(false)
+  const [labelsSubOpen, setLabelsSubOpen] = useState(false)
   // Grid subgroups
   const [majorLinesOpen, setMajorLinesOpen] = useState(false)
   const [minorLinesOpen, setMinorLinesOpen] = useState(false)
@@ -260,7 +266,7 @@ export function ParameterPanel(): JSX.Element {
   const [newCustomStrokeWeight, setNewCustomStrokeWeight] = useState(1.5)
 
   const allOpen = hillshadeOpen && contoursOpen && styleOpen && labelStylingOpen && seaLevelOpen && markersOpen && roadsOpen && buildingsOpen && gridsOpen && geoOpen && framingOpen
-    && elevFlagsSubOpen && slopeArrowsSubOpen && ruggedSubOpen && swampSubOpen && poisSubOpen
+    && elevFlagsSubOpen && slopeArrowsSubOpen && ruggedSubOpen && swampSubOpen && poisSubOpen && labelsSubOpen
     && majorLinesOpen && minorLinesOpen
     && titleSubOpen && compassSubOpen && legendSubOpen
     && poiEditMapLabelOpen && poiNewDefaultsOpen && poiNewMapLabelOpen && poiCustomLibOpen
@@ -269,7 +275,7 @@ export function ParameterPanel(): JSX.Element {
     const next = !allOpen
     setHillshadeOpen(next); setContoursOpen(next); setStyleOpen(next)
     setLabelStylingOpen(next); setSeaLevelOpen(next); setMarkersOpen(next); setRoadsOpen(next); setBuildingsOpen(next); setGridsOpen(next); setGeoOpen(next); setFramingOpen(next)
-    setElevFlagsSubOpen(next); setSlopeArrowsSubOpen(next); setRuggedSubOpen(next); setSwampSubOpen(next); setPoisSubOpen(next)
+    setElevFlagsSubOpen(next); setSlopeArrowsSubOpen(next); setRuggedSubOpen(next); setSwampSubOpen(next); setPoisSubOpen(next); setLabelsSubOpen(next)
     setMajorLinesOpen(next); setMinorLinesOpen(next)
     setTitleSubOpen(next); setCompassSubOpen(next); setLegendSubOpen(next)
     setPoiEditMapLabelOpen(next); setPoiNewDefaultsOpen(next); setPoiNewMapLabelOpen(next); setPoiCustomLibOpen(next)
@@ -1429,6 +1435,101 @@ export function ParameterPanel(): JSX.Element {
                   </Stack>
                 </Collapse>
               </>
+            )
+          })()}
+          </Stack>
+          </Collapse>
+
+          <Group justify="space-between" style={{ cursor: 'pointer', userSelect: 'none', paddingLeft: 10 }}
+            onClick={() => setLabelsSubOpen((o) => !o)}>
+            <Text fw={500} size="xs" c="dimmed">Labels</Text>
+            <Text size="sm" c="dimmed">{labelsSubOpen ? '▾' : '▸'}</Text>
+          </Group>
+          <Collapse in={labelsSubOpen}>
+          <Stack gap="md" pt={4}>
+          <Text size="xs" c="dimmed">({curvedLabels.length} placed)</Text>
+
+          {(() => {
+            const sel = selectedCurvedLabelId ? curvedLabels.find(l => l.id === selectedCurvedLabelId) : null
+            if (!sel) return null
+            return (
+              <Box style={{
+                background: 'rgba(34,139,230,0.07)',
+                border: '1px solid rgba(34,139,230,0.3)',
+                borderRadius: 6,
+                padding: '10px 12px',
+              }}>
+                <Stack gap="md">
+                  <Group justify="space-between" align="center">
+                    <Text size="xs" fw={700} c="blue">Editing label</Text>
+                    <Text size="xs" c="dimmed">Esc to deselect</Text>
+                  </Group>
+
+                  <TextInput size="xs" label="Text"
+                    value={sel.text}
+                    onChange={(e) => updateCurvedLabel(sel.id, { text: e.currentTarget.value })} />
+
+                  <Group grow>
+                    <Select size="xs" label="Font" data={FONT_OPTIONS}
+                      value={sel.fontFamily}
+                      onChange={(v) => v && updateCurvedLabel(sel.id, { fontFamily: v })} />
+                    <NumberInput size="xs" label="Size (px)"
+                      value={sel.fontSize} min={4} step={2}
+                      onChange={(v) => { const n = Number(v); if (n >= 4) updateCurvedLabel(sel.id, { fontSize: n }) }} />
+                  </Group>
+
+                  <Group grow>
+                    <Switch size="sm" label="Bold" checked={sel.bold}
+                      onChange={(e) => updateCurvedLabel(sel.id, { bold: e.currentTarget.checked })} />
+                    <Switch size="sm" label="Italic" checked={sel.italic}
+                      onChange={(e) => updateCurvedLabel(sel.id, { italic: e.currentTarget.checked })} />
+                  </Group>
+
+                  <ColorInput size="xs" label="Color"
+                    value={sel.color}
+                    onChange={(v) => updateCurvedLabel(sel.id, { color: v })} format="hex" />
+
+                  <Group grow>
+                    <ColorInput size="xs" label="Outline color"
+                      value={sel.strokeColor}
+                      onChange={(v) => updateCurvedLabel(sel.id, { strokeColor: v })} format="hex" />
+                    <NumberInput size="xs" label="Outline width (px)"
+                      value={sel.strokeWidth} min={0} step={0.5}
+                      onChange={(v) => { const n = Number(v); if (n >= 0) updateCurvedLabel(sel.id, { strokeWidth: n }) }} />
+                  </Group>
+
+                  <Stack gap={4}>
+                    <Text size="xs" fw={500}>Opacity</Text>
+                    <Slider min={0} max={1} step={0.05} value={sel.opacity}
+                      onChange={(v) => updateCurvedLabel(sel.id, { opacity: v })}
+                      label={(v) => `${Math.round(v * 100)}%`} />
+                  </Stack>
+
+                  <Stack gap={4}>
+                    <Text size="xs" fw={500}>Start offset (%)</Text>
+                    <Slider min={0} max={100} step={1} value={sel.startOffset}
+                      onChange={(v) => updateCurvedLabel(sel.id, { startOffset: v })}
+                      label={(v) => `${v}%`} />
+                  </Stack>
+
+                  <Group grow>
+                    <Switch size="sm" label="Reverse side" checked={sel.side === 'right'}
+                      onChange={(e) => updateCurvedLabel(sel.id, { side: e.currentTarget.checked ? 'right' : 'left' })} />
+                    <Switch size="sm" label="Flip" checked={sel.flip}
+                      onChange={(e) => updateCurvedLabel(sel.id, { flip: e.currentTarget.checked })} />
+                  </Group>
+
+                  <NumberInput size="xs" label="Z-order (0–100)"
+                    description="0–24: below contours · 25–49: below roads · 50–74: above POIs · 75–100: above grid"
+                    value={sel.zOrder} min={0} max={100} step={1}
+                    onChange={(v) => { const n = Number(v); if (n >= 0 && n <= 100) updateCurvedLabel(sel.id, { zOrder: n }) }} />
+
+                  <Button size="xs" color="red" variant="light"
+                    onClick={() => { removeCurvedLabel(sel.id); setSelectedCurvedLabelId(null) }}>
+                    Delete label
+                  </Button>
+                </Stack>
+              </Box>
             )
           })()}
           </Stack>

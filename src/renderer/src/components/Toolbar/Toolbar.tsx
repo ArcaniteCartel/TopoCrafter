@@ -101,6 +101,15 @@ function PoiIcon(): JSX.Element {
   )
 }
 
+function CurvedLabelIcon(): JSX.Element {
+  return (
+    <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round">
+      <path d="M 2 12 C 4 6 12 6 14 12" fill="none" />
+      <text x="5" y="10" fontSize="6" fontFamily="serif" fill="currentColor" stroke="none" fontWeight="bold">Ab</text>
+    </svg>
+  )
+}
+
 function BuildingIcon(): JSX.Element {
   return (
     <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor" fillOpacity={0.7} stroke="currentColor" strokeWidth="1.1">
@@ -340,6 +349,17 @@ export function Toolbar(): JSX.Element {
                     aria-label="Points of interest tool"
                   >
                     <PoiIcon />
+                  </ActionIcon>
+                </Tooltip>
+                <Tooltip label="Draw a curved text label" position="bottom" withArrow>
+                  <ActionIcon
+                    variant={mapTool === 'curved-label' ? 'filled' : 'subtle'}
+                    size="md"
+                    disabled={!heightmap}
+                    onClick={() => setMapTool(mapTool === 'curved-label' ? 'none' : 'curved-label')}
+                    aria-label="Curved label tool"
+                  >
+                    <CurvedLabelIcon />
                   </ActionIcon>
                 </Tooltip>
               </Group>

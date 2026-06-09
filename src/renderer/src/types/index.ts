@@ -181,7 +181,41 @@ export function triRangeLabel(i: number, elevRange?: number, unitAbbr?: string):
   return hi !== null ? `${lo}–${hi}` : `>${lo}`
 }
 
-export type MapTool = 'none' | 'elevation-flag' | 'slope-arrow' | 'measure-anchor' | 'ruggedness-flag' | 'swamp-marker' | 'road' | 'building' | 'poi'
+export interface CurvedLabel {
+  id: string
+  points: { x: number; y: number }[]
+  text: string
+  fontFamily: string
+  fontSize: number
+  color: string
+  bold: boolean
+  italic: boolean
+  strokeColor: string
+  strokeWidth: number
+  opacity: number
+  side: 'left' | 'right'
+  flip: boolean
+  startOffset: number   // 0–100 percent along path
+  zOrder: number        // 0–100; 0-24 below contours, 25-49 below annotations, 50-74 above annotations (default 70), 75-100 above grid
+}
+
+export const defaultCurvedLabelStyle: Omit<CurvedLabel, 'id' | 'points'> = {
+  text: '',
+  fontFamily: 'serif',
+  fontSize: 24,
+  color: '#222222',
+  bold: false,
+  italic: false,
+  strokeColor: '#ffffff',
+  strokeWidth: 0,
+  opacity: 1,
+  side: 'left',
+  flip: false,
+  startOffset: 50,
+  zOrder: 70,
+}
+
+export type MapTool = 'none' | 'elevation-flag' | 'slope-arrow' | 'measure-anchor' | 'ruggedness-flag' | 'swamp-marker' | 'road' | 'building' | 'poi' | 'curved-label'
 
 export type BuiltinMarkerTypeId = 'mine' | 'bridge' | 'cave'
 
@@ -622,6 +656,8 @@ export interface ProjectState {
   grid: GridConfig
   precisionSetting: PrecisionSetting
   sagittalExceptionAcknowledged: boolean
+  curvedLabels: CurvedLabel[]
+  selectedCurvedLabelId: string | null
 }
 
 export const defaultParameters: ContourParameters = {

@@ -4,7 +4,8 @@ import type { ContourMultiPolygon } from 'd3-contour'
 import { useStore } from '../../store/useStore'
 import { generateContours, contourToSvgPath } from '../../utils/contour'
 import type { ContourSet } from '../../utils/contour'
-import type { ElevationFlag, SlopeArrow, RuggednessFlag, SwampMarker, Road, BuildingEntry, BuildingShape, PoiEntry, PoiNewMarkerState, CustomMarkerDef, MarkerPrimitiveId, BuiltinMarkerTypeId, FrameConfig, CompassConfig, LegendConfig, ContourStyle, FramePosition, MeasureBarConfig, ElevationCalibration, HeightmapInfo, GridConfig } from '../../types'
+import type { ElevationFlag, SlopeArrow, RuggednessFlag, SwampMarker, Road, BuildingEntry, BuildingShape, PoiEntry, PoiNewMarkerState, CustomMarkerDef, MarkerPrimitiveId, BuiltinMarkerTypeId, FrameConfig, CompassConfig, LegendConfig, ContourStyle, FramePosition, MeasureBarConfig, ElevationCalibration, HeightmapInfo, GridConfig, CurvedLabel } from '../../types'
+import { defaultCurvedLabelStyle } from '../../types'
 import { BUILTIN_MARKER_SPECS } from '../../types'
 import { useGlobalStore } from '../../store/useGlobalStore'
 import { BUILDING_CATALOG } from '../../data/buildings'
@@ -1211,6 +1212,12 @@ export function MapCanvas(): JSX.Element {
   const poiNewMarker = useStore((s) => s.poiNewMarker)
   const selectedPoiId = useStore((s) => s.selectedPoiId)
   const setSelectedPoiId = useStore((s) => s.setSelectedPoiId)
+  const curvedLabels = useStore((s) => s.curvedLabels)
+  const addCurvedLabel = useStore((s) => s.addCurvedLabel)
+  const updateCurvedLabel = useStore((s) => s.updateCurvedLabel)
+  const removeCurvedLabel = useStore((s) => s.removeCurvedLabel)
+  const selectedCurvedLabelId = useStore((s) => s.selectedCurvedLabelId)
+  const setSelectedCurvedLabelId = useStore((s) => s.setSelectedCurvedLabelId)
   const customMarkerDefs = useGlobalStore((s) => s.customMarkerDefs)
   const elevationFlagDefaults = useStore((s) => s.elevationFlagDefaults)
   const slopeArrowDefaults = useStore((s) => s.slopeArrowDefaults)
@@ -1269,6 +1276,16 @@ export function MapCanvas(): JSX.Element {
   roadsRef.current = roads
   const roadDefaultsRef = useRef(roadDefaults)
   roadDefaultsRef.current = roadDefaults
+
+  // Curved-label drawing state
+  const [inProgressLabelPts, setInProgressLabelPts] = useState<{ x: number; y: number }[]>([])
+  const [labelHoverPt, setLabelHoverPt] = useState<{ x: number; y: number } | null>(null)
+  const labelAnchorDragRef = useRef<{ labelId: string; ptIdx: number } | null>(null)
+  const lastLabelClickTimeRef = useRef<number>(0)
+  const inProgressLabelPtsRef = useRef(inProgressLabelPts)
+  inProgressLabelPtsRef.current = inProgressLabelPts
+  const curvedLabelsRef = useRef(curvedLabels)
+  curvedLabelsRef.current = curvedLabels
   const buildingDefaultsRef = useRef(buildingDefaults)
   buildingDefaultsRef.current = buildingDefaults
   const poiNewMarkerRef = useRef(poiNewMarker)
@@ -1384,15 +1401,25 @@ export function MapCanvas(): JSX.Element {
           setRoadHoverPt(null)
           return
         }
+        if (mapTool === 'curved-label' && inProgressLabelPtsRef.current.length > 0) {
+          setInProgressLabelPts([])
+          setLabelHoverPt(null)
+          return
+        }
         setMapTool('none')
         setSelectedItem(null)
         setSelectedPoiId(null)
+        setSelectedCurvedLabelId(null)
         dragRef.current = null
         setDragPos(null)
         setHoverPos(null)
       }
       if (e.key === 'Enter' && mapTool === 'road' && inProgressPtsRef.current.length >= 2) {
         commitRoad(inProgressPtsRef.current, false)
+      }
+      if ((e.key === 'Enter' || e.key === 'Tab') && mapTool === 'curved-label' && inProgressLabelPtsRef.current.length >= 2) {
+        if (e.key === 'Tab') e.preventDefault()
+        commitLabel(inProgressLabelPtsRef.current)
       }
       if (e.key === 'Delete' && selectedItemRef.current) {
         const { type, id } = selectedItemRef.current
@@ -1405,6 +1432,10 @@ export function MapCanvas(): JSX.Element {
         else if (type === 'poi') removePoi(id)
         setSelectedItem(null)
         setSelectedPoiId(null)
+      }
+      if (e.key === 'Delete' && selectedCurvedLabelId) {
+        removeCurvedLabel(selectedCurvedLabelId)
+        setSelectedCurvedLabelId(null)
       }
     }
     document.addEventListener('keydown', handleKeyDown)
@@ -1501,10 +1532,38 @@ export function MapCanvas(): JSX.Element {
     }
   }, [updateRoad])
 
+  // Curved-label anchor point drag
+  useEffect(() => {
+    const onMove = (e: MouseEvent) => {
+      if (!labelAnchorDragRef.current) return
+      const svgEl = document.getElementById('annotation-svg') as SVGSVGElement | null
+      if (!svgEl) return
+      const pt = svgEl.createSVGPoint()
+      pt.x = e.clientX; pt.y = e.clientY
+      const svgPt = pt.matrixTransform(svgEl.getScreenCTM()!.inverse())
+      const { labelId, ptIdx } = labelAnchorDragRef.current
+      const label = curvedLabelsRef.current.find(l => l.id === labelId)
+      if (!label) return
+      updateCurvedLabel(labelId, {
+        points: label.points.map((p, i) =>
+          i === ptIdx ? { x: svgPt.x, y: svgPt.y } : p
+        ),
+      })
+    }
+    const onUp = () => { labelAnchorDragRef.current = null }
+    document.addEventListener('mousemove', onMove)
+    document.addEventListener('mouseup', onUp)
+    return () => {
+      document.removeEventListener('mousemove', onMove)
+      document.removeEventListener('mouseup', onUp)
+    }
+  }, [updateCurvedLabel])
+
   // Clear hover preview whenever the tool mode is turned off
   useEffect(() => {
     if (mapTool === 'none') { setHoverPos(null) }
     if (mapTool !== 'road') { setInProgressPts([]); setRoadHoverPt(null) }
+    if (mapTool !== 'curved-label') { setInProgressLabelPts([]); setLabelHoverPt(null) }
   }, [mapTool])
 
   function commitRoad(pts: { x: number; y: number }[], closed: boolean) {
@@ -1532,6 +1591,15 @@ export function MapCanvas(): JSX.Element {
     setRoadHoverPt(null)
   }
 
+  function commitLabel(pts: { x: number; y: number }[]) {
+    if (pts.length < 2) { setInProgressLabelPts([]); setLabelHoverPt(null); return }
+    const id = crypto.randomUUID()
+    addCurvedLabel({ id, points: pts, ...defaultCurvedLabelStyle })
+    setSelectedCurvedLabelId(id)
+    setInProgressLabelPts([])
+    setLabelHoverPt(null)
+  }
+
   function handleSvgMouseMove(e: React.MouseEvent<SVGSVGElement>) {
     if (mapTool === 'road') {
       const pt = getSvgPoint(e.clientX, e.clientY)
@@ -1539,6 +1607,11 @@ export function MapCanvas(): JSX.Element {
         const elevation = computeElevationAt(pt.x, pt.y)
         setRoadHoverPt({ x: pt.x, y: pt.y, elevation: elevation ?? undefined })
       }
+      return
+    }
+    if (mapTool === 'curved-label') {
+      const pt = getSvgPoint(e.clientX, e.clientY)
+      if (pt) setLabelHoverPt({ x: pt.x, y: pt.y })
       return
     }
     if (!toolActive || dragRef.current) { setHoverPos(null); return }
@@ -1603,8 +1676,23 @@ export function MapCanvas(): JSX.Element {
       setInProgressPts(prev => [...prev, { x: pt.x, y: pt.y }])
       return
     }
+    if (mapTool === 'curved-label') {
+      const pt = getSvgPoint(e.clientX, e.clientY)
+      if (!pt) return
+      const now = Date.now()
+      const isDouble = now - lastLabelClickTimeRef.current < 300
+      lastLabelClickTimeRef.current = now
+      if (isDouble && inProgressLabelPtsRef.current.length >= 2) {
+        const pts = inProgressLabelPtsRef.current.slice(0, -1)
+        if (pts.length >= 2) commitLabel(pts)
+        return
+      }
+      setInProgressLabelPts(prev => [...prev, { x: pt.x, y: pt.y }])
+      return
+    }
     setSelectedItem(null)
     setSelectedPoiId(null)
+    setSelectedCurvedLabelId(null)
   }
 
   // Fires for background mouseup — drag/select is handled by the document listener
@@ -1697,8 +1785,8 @@ export function MapCanvas(): JSX.Element {
     ? getLabelPoint(contourState.contourSet.seaLevelPath)
     : null
 
-  const toolActive = mapTool === 'elevation-flag' || mapTool === 'slope-arrow' || mapTool === 'measure-anchor' || mapTool === 'ruggedness-flag' || mapTool === 'swamp-marker' || mapTool === 'road' || mapTool === 'building' || mapTool === 'poi'
-  const flagSvgInteractive = toolActive || elevationFlags.length > 0 || slopeArrows.length > 0 || ruggednessFlags.length > 0 || swampMarkers.length > 0 || roads.length > 0 || buildings.length > 0 || pois.length > 0
+  const toolActive = mapTool === 'elevation-flag' || mapTool === 'slope-arrow' || mapTool === 'measure-anchor' || mapTool === 'ruggedness-flag' || mapTool === 'swamp-marker' || mapTool === 'road' || mapTool === 'building' || mapTool === 'poi' || mapTool === 'curved-label'
+  const flagSvgInteractive = toolActive || elevationFlags.length > 0 || slopeArrows.length > 0 || ruggednessFlags.length > 0 || swampMarkers.length > 0 || roads.length > 0 || buildings.length > 0 || pois.length > 0 || curvedLabels.length > 0
 
   const pixelsPerMeter = (() => {
     if (!heightmap || !elevationCalibration.mapWidth || elevationCalibration.mapWidth <= 0) {
@@ -1906,6 +1994,35 @@ export function MapCanvas(): JSX.Element {
             />
           )}
 
+          {curvedLabels.filter(l => l.zOrder < 25).sort((a, b) => a.zOrder - b.zOrder).map(label => {
+            const pts = label.side === 'right' ? [...label.points].reverse() : label.points
+            const pathD = catmullRomPath(pts, false)
+            const isSelected = label.id === selectedCurvedLabelId
+            const hitW = Math.max(label.fontSize * 1.5, 20)
+            return (
+              <g key={label.id} opacity={label.opacity}>
+                <defs><path id={`cl-path-${label.id}`} d={pathD} /></defs>
+                <path d={pathD} stroke="transparent" strokeWidth={hitW} fill="none"
+                  style={{ cursor: mapTool === 'curved-label' ? 'crosshair' : 'pointer' }}
+                  onClick={(e) => { if (mapTool === 'curved-label') return; e.stopPropagation(); setSelectedCurvedLabelId(label.id) }} />
+                <text fontFamily={label.fontFamily} fontSize={label.fontSize}
+                  fontWeight={label.bold ? 'bold' : 'normal'} fontStyle={label.italic ? 'italic' : 'normal'}
+                  fill={label.color} stroke={label.strokeWidth > 0 ? label.strokeColor : 'none'}
+                  strokeWidth={label.strokeWidth} paintOrder="stroke fill"
+                  style={{ cursor: mapTool === 'curved-label' ? 'crosshair' : 'pointer' }}
+                  onClick={(e) => { if (mapTool === 'curved-label') return; e.stopPropagation(); setSelectedCurvedLabelId(label.id) }}>
+                  <textPath href={`#cl-path-${label.id}`} startOffset={`${label.startOffset}%`} textAnchor="middle"
+                    dy={label.flip ? label.fontSize * 0.9 : 0}>{label.text}</textPath>
+                </text>
+                {isSelected && label.points.map((pt, i) => (
+                  <circle key={i} cx={pt.x} cy={pt.y} r={Math.max(label.fontSize * 0.4, 6)}
+                    fill="white" stroke="#0066ff" strokeWidth={2} style={{ cursor: 'grab' }}
+                    onMouseDown={(e) => { e.stopPropagation(); labelAnchorDragRef.current = { labelId: label.id, ptIdx: i } }} />
+                ))}
+              </g>
+            )
+          })}
+
           {seaLevelLabelPt && (
             <g transform={`translate(${seaLevelLabelPt[0]}, ${seaLevelLabelPt[1]}) scale(${seaLevelLabelFontSize})`}>
               <path
@@ -1957,6 +2074,36 @@ export function MapCanvas(): JSX.Element {
               fill="transparent"
             />
           )}
+
+          {/* Curved labels — zOrder 25–49, below roads */}
+          {curvedLabels.filter(l => l.zOrder >= 25 && l.zOrder < 50).sort((a, b) => a.zOrder - b.zOrder).map(label => {
+            const pts = label.side === 'right' ? [...label.points].reverse() : label.points
+            const pathD = catmullRomPath(pts, false)
+            const isSelected = label.id === selectedCurvedLabelId
+            const hitW = Math.max(label.fontSize * 1.5, 20)
+            return (
+              <g key={label.id} opacity={label.opacity}>
+                <defs><path id={`cl-path-${label.id}`} d={pathD} /></defs>
+                <path d={pathD} stroke="transparent" strokeWidth={hitW} fill="none"
+                  style={{ cursor: mapTool === 'curved-label' ? 'crosshair' : 'pointer' }}
+                  onClick={(e) => { if (mapTool === 'curved-label') return; e.stopPropagation(); setSelectedCurvedLabelId(label.id) }} />
+                <text fontFamily={label.fontFamily} fontSize={label.fontSize}
+                  fontWeight={label.bold ? 'bold' : 'normal'} fontStyle={label.italic ? 'italic' : 'normal'}
+                  fill={label.color} stroke={label.strokeWidth > 0 ? label.strokeColor : 'none'}
+                  strokeWidth={label.strokeWidth} paintOrder="stroke fill"
+                  style={{ cursor: mapTool === 'curved-label' ? 'crosshair' : 'pointer' }}
+                  onClick={(e) => { if (mapTool === 'curved-label') return; e.stopPropagation(); setSelectedCurvedLabelId(label.id) }}>
+                  <textPath href={`#cl-path-${label.id}`} startOffset={`${label.startOffset}%`} textAnchor="middle"
+                    dy={label.flip ? label.fontSize * 0.9 : 0}>{label.text}</textPath>
+                </text>
+                {isSelected && label.points.map((pt, i) => (
+                  <circle key={i} cx={pt.x} cy={pt.y} r={Math.max(label.fontSize * 0.4, 6)}
+                    fill="white" stroke="#0066ff" strokeWidth={2} style={{ cursor: 'grab' }}
+                    onMouseDown={(e) => { e.stopPropagation(); labelAnchorDragRef.current = { labelId: label.id, ptIdx: i } }} />
+                ))}
+              </g>
+            )
+          })}
 
           {/* SVG defs: road masks + center paths for textPath */}
           {roads.length > 0 && (
@@ -2349,6 +2496,36 @@ export function MapCanvas(): JSX.Element {
             )
           })}
 
+          {/* Curved labels — zOrder 50–74, above POIs (default band) */}
+          {curvedLabels.filter(l => l.zOrder >= 50 && l.zOrder < 75).sort((a, b) => a.zOrder - b.zOrder).map(label => {
+            const pts = label.side === 'right' ? [...label.points].reverse() : label.points
+            const pathD = catmullRomPath(pts, false)
+            const isSelected = label.id === selectedCurvedLabelId
+            const hitW = Math.max(label.fontSize * 1.5, 20)
+            return (
+              <g key={label.id} opacity={label.opacity}>
+                <defs><path id={`cl-path-${label.id}`} d={pathD} /></defs>
+                <path d={pathD} stroke="transparent" strokeWidth={hitW} fill="none"
+                  style={{ cursor: mapTool === 'curved-label' ? 'crosshair' : 'pointer' }}
+                  onClick={(e) => { if (mapTool === 'curved-label') return; e.stopPropagation(); setSelectedCurvedLabelId(label.id) }} />
+                <text fontFamily={label.fontFamily} fontSize={label.fontSize}
+                  fontWeight={label.bold ? 'bold' : 'normal'} fontStyle={label.italic ? 'italic' : 'normal'}
+                  fill={label.color} stroke={label.strokeWidth > 0 ? label.strokeColor : 'none'}
+                  strokeWidth={label.strokeWidth} paintOrder="stroke fill"
+                  style={{ cursor: mapTool === 'curved-label' ? 'crosshair' : 'pointer' }}
+                  onClick={(e) => { if (mapTool === 'curved-label') return; e.stopPropagation(); setSelectedCurvedLabelId(label.id) }}>
+                  <textPath href={`#cl-path-${label.id}`} startOffset={`${label.startOffset}%`} textAnchor="middle"
+                    dy={label.flip ? label.fontSize * 0.9 : 0}>{label.text}</textPath>
+                </text>
+                {isSelected && label.points.map((pt, i) => (
+                  <circle key={i} cx={pt.x} cy={pt.y} r={Math.max(label.fontSize * 0.4, 6)}
+                    fill="white" stroke="#0066ff" strokeWidth={2} style={{ cursor: 'grab' }}
+                    onMouseDown={(e) => { e.stopPropagation(); labelAnchorDragRef.current = { labelId: label.id, ptIdx: i } }} />
+                ))}
+              </g>
+            )
+          })}
+
           {/* Measure anchor crosshair */}
           {(() => {
             const showAnchor = mapTool === 'measure-anchor'
@@ -2451,6 +2628,27 @@ export function MapCanvas(): JSX.Element {
                 style={{ pointerEvents: 'none' }}
                 opacity={0.85}
               >{roadHoverPt.elevation}{unitAbbr}</text>
+            )
+          })()}
+
+          {/* Curved label drawing preview */}
+          {mapTool === 'curved-label' && inProgressLabelPts.length >= 1 && (() => {
+            const previewPts = labelHoverPt ? [...inProgressLabelPts, labelHoverPt] : inProgressLabelPts
+            const s = labelFontSize
+            return (
+              <g opacity={0.7} style={{ pointerEvents: 'none' }}>
+                {previewPts.length >= 2 && (
+                  <path d={catmullRomPath(previewPts, false)}
+                    stroke="#0066ff" strokeWidth={2} fill="none"
+                    strokeDasharray="6 4" strokeLinecap="round"
+                    vectorEffect="non-scaling-stroke" />
+                )}
+                {inProgressLabelPts.map((pt, i) => (
+                  <circle key={i} cx={pt.x} cy={pt.y} r={Math.max(s * 0.3, 5)}
+                    fill={i === 0 ? '#0066ff' : 'white'} stroke="#0066ff" strokeWidth={2}
+                    vectorEffect="non-scaling-stroke" />
+                ))}
+              </g>
             )
           })()}
 
@@ -2608,6 +2806,48 @@ export function MapCanvas(): JSX.Element {
           mapW={innerMapSize.w}
           mapH={innerMapSize.h}
         />
+      )}
+
+      {/* Curved labels — zOrder 75–100, above grid */}
+      {heightmap && curvedLabels.some(l => l.zOrder >= 75) && (
+        <svg
+          viewBox={`0 0 ${heightmap.width} ${heightmap.height}`}
+          style={{
+            position: 'absolute', top: 0, left: 0, width: '100%', height: '100%',
+            pointerEvents: mapTool === 'curved-label' ? 'none' : 'auto',
+          }}
+          onClick={() => { setSelectedCurvedLabelId(null); setSelectedItem(null); setSelectedPoiId(null) }}
+        >
+          {curvedLabels.filter(l => l.zOrder >= 75).sort((a, b) => a.zOrder - b.zOrder).map(label => {
+            const pts = label.side === 'right' ? [...label.points].reverse() : label.points
+            const pathD = catmullRomPath(pts, false)
+            const isSelected = label.id === selectedCurvedLabelId
+            const hitW = Math.max(label.fontSize * 1.5, 20)
+            return (
+              <g key={label.id} opacity={label.opacity}>
+                <defs><path id={`cl-path-${label.id}`} d={pathD} /></defs>
+                <path d={pathD} stroke="transparent" strokeWidth={hitW} fill="none"
+                  style={{ cursor: 'pointer', pointerEvents: 'auto' }}
+                  onClick={(e) => { e.stopPropagation(); setSelectedCurvedLabelId(label.id) }} />
+                <text fontFamily={label.fontFamily} fontSize={label.fontSize}
+                  fontWeight={label.bold ? 'bold' : 'normal'} fontStyle={label.italic ? 'italic' : 'normal'}
+                  fill={label.color} stroke={label.strokeWidth > 0 ? label.strokeColor : 'none'}
+                  strokeWidth={label.strokeWidth} paintOrder="stroke fill"
+                  style={{ cursor: 'pointer', pointerEvents: 'auto' }}
+                  onClick={(e) => { e.stopPropagation(); setSelectedCurvedLabelId(label.id) }}>
+                  <textPath href={`#cl-path-${label.id}`} startOffset={`${label.startOffset}%`} textAnchor="middle"
+                    dy={label.flip ? label.fontSize * 0.9 : 0}>{label.text}</textPath>
+                </text>
+                {isSelected && label.points.map((pt, i) => (
+                  <circle key={i} cx={pt.x} cy={pt.y} r={Math.max(label.fontSize * 0.4, 6)}
+                    fill="white" stroke="#0066ff" strokeWidth={2}
+                    style={{ cursor: 'grab', pointerEvents: 'auto' }}
+                    onMouseDown={(e) => { e.stopPropagation(); labelAnchorDragRef.current = { labelId: label.id, ptIdx: i } }} />
+                ))}
+              </g>
+            )
+          })}
+        </svg>
       )}
 
       </div>{/* end inner map area */}

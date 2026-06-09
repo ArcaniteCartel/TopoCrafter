@@ -6,7 +6,7 @@ import type {
   ElevationFlag, SlopeArrow, RuggednessFlag, SwampMarker, MarkerDefaults, SwampMarkerDefaults,
   MapTool, FrameConfig, TitleConfig, CompassConfig, LegendConfig, MeasureBarConfig,
   Road, RoadDefaults, GridConfig, BuildingEntry, BuildingDefaults,
-  PoiEntry, PoiNewMarkerState, PrecisionSetting,
+  PoiEntry, PoiNewMarkerState, PrecisionSetting, CurvedLabel,
 } from '../types'
 import { defaultParameters, defaultStyle, defaultHillshadeParameters, defaultElevationCalibration, defaultFrameConfig, defaultTitleConfig, defaultCompassConfig, defaultLegendConfig, defaultMeasureBarConfig, TRI_COLORS, defaultRoadDefaults, defaultGridConfig, defaultBuildingDefaults, defaultPoiNewMarkerState } from '../types'
 
@@ -92,6 +92,10 @@ interface AppActions {
   setPoisVisible: (v: boolean) => void
   updatePoiNewMarker: (d: Partial<PoiNewMarkerState>) => void
   setSelectedPoiId: (id: string | null) => void
+  addCurvedLabel: (label: CurvedLabel) => void
+  updateCurvedLabel: (id: string, updates: Partial<Omit<CurvedLabel, 'id'>>) => void
+  removeCurvedLabel: (id: string) => void
+  setSelectedCurvedLabelId: (id: string | null) => void
   setRuggednessSeverityColor: (index: number, color: string) => void
   setMapTool: (tool: MapTool) => void
   setActiveTab: (tab: 'terrain' | 'hillshade') => void
@@ -173,6 +177,8 @@ const initialState: ProjectState = {
   grid: defaultGridConfig,
   precisionSetting: 'medium' as PrecisionSetting,
   sagittalExceptionAcknowledged: false,
+  curvedLabels: [],
+  selectedCurvedLabelId: null,
 }
 
 export const useStore = create<ProjectState & AppActions>()(
@@ -453,6 +459,16 @@ export const useStore = create<ProjectState & AppActions>()(
       updatePoiNewMarker: (d) => set((state) => ({ poiNewMarker: { ...state.poiNewMarker, ...d } })),
       setSelectedPoiId: (id) => set({ selectedPoiId: id }),
 
+      addCurvedLabel: (label) => set((state) => ({ curvedLabels: [...state.curvedLabels, label], isDirty: true })),
+      updateCurvedLabel: (id, updates) => set((state) => ({
+        curvedLabels: state.curvedLabels.map((l) => l.id === id ? { ...l, ...updates } : l), isDirty: true,
+      })),
+      removeCurvedLabel: (id) => set((state) => ({
+        curvedLabels: state.curvedLabels.filter((l) => l.id !== id), isDirty: true,
+        selectedCurvedLabelId: state.selectedCurvedLabelId === id ? null : state.selectedCurvedLabelId,
+      })),
+      setSelectedCurvedLabelId: (id) => set({ selectedCurvedLabelId: id }),
+
       setRuggednessSeverityColor: (index, color) =>
         set((state) => ({
           ruggednessSeverityColors: state.ruggednessSeverityColors.map((c, i) => i === index ? color : c),
@@ -513,7 +529,7 @@ export const useStore = create<ProjectState & AppActions>()(
     }),
     {
       name: 'topocrafter-state',
-      version: 2,
+      version: 3,
       storage: createJSONStorage(() => localStorage),
       migrate: (persistedState: unknown, version: number) => {
         const ps = persistedState as Record<string, unknown>
@@ -566,6 +582,9 @@ export const useStore = create<ProjectState & AppActions>()(
           ps.precisionSetting = ps.precisionSetting ?? 'medium'
           ps.sagittalExceptionAcknowledged = ps.sagittalExceptionAcknowledged ?? false
         }
+        if (version < 3) {
+          ps.curvedLabels = ps.curvedLabels ?? []
+        }
         return ps
       },
       // Deep-merge so that new fields added to nested config objects (legend, frame, etc.)
@@ -596,6 +615,7 @@ export const useStore = create<ProjectState & AppActions>()(
           grid:                   merge(current.grid,                   ps.grid),
           precisionSetting:              ps.precisionSetting              ?? current.precisionSetting,
           sagittalExceptionAcknowledged: ps.sagittalExceptionAcknowledged ?? current.sagittalExceptionAcknowledged,
+          curvedLabels:                  ps.curvedLabels                  ?? current.curvedLabels,
         }
       },
       partialize: (state) => ({
@@ -640,6 +660,7 @@ export const useStore = create<ProjectState & AppActions>()(
         grid: state.grid,
         precisionSetting: state.precisionSetting,
         sagittalExceptionAcknowledged: state.sagittalExceptionAcknowledged,
+        curvedLabels: state.curvedLabels,
       }),
     }
   )
