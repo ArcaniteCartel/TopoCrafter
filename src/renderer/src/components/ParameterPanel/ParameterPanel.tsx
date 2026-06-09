@@ -1,9 +1,10 @@
 import { useEffect, useRef, useState } from 'react'
-import { Stack, Text, Slider, NumberInput, ColorInput, Switch, Divider, Group, Select, TextInput, Collapse, Checkbox, SegmentedControl, Box, Button, Radio, Tooltip } from '@mantine/core'
+import { Stack, Text, Slider, NumberInput, ColorInput, Switch, Divider, Group, Select, TextInput, Collapse, Checkbox, SegmentedControl, Box, Button, Radio, Tooltip, Alert } from '@mantine/core'
 import { useStore } from '../../store/useStore'
 import { useGlobalStore } from '../../store/useGlobalStore'
-import type { FrameBorderStyle, TitleConfig, CompassConfig, FramePosition, RoadType, GridType, GridLinePattern, GridConfig, BuiltinMarkerTypeId, MarkerPrimitiveId, MarkerSymbolDescriptor } from '../../types'
+import type { FrameBorderStyle, TitleConfig, CompassConfig, FramePosition, RoadType, GridType, GridLinePattern, GridConfig, BuiltinMarkerTypeId, MarkerPrimitiveId, MarkerSymbolDescriptor, PrecisionSetting } from '../../types'
 import { TRI_LABELS, TRI_THRESHOLDS, triRangeLabel, BUILTIN_MARKER_SPECS } from '../../types'
+import { computeSagittalErrorM, sagittalColor, formatSagittalError, PRECISION_CAPS, PRECISION_LABELS } from '../../utils/sagittal'
 import { BUILDING_CATALOG } from '../../data/buildings'
 import type { BuildingShape } from '../../data/buildings'
 
@@ -175,6 +176,10 @@ export function ParameterPanel(): JSX.Element {
   const customMarkerDefs = useGlobalStore((s) => s.customMarkerDefs)
   const addCustomMarkerDef = useGlobalStore((s) => s.addCustomMarkerDef)
   const removeCustomMarkerDef = useGlobalStore((s) => s.removeCustomMarkerDef)
+  const precisionSetting = useStore((s) => s.precisionSetting)
+  const setPrecisionSetting = useStore((s) => s.setPrecisionSetting)
+  const sagittalExceptionAcknowledged = useStore((s) => s.sagittalExceptionAcknowledged)
+  const setSagittalExceptionAcknowledged = useStore((s) => s.setSagittalExceptionAcknowledged)
 
   const { unitType, customName, customAbbr, customBase, customRatio, realMin, realMax, realInterval, mapWidth } = elevationCalibration
 
@@ -191,6 +196,13 @@ export function ParameterPanel(): JSX.Element {
     ? Math.abs(realMax! - realMin!) / (mapWidth / heightmap.width)
     : null
   const hasGroundResolution = correctZFactor !== null
+
+  const effectivePrecision: PrecisionSetting = (measureBar.enabled && measureBar.geoEnabled) ? precisionSetting : 'medium'
+  const effectiveCapM = PRECISION_CAPS[effectivePrecision]
+  const sagittalErrorM = (mapWidth && mapWidth > 0 && heightmap)
+    ? computeSagittalErrorM(mapWidth, heightmap.width, heightmap.height, unitType, measureBar.planetRadius)
+    : null
+  const sagittalExceeded = sagittalErrorM !== null && sagittalErrorM > effectiveCapM
 
   // Sea level is only applicable when calibration spans real-world 0 (min < 0 < max)
   const seaLevelApplicable = calReady && realMin !== null && realMax !== null
@@ -531,6 +543,48 @@ export function ParameterPanel(): JSX.Element {
         placeholder={unitType ? 'e.g. 50' : '—'}
         styles={!unitType ? roStyle : activeStyle}
       />
+
+      {sagittalErrorM !== null && (
+        <Group gap={6} align="center">
+          <Text size="xs" c="dimmed">Spherical error:</Text>
+          <Tooltip
+            label={
+              `Sagittal error: the flat-tile assumption deviates from the spherical surface by this amount at the tile center. ` +
+              `Computed from the diagonal of your map dimensions and the planet radius.`
+            }
+            withArrow multiline maw={260} position="right"
+          >
+            <Text size="xs" fw={600} c={sagittalColor(sagittalErrorM)} style={{ cursor: 'help' }}>
+              {formatSagittalError(sagittalErrorM)}
+            </Text>
+          </Tooltip>
+          <Text size="xs" c="dimmed">/ {effectiveCapM} m cap</Text>
+        </Group>
+      )}
+
+      {sagittalExceeded && (
+        <Alert
+          color={sagittalExceptionAcknowledged ? 'gray' : 'orange'}
+          variant="light"
+          p="xs"
+        >
+          <Stack gap={6}>
+            <Text size="xs">
+              Spherical error ({formatSagittalError(sagittalErrorM!)}) exceeds your{' '}
+              <strong>{PRECISION_LABELS[effectivePrecision]}</strong> precision cap.
+              At this tile size, flat-map geometry deviates from the true planetary surface
+              by more than {effectiveCapM} m at the center — contours, slope arrows, and
+              distance annotations will carry that inaccuracy.
+            </Text>
+            <Checkbox
+              size="xs"
+              label="I understand the limitation and wish to proceed"
+              checked={sagittalExceptionAcknowledged}
+              onChange={(e) => setSagittalExceptionAcknowledged(e.currentTarget.checked)}
+            />
+          </Stack>
+        </Alert>
+      )}
 
       <Group grow>
         <NumberInput
@@ -2469,6 +2523,19 @@ export function ParameterPanel(): JSX.Element {
           />
           {measureBar.geoEnabled && hasGroundResolution && (
             <>
+              <Select
+                label="Precision setting"
+                description="Sets the sagittal error cap for this project"
+                size="xs"
+                data={[
+                  { value: 'high',   label: 'High — ≤ 2 m (local / tactical)' },
+                  { value: 'medium', label: 'Medium — ≤ 10 m (balanced)' },
+                  { value: 'low',    label: 'Low — ≤ 30 m (macro / regional)' },
+                ]}
+                value={precisionSetting}
+                onChange={(v) => v && setPrecisionSetting(v as PrecisionSetting)}
+                disabled={!frame.enabled || !measureBar.enabled}
+              />
               <Group grow>
                 <NumberInput
                   label="Anchor latitude (°)"

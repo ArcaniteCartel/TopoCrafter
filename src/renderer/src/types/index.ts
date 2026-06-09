@@ -1,3 +1,5 @@
+export type PrecisionSetting = 'high' | 'medium' | 'low'
+
 export interface ContourParameters {
   interval: number
   minElevation: number
@@ -618,6 +620,8 @@ export interface ProjectState {
   legend: LegendConfig
   measureBar: MeasureBarConfig
   grid: GridConfig
+  precisionSetting: PrecisionSetting
+  sagittalExceptionAcknowledged: boolean
 }
 
 export const defaultParameters: ContourParameters = {

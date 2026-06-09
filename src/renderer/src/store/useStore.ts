@@ -6,7 +6,7 @@ import type {
   ElevationFlag, SlopeArrow, RuggednessFlag, SwampMarker, MarkerDefaults, SwampMarkerDefaults,
   MapTool, FrameConfig, TitleConfig, CompassConfig, LegendConfig, MeasureBarConfig,
   Road, RoadDefaults, GridConfig, BuildingEntry, BuildingDefaults,
-  PoiEntry, PoiNewMarkerState,
+  PoiEntry, PoiNewMarkerState, PrecisionSetting,
 } from '../types'
 import { defaultParameters, defaultStyle, defaultHillshadeParameters, defaultElevationCalibration, defaultFrameConfig, defaultTitleConfig, defaultCompassConfig, defaultLegendConfig, defaultMeasureBarConfig, TRI_COLORS, defaultRoadDefaults, defaultGridConfig, defaultBuildingDefaults, defaultPoiNewMarkerState } from '../types'
 
@@ -105,6 +105,8 @@ interface AppActions {
   updateLegend: (l: Partial<LegendConfig>) => void
   updateMeasureBar: (m: Partial<MeasureBarConfig>) => void
   updateGrid: (updates: Partial<GridConfig>) => void
+  setPrecisionSetting: (s: PrecisionSetting) => void
+  setSagittalExceptionAcknowledged: (v: boolean) => void
   clearPendingChanges: () => void
   markClean: () => void
   reset: () => void
@@ -169,6 +171,8 @@ const initialState: ProjectState = {
   legend: defaultLegendConfig,
   measureBar: defaultMeasureBarConfig,
   grid: defaultGridConfig,
+  precisionSetting: 'medium' as PrecisionSetting,
+  sagittalExceptionAcknowledged: false,
 }
 
 export const useStore = create<ProjectState & AppActions>()(
@@ -234,6 +238,7 @@ export const useStore = create<ProjectState & AppActions>()(
             elevationCalibration: { ...state.elevationCalibration, ...cal },
             isDirty: true,
             contoursDirty: true,
+            ...('mapWidth' in cal ? { sagittalExceptionAcknowledged: false } : {}),
             ...(state.heightmap && affectsHillshade ? { hillshadeDirty: true } : {}),
           }
         }),
@@ -483,6 +488,12 @@ export const useStore = create<ProjectState & AppActions>()(
       updateGrid: (updates) =>
         set((s) => ({ grid: { ...s.grid, ...updates } })),
 
+      setPrecisionSetting: (s) =>
+        set({ precisionSetting: s, sagittalExceptionAcknowledged: false }),
+
+      setSagittalExceptionAcknowledged: (v) =>
+        set({ sagittalExceptionAcknowledged: v }),
+
       clearPendingChanges: () =>
         set((state) => ({
           parameters: state.snapshotParams ?? state.parameters,
@@ -502,7 +513,7 @@ export const useStore = create<ProjectState & AppActions>()(
     }),
     {
       name: 'topocrafter-state',
-      version: 1,
+      version: 2,
       storage: createJSONStorage(() => localStorage),
       migrate: (persistedState: unknown, version: number) => {
         const ps = persistedState as Record<string, unknown>
@@ -550,6 +561,11 @@ export const useStore = create<ProjectState & AppActions>()(
             delete ps.poiDefaults
           }
         }
+        if (version < 2) {
+          // New fields — defaults applied via merge()
+          ps.precisionSetting = ps.precisionSetting ?? 'medium'
+          ps.sagittalExceptionAcknowledged = ps.sagittalExceptionAcknowledged ?? false
+        }
         return ps
       },
       // Deep-merge so that new fields added to nested config objects (legend, frame, etc.)
@@ -578,6 +594,8 @@ export const useStore = create<ProjectState & AppActions>()(
           buildingDefaults:       merge(current.buildingDefaults,       ps.buildingDefaults),
           poiNewMarker:           merge(current.poiNewMarker,           ps.poiNewMarker),
           grid:                   merge(current.grid,                   ps.grid),
+          precisionSetting:              ps.precisionSetting              ?? current.precisionSetting,
+          sagittalExceptionAcknowledged: ps.sagittalExceptionAcknowledged ?? current.sagittalExceptionAcknowledged,
         }
       },
       partialize: (state) => ({
@@ -620,6 +638,8 @@ export const useStore = create<ProjectState & AppActions>()(
         poisVisible: state.poisVisible,
         poiNewMarker: state.poiNewMarker,
         grid: state.grid,
+        precisionSetting: state.precisionSetting,
+        sagittalExceptionAcknowledged: state.sagittalExceptionAcknowledged,
       }),
     }
   )

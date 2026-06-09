@@ -9,6 +9,7 @@ import { useThemeStore } from '../../store/useThemeStore'
 import { THEMES } from '../../themes'
 import { exportToBlob, exportOverlayToBlob, OverlayExportConfig } from '../../utils/export'
 import { OverlayExportModal } from './OverlayExportModal'
+import { computeSagittalErrorM, sagittalColor, formatSagittalError, PRECISION_CAPS } from '../../utils/sagittal'
 
 function CrosshairIcon(): JSX.Element {
   return (
@@ -149,11 +150,17 @@ export function Toolbar(): JSX.Element {
   const [exportIncludeFrame, setExportIncludeFrame] = useState(true)
   const [exportIncludeGrid, setExportIncludeGrid] = useState(false)
 
+  const precisionSetting = useStore((s) => s.precisionSetting)
   const { unitType, customAbbr, customRatio, realMin, realMax, mapWidth } = elevationCalibration
   const calReady = (unitType === 'feet' || unitType === 'meters'
     || (unitType === 'custom' && !!customAbbr && customRatio > 0))
     && realMin !== null && realMax !== null && realMax !== realMin
   const hasGroundResolution = calReady && mapWidth !== null && mapWidth > 0
+
+  const effectivePrecision = (measureBar.geoEnabled && measureBar.enabled) ? precisionSetting : 'medium'
+  const sagittalErrorM = (mapWidth && mapWidth > 0 && heightmap)
+    ? computeSagittalErrorM(mapWidth, heightmap.width, heightmap.height, unitType, measureBar.planetRadius)
+    : null
 
   const canExport = !!heightmap
   const baseImageUrl = activeTab === 'terrain' ? terrainImageUrl : hillshadeImageUrl
@@ -385,6 +392,40 @@ export function Toolbar(): JSX.Element {
               </Text>
             )}
           </Group>
+
+          {sagittalErrorM !== null && (
+            <Group gap={4} align="center">
+              <Tooltip
+                label={
+                  `Sagittal (spherical) error: how far the flat-map tile deviates from the curved planetary surface at its center. ` +
+                  `Larger tiles on smaller planets produce more error. ` +
+                  `Green ≤ 2 m · Yellow ≤ 10 m · Orange ≤ 30 m · Red > 30 m.`
+                }
+                withArrow
+                multiline
+                maw={300}
+                position="bottom"
+              >
+                <Text
+                  size="xs"
+                  fw={600}
+                  c={sagittalColor(sagittalErrorM)}
+                  style={{ fontVariantNumeric: 'tabular-nums', cursor: 'help' }}
+                >
+                  ⊕ {formatSagittalError(sagittalErrorM)}
+                </Text>
+              </Tooltip>
+              <Tooltip
+                label={`Precision cap: ${PRECISION_CAPS[effectivePrecision]} m. Change in Calibration › Geolocation.`}
+                withArrow
+                position="bottom"
+              >
+                <Text size="xs" c="dimmed" style={{ cursor: 'help' }}>
+                  /{PRECISION_CAPS[effectivePrecision]} m
+                </Text>
+              </Tooltip>
+            </Group>
+          )}
 
           <Menu shadow="md" width={220} disabled={!canExport}>
             <Menu.Target>
