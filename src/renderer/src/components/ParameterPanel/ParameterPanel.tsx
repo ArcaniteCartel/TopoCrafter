@@ -1434,20 +1434,10 @@ export function ParameterPanel(): JSX.Element {
           </Stack>
           </Collapse>
 
-        </Stack>
-      </Collapse>
-
-      <Divider />
-
-      <Group
-        justify="space-between"
-        style={{ cursor: 'pointer', userSelect: 'none' }}
-        onClick={() => setRoadsOpen((o) => !o)}
-      >
-        <Text fw={600} size="sm" c="dimmed" tt="uppercase" style={{ letterSpacing: 1 }}>
-          Roads
-        </Text>
-        <Text size="lg" c="dimmed">{roadsOpen ? '▾' : '▸'}</Text>
+      <Group justify="space-between" style={{ cursor: 'pointer', userSelect: 'none', paddingLeft: 10 }}
+        onClick={() => setRoadsOpen((o) => !o)}>
+        <Text fw={500} size="xs" c="dimmed">Roads</Text>
+        <Text size="sm" c="dimmed">{roadsOpen ? '▾' : '▸'}</Text>
       </Group>
 
       <Collapse in={roadsOpen}>
@@ -1590,17 +1580,10 @@ export function ParameterPanel(): JSX.Element {
         </Stack>
       </Collapse>
 
-      <Divider />
-
-      <Group
-        justify="space-between"
-        style={{ cursor: 'pointer', userSelect: 'none' }}
-        onClick={() => setBuildingsOpen((o) => !o)}
-      >
-        <Text fw={600} size="sm" c="dimmed" tt="uppercase" style={{ letterSpacing: 1 }}>
-          Urban Areas &amp; Settlements
-        </Text>
-        <Text size="lg" c="dimmed">{buildingsOpen ? '▾' : '▸'}</Text>
+      <Group justify="space-between" style={{ cursor: 'pointer', userSelect: 'none', paddingLeft: 10 }}
+        onClick={() => setBuildingsOpen((o) => !o)}>
+        <Text fw={500} size="xs" c="dimmed">Urban areas &amp; settlements</Text>
+        <Text size="sm" c="dimmed">{buildingsOpen ? '▾' : '▸'}</Text>
       </Group>
 
       <Collapse in={buildingsOpen}>
@@ -1729,6 +1712,9 @@ export function ParameterPanel(): JSX.Element {
           })()}
 
         </Stack>
+      </Collapse>
+
+      </Stack>
       </Collapse>
 
       <Divider />
