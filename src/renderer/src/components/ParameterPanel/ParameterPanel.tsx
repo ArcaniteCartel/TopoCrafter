@@ -700,21 +700,14 @@ export function ParameterPanel(): JSX.Element {
         />
       </Stack>
 
-      </Stack>
-      </Collapse>
-
-      <Divider />
-
-      <Group justify="space-between" style={{ cursor: 'pointer', userSelect: 'none' }}
+      <Group justify="space-between" style={{ cursor: 'pointer', userSelect: 'none', paddingLeft: 10 }}
         onClick={() => setStyleOpen((o) => !o)}>
-        <Text fw={600} size="sm" c="dimmed" tt="uppercase" style={{ letterSpacing: 1 }}>
-          Style
-        </Text>
-        <Text size="lg" c="dimmed">{styleOpen ? '▾' : '▸'}</Text>
+        <Text fw={500} size="xs" c="dimmed">Style</Text>
+        <Text size="sm" c="dimmed">{styleOpen ? '▾' : '▸'}</Text>
       </Group>
 
       <Collapse in={styleOpen}>
-      <Stack gap="md">
+      <Stack gap="md" pt={4}>
       <ColorInput
         label="Minor Contour Color"
         size="xs"
@@ -768,13 +761,11 @@ export function ParameterPanel(): JSX.Element {
 
       <Group
         justify="space-between"
-        style={{ cursor: 'pointer', userSelect: 'none' }}
+        style={{ cursor: 'pointer', userSelect: 'none', paddingLeft: 20 }}
         onClick={() => setLabelStylingOpen((o) => !o)}
       >
-        <Text fw={600} size="xs" tt="uppercase" style={{ letterSpacing: 1 }}>
-          Label Styling
-        </Text>
-        <Text size="lg" c="dimmed">{labelStylingOpen ? '▾' : '▸'}</Text>
+        <Text fw={400} size="xs" c="dimmed">label styling</Text>
+        <Text size="xs" c="dimmed">{labelStylingOpen ? '▾' : '▸'}</Text>
       </Group>
 
       <Collapse in={labelStylingOpen}>
@@ -836,13 +827,11 @@ export function ParameterPanel(): JSX.Element {
 
       <Group
         justify="space-between"
-        style={{ cursor: 'pointer', userSelect: 'none' }}
+        style={{ cursor: 'pointer', userSelect: 'none', paddingLeft: 20 }}
         onClick={() => setSeaLevelOpen((o) => !o)}
       >
-        <Text fw={600} size="xs" tt="uppercase" style={{ letterSpacing: 1 }}>
-          Sea Level
-        </Text>
-        <Text size="lg" c="dimmed">{seaLevelOpen ? '▾' : '▸'}</Text>
+        <Text fw={400} size="xs" c="dimmed">sea level</Text>
+        <Text size="xs" c="dimmed">{seaLevelOpen ? '▾' : '▸'}</Text>
       </Group>
 
       <Collapse in={seaLevelOpen}>
@@ -909,6 +898,9 @@ export function ParameterPanel(): JSX.Element {
             />
           </Stack>
         </Stack>
+      </Collapse>
+
+      </Stack>
       </Collapse>
 
       </Stack>
