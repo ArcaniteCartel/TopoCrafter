@@ -2007,7 +2007,7 @@ export function MapCanvas(): JSX.Element {
           )}
 
           {curvedLabels.filter(l => l.zOrder < 25).sort((a, b) => a.zOrder - b.zOrder).map(label => {
-            const pts = label.side === 'right' ? [...label.points].reverse() : label.points
+            const pts = label.flip ? [...label.points].reverse() : label.points
             const pathD = catmullRomPath(pts, false)
             const isSelected = label.id === selectedCurvedLabelId
             const hitW = Math.max(label.fontSize * 1.5, 20)
@@ -2021,7 +2021,7 @@ export function MapCanvas(): JSX.Element {
                   fontWeight={label.bold ? 'bold' : 'normal'} fontStyle={label.italic ? 'italic' : 'normal'}
                   fill={label.color} stroke={label.strokeWidth > 0 ? label.strokeColor : 'none'}
                   strokeWidth={label.strokeWidth} paintOrder="stroke fill"
-                  dominantBaseline={label.flip ? 'hanging' : undefined}
+                  dominantBaseline={(label.side === 'right') !== label.flip ? 'hanging' : undefined}
                   style={{ cursor: mapTool === 'curved-label' ? 'crosshair' : 'pointer' }}
                   onClick={(e) => { if (mapTool === 'curved-label') return; e.stopPropagation(); setSelectedCurvedLabelId(label.id) }}>
                   <textPath href={`#cl-path-${label.id}`} startOffset={`${label.startOffset}%`} textAnchor="middle"
@@ -2090,7 +2090,7 @@ export function MapCanvas(): JSX.Element {
 
           {/* Curved labels — zOrder 25–49, below roads */}
           {curvedLabels.filter(l => l.zOrder >= 25 && l.zOrder < 50).sort((a, b) => a.zOrder - b.zOrder).map(label => {
-            const pts = label.side === 'right' ? [...label.points].reverse() : label.points
+            const pts = label.flip ? [...label.points].reverse() : label.points
             const pathD = catmullRomPath(pts, false)
             const isSelected = label.id === selectedCurvedLabelId
             const hitW = Math.max(label.fontSize * 1.5, 20)
@@ -2104,7 +2104,7 @@ export function MapCanvas(): JSX.Element {
                   fontWeight={label.bold ? 'bold' : 'normal'} fontStyle={label.italic ? 'italic' : 'normal'}
                   fill={label.color} stroke={label.strokeWidth > 0 ? label.strokeColor : 'none'}
                   strokeWidth={label.strokeWidth} paintOrder="stroke fill"
-                  dominantBaseline={label.flip ? 'hanging' : undefined}
+                  dominantBaseline={(label.side === 'right') !== label.flip ? 'hanging' : undefined}
                   style={{ cursor: mapTool === 'curved-label' ? 'crosshair' : 'pointer' }}
                   onClick={(e) => { if (mapTool === 'curved-label') return; e.stopPropagation(); setSelectedCurvedLabelId(label.id) }}>
                   <textPath href={`#cl-path-${label.id}`} startOffset={`${label.startOffset}%`} textAnchor="middle"
@@ -2512,7 +2512,7 @@ export function MapCanvas(): JSX.Element {
 
           {/* Curved labels — zOrder 50–74, above POIs (default band) */}
           {curvedLabels.filter(l => l.zOrder >= 50 && l.zOrder < 75).sort((a, b) => a.zOrder - b.zOrder).map(label => {
-            const pts = label.side === 'right' ? [...label.points].reverse() : label.points
+            const pts = label.flip ? [...label.points].reverse() : label.points
             const pathD = catmullRomPath(pts, false)
             const isSelected = label.id === selectedCurvedLabelId
             const hitW = Math.max(label.fontSize * 1.5, 20)
@@ -2526,7 +2526,7 @@ export function MapCanvas(): JSX.Element {
                   fontWeight={label.bold ? 'bold' : 'normal'} fontStyle={label.italic ? 'italic' : 'normal'}
                   fill={label.color} stroke={label.strokeWidth > 0 ? label.strokeColor : 'none'}
                   strokeWidth={label.strokeWidth} paintOrder="stroke fill"
-                  dominantBaseline={label.flip ? 'hanging' : undefined}
+                  dominantBaseline={(label.side === 'right') !== label.flip ? 'hanging' : undefined}
                   style={{ cursor: mapTool === 'curved-label' ? 'crosshair' : 'pointer' }}
                   onClick={(e) => { if (mapTool === 'curved-label') return; e.stopPropagation(); setSelectedCurvedLabelId(label.id) }}>
                   <textPath href={`#cl-path-${label.id}`} startOffset={`${label.startOffset}%`} textAnchor="middle"
@@ -2834,7 +2834,7 @@ export function MapCanvas(): JSX.Element {
           onClick={() => { setSelectedCurvedLabelId(null); setSelectedItem(null); setSelectedPoiId(null) }}
         >
           {curvedLabels.filter(l => l.zOrder >= 75).sort((a, b) => a.zOrder - b.zOrder).map(label => {
-            const pts = label.side === 'right' ? [...label.points].reverse() : label.points
+            const pts = label.flip ? [...label.points].reverse() : label.points
             const pathD = catmullRomPath(pts, false)
             const isSelected = label.id === selectedCurvedLabelId
             const hitW = Math.max(label.fontSize * 1.5, 20)
@@ -2848,7 +2848,7 @@ export function MapCanvas(): JSX.Element {
                   fontWeight={label.bold ? 'bold' : 'normal'} fontStyle={label.italic ? 'italic' : 'normal'}
                   fill={label.color} stroke={label.strokeWidth > 0 ? label.strokeColor : 'none'}
                   strokeWidth={label.strokeWidth} paintOrder="stroke fill"
-                  dominantBaseline={label.flip ? 'hanging' : undefined}
+                  dominantBaseline={(label.side === 'right') !== label.flip ? 'hanging' : undefined}
                   style={{ cursor: 'pointer', pointerEvents: 'auto' }}
                   onClick={(e) => { e.stopPropagation(); setSelectedCurvedLabelId(label.id) }}>
                   <textPath href={`#cl-path-${label.id}`} startOffset={`${label.startOffset}%`} textAnchor="middle"
