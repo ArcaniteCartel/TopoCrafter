@@ -2021,10 +2021,11 @@ export function MapCanvas(): JSX.Element {
                   fontWeight={label.bold ? 'bold' : 'normal'} fontStyle={label.italic ? 'italic' : 'normal'}
                   fill={label.color} stroke={label.strokeWidth > 0 ? label.strokeColor : 'none'}
                   strokeWidth={label.strokeWidth} paintOrder="stroke fill"
+                  dominantBaseline={label.flip ? 'hanging' : undefined}
                   style={{ cursor: mapTool === 'curved-label' ? 'crosshair' : 'pointer' }}
                   onClick={(e) => { if (mapTool === 'curved-label') return; e.stopPropagation(); setSelectedCurvedLabelId(label.id) }}>
                   <textPath href={`#cl-path-${label.id}`} startOffset={`${label.startOffset}%`} textAnchor="middle"
-                    dy={label.flip ? label.fontSize * 0.9 : 0}>{label.text}</textPath>
+                    >{label.text}</textPath>
                 </text>
                 {isSelected && label.points.map((pt, i) => (
                   <circle key={i} cx={pt.x} cy={pt.y} r={Math.max(label.fontSize * 0.4, 6)}
@@ -2103,10 +2104,11 @@ export function MapCanvas(): JSX.Element {
                   fontWeight={label.bold ? 'bold' : 'normal'} fontStyle={label.italic ? 'italic' : 'normal'}
                   fill={label.color} stroke={label.strokeWidth > 0 ? label.strokeColor : 'none'}
                   strokeWidth={label.strokeWidth} paintOrder="stroke fill"
+                  dominantBaseline={label.flip ? 'hanging' : undefined}
                   style={{ cursor: mapTool === 'curved-label' ? 'crosshair' : 'pointer' }}
                   onClick={(e) => { if (mapTool === 'curved-label') return; e.stopPropagation(); setSelectedCurvedLabelId(label.id) }}>
                   <textPath href={`#cl-path-${label.id}`} startOffset={`${label.startOffset}%`} textAnchor="middle"
-                    dy={label.flip ? label.fontSize * 0.9 : 0}>{label.text}</textPath>
+                    >{label.text}</textPath>
                 </text>
                 {isSelected && label.points.map((pt, i) => (
                   <circle key={i} cx={pt.x} cy={pt.y} r={Math.max(label.fontSize * 0.4, 6)}
@@ -2524,10 +2526,11 @@ export function MapCanvas(): JSX.Element {
                   fontWeight={label.bold ? 'bold' : 'normal'} fontStyle={label.italic ? 'italic' : 'normal'}
                   fill={label.color} stroke={label.strokeWidth > 0 ? label.strokeColor : 'none'}
                   strokeWidth={label.strokeWidth} paintOrder="stroke fill"
+                  dominantBaseline={label.flip ? 'hanging' : undefined}
                   style={{ cursor: mapTool === 'curved-label' ? 'crosshair' : 'pointer' }}
                   onClick={(e) => { if (mapTool === 'curved-label') return; e.stopPropagation(); setSelectedCurvedLabelId(label.id) }}>
                   <textPath href={`#cl-path-${label.id}`} startOffset={`${label.startOffset}%`} textAnchor="middle"
-                    dy={label.flip ? label.fontSize * 0.9 : 0}>{label.text}</textPath>
+                    >{label.text}</textPath>
                 </text>
                 {isSelected && label.points.map((pt, i) => (
                   <circle key={i} cx={pt.x} cy={pt.y} r={Math.max(label.fontSize * 0.4, 6)}
@@ -2845,10 +2848,11 @@ export function MapCanvas(): JSX.Element {
                   fontWeight={label.bold ? 'bold' : 'normal'} fontStyle={label.italic ? 'italic' : 'normal'}
                   fill={label.color} stroke={label.strokeWidth > 0 ? label.strokeColor : 'none'}
                   strokeWidth={label.strokeWidth} paintOrder="stroke fill"
+                  dominantBaseline={label.flip ? 'hanging' : undefined}
                   style={{ cursor: 'pointer', pointerEvents: 'auto' }}
                   onClick={(e) => { e.stopPropagation(); setSelectedCurvedLabelId(label.id) }}>
                   <textPath href={`#cl-path-${label.id}`} startOffset={`${label.startOffset}%`} textAnchor="middle"
-                    dy={label.flip ? label.fontSize * 0.9 : 0}>{label.text}</textPath>
+                    >{label.text}</textPath>
                 </text>
                 {isSelected && label.points.map((pt, i) => (
                   <circle key={i} cx={pt.x} cy={pt.y} r={Math.max(label.fontSize * 0.4, 6)}
