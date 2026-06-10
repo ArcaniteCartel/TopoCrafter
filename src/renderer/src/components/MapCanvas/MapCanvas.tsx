@@ -1266,6 +1266,8 @@ export function MapCanvas(): JSX.Element {
   const flagSvgRef = useRef<SVGSVGElement>(null)
   const selectedItemRef = useRef<SelectedItem | null>(null)
   selectedItemRef.current = selectedItem
+  const selectedCurvedLabelIdRef = useRef<string | null>(selectedCurvedLabelId)
+  selectedCurvedLabelIdRef.current = selectedCurvedLabelId
 
   // Road drawing state
   const [inProgressPts, setInProgressPts] = useState<{ x: number; y: number }[]>([])
@@ -1420,6 +1422,15 @@ export function MapCanvas(): JSX.Element {
       if ((e.key === 'Enter' || e.key === 'Tab') && mapTool === 'curved-label' && inProgressLabelPtsRef.current.length >= 2) {
         if (e.key === 'Tab') e.preventDefault()
         commitLabel(inProgressLabelPtsRef.current)
+        return
+      }
+      if (e.key === 'Tab' && selectedCurvedLabelIdRef.current && inProgressLabelPtsRef.current.length === 0) {
+        e.preventDefault()
+        const labels = curvedLabelsRef.current
+        const idx = labels.findIndex(l => l.id === selectedCurvedLabelIdRef.current)
+        const next = labels[idx + 1]
+        setSelectedCurvedLabelId(next?.id ?? null)
+        return
       }
       if (e.key === 'Delete' && selectedItemRef.current) {
         const { type, id } = selectedItemRef.current
@@ -1433,8 +1444,8 @@ export function MapCanvas(): JSX.Element {
         setSelectedItem(null)
         setSelectedPoiId(null)
       }
-      if (e.key === 'Delete' && selectedCurvedLabelId) {
-        removeCurvedLabel(selectedCurvedLabelId)
+      if (e.key === 'Delete' && selectedCurvedLabelIdRef.current) {
+        removeCurvedLabel(selectedCurvedLabelIdRef.current)
         setSelectedCurvedLabelId(null)
       }
     }
@@ -1596,6 +1607,7 @@ export function MapCanvas(): JSX.Element {
     const id = crypto.randomUUID()
     addCurvedLabel({ id, points: pts, ...defaultCurvedLabelStyle })
     setSelectedCurvedLabelId(id)
+    setMapTool('none')
     setInProgressLabelPts([])
     setLabelHoverPt(null)
   }
