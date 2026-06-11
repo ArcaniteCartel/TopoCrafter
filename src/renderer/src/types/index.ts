@@ -238,6 +238,59 @@ export const defaultCurvedLabelStyle: Omit<CurvedLabel, 'id' | 'points'> = {
   zOrder: 70,
 }
 
+export interface WaterLake {
+  id: string
+  polygon: { x: number; y: number }[]
+  areaPx: number
+  surfaceElevNorm: number
+  depthNorm: number
+  color: string
+  opacity: number
+  label: string
+  labelColor: string
+  labelFontSize: number
+  labelFontFamily: string
+  labelBold: boolean
+  labelItalic: boolean
+  labelStrokeColor: string
+  labelStrokeWidth: number
+  labelPoints: { x: number; y: number }[] | null
+}
+
+export interface WaterRiver {
+  id: string
+  systemId: number
+  systemRank: number
+  segments: Array<{ points: { x: number; y: number }[]; strahlerOrder: number }>
+  maxAccumulation: number
+  color: string
+  opacity: number
+  strokeWidth: number
+  label: string
+  labelColor: string
+  labelFontSize: number
+  labelFontFamily: string
+  labelBold: boolean
+  labelItalic: boolean
+  labelStrokeColor: string
+  labelStrokeWidth: number
+  labelPoints: { x: number; y: number }[] | null
+}
+
+export interface WaterDetectionParams {
+  minDepthPct: number
+  minAreaPx: number
+  accumulationPct: number
+  maxRiverSystems: number
+}
+
+export const defaultWaterDetectionParams: WaterDetectionParams = {
+  minDepthPct: 2,
+  minAreaPx: 20,
+  accumulationPct: 0.5,
+  maxRiverSystems: 5,
+}
+
 export type MapTool = 'none' | 'elevation-flag' | 'slope-arrow' | 'measure-anchor' | 'ruggedness-flag' | 'swamp-marker' | 'road' | 'building' | 'poi' | 'curved-label'
 
 export type BuiltinMarkerTypeId = 'mine' | 'bridge' | 'cave'
@@ -720,6 +773,14 @@ export interface ProjectState {
   curvedLabels: CurvedLabel[]
   selectedCurvedLabelId: string | null
   ppi: number
+  waterLakes: WaterLake[]
+  waterRivers: WaterRiver[]
+  waterLakesVisible: boolean
+  waterRiversVisible: boolean
+  waterDetectionParams: WaterDetectionParams
+  selectedWaterLakeId: string | null
+  selectedWaterRiverId: string | null
+  waterDetecting: boolean
 }
 
 export const defaultParameters: ContourParameters = {

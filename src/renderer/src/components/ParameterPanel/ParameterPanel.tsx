@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { Stack, Text, Slider, NumberInput, ColorInput, Switch, Divider, Group, Select, TextInput, Collapse, Checkbox, SegmentedControl, Box, Button, Radio, Tooltip, Alert } from '@mantine/core'
+import { Stack, Text, Slider, NumberInput, ColorInput, Switch, Divider, Group, Select, TextInput, Collapse, Checkbox, SegmentedControl, Box, Button, Radio, Tooltip, Alert, Modal } from '@mantine/core'
 import { useStore } from '../../store/useStore'
 import { useGlobalStore } from '../../store/useGlobalStore'
 import type { FrameBorderStyle, TitleConfig, CompassConfig, FramePosition, RoadType, GridType, GridLinePattern, GridConfig, BuiltinMarkerTypeId, MarkerPrimitiveId, MarkerSymbolDescriptor, PrecisionSetting } from '../../types'
@@ -7,6 +7,7 @@ import { TRI_LABELS, TRI_THRESHOLDS, triRangeLabel, BUILTIN_MARKER_SPECS, calToM
 import { computeSagittalErrorM, sagittalColor, formatSagittalError, PRECISION_CAPS, PRECISION_LABELS } from '../../utils/sagittal'
 import { BUILDING_CATALOG } from '../../data/buildings'
 import type { BuildingShape } from '../../data/buildings'
+import { detectWaterFeatures } from '../../utils/hydrology'
 
 const DASH_OPTIONS = [
   { value: 'solid', label: 'Solid' },
@@ -187,6 +188,27 @@ export function ParameterPanel(): JSX.Element {
   const setPrecisionSetting = useStore((s) => s.setPrecisionSetting)
   const sagittalExceptionAcknowledged = useStore((s) => s.sagittalExceptionAcknowledged)
   const setSagittalExceptionAcknowledged = useStore((s) => s.setSagittalExceptionAcknowledged)
+  const waterLakes = useStore((s) => s.waterLakes)
+  const waterRivers = useStore((s) => s.waterRivers)
+  const waterLakesVisible = useStore((s) => s.waterLakesVisible)
+  const waterRiversVisible = useStore((s) => s.waterRiversVisible)
+  const waterDetectionParams = useStore((s) => s.waterDetectionParams)
+  const waterDetecting = useStore((s) => s.waterDetecting)
+  const selectedWaterLakeId = useStore((s) => s.selectedWaterLakeId)
+  const selectedWaterRiverId = useStore((s) => s.selectedWaterRiverId)
+  const setWaterLakes = useStore((s) => s.setWaterLakes)
+  const setWaterRivers = useStore((s) => s.setWaterRivers)
+  const updateWaterLake = useStore((s) => s.updateWaterLake)
+  const updateWaterRiver = useStore((s) => s.updateWaterRiver)
+  const removeWaterLake = useStore((s) => s.removeWaterLake)
+  const removeWaterRiver = useStore((s) => s.removeWaterRiver)
+  const setWaterLakesVisible = useStore((s) => s.setWaterLakesVisible)
+  const setWaterRiversVisible = useStore((s) => s.setWaterRiversVisible)
+  const setSelectedWaterLakeId = useStore((s) => s.setSelectedWaterLakeId)
+  const setSelectedWaterRiverId = useStore((s) => s.setSelectedWaterRiverId)
+  const updateWaterDetectionParams = useStore((s) => s.updateWaterDetectionParams)
+  const setWaterDetecting = useStore((s) => s.setWaterDetecting)
+  const clearWaterFeatures = useStore((s) => s.clearWaterFeatures)
 
   const { unitType, customName, customAbbr, customBase, customRatio, realMin, realMax, realInterval, mapWidth } = elevationCalibration
 
@@ -274,6 +296,9 @@ export function ParameterPanel(): JSX.Element {
   const [legendItemsOpen, setLegendItemsOpen] = useState(false)
   const [measureBarsOpen, setMeasureBarsOpen] = useState(false)
   const [metadataOpen, setMetadataOpen] = useState(false)
+  const [waterOpen, setWaterOpen] = useState(false)
+  const [waterDetectParamsOpen, setWaterDetectParamsOpen] = useState(false)
+  const [waterConfirmOpen, setWaterConfirmOpen] = useState(false)
 
   const [createCustomOpen, setCreateCustomOpen] = useState(false)
   const [newCustomName, setNewCustomName] = useState('')
@@ -369,6 +394,32 @@ export function ParameterPanel(): JSX.Element {
   const handleRealMaxChange = (v: number | string) => {
     const num = typeof v === 'number' ? v : parseFloat(String(v))
     if (!isNaN(num)) updateElevationCalibration({ realMax: num })
+  }
+
+  const runWaterDetection = async () => {
+    if (!heightmap) return
+    setWaterDetecting(true)
+    await new Promise<void>((res) => setTimeout(res, 50))
+    try {
+      const result = detectWaterFeatures(
+        heightmap.data, heightmap.width, heightmap.height,
+        waterDetectionParams, heightmap.minValue, heightmap.maxValue
+      )
+      setWaterLakes(result.lakes)
+      setWaterRivers(result.rivers)
+      setSelectedWaterLakeId(null)
+      setSelectedWaterRiverId(null)
+    } finally {
+      setWaterDetecting(false)
+    }
+  }
+
+  const handleDetectClick = () => {
+    if (waterLakes.length > 0 || waterRivers.length > 0) {
+      setWaterConfirmOpen(true)
+    } else {
+      void runWaterDetection()
+    }
   }
 
   return (
@@ -2877,6 +2928,199 @@ export function ParameterPanel(): JSX.Element {
 
         </Stack>
       </Collapse>
+
+      {/* ─── WATER FEATURES ────────────────────────────────────── */}
+      <Divider my="xs" />
+      <Group justify="space-between" style={{ cursor: 'pointer', userSelect: 'none' }}
+        onClick={() => setWaterOpen((o) => !o)}>
+        <Text size="lg" c="dimmed">Water Features</Text>
+        <Text size="lg" c="dimmed">{waterOpen ? '▾' : '▸'}</Text>
+      </Group>
+      <Collapse in={waterOpen}>
+      <Stack gap="md" pt={4} pl="xs">
+
+        {/* Detection controls */}
+        <Group>
+          <Button size="xs" onClick={handleDetectClick}
+            loading={waterDetecting} disabled={!heightmap || waterDetecting}>
+            {waterLakes.length + waterRivers.length > 0 ? 'Re-detect' : 'Detect'}
+          </Button>
+          <Text size="xs" c="dimmed" style={{ fontStyle: 'italic' }}>
+            {waterDetecting ? 'Detecting…' : waterLakes.length + waterRivers.length > 0
+              ? `${waterLakes.length} lake${waterLakes.length !== 1 ? 's' : ''}, ${waterRivers.length} river${waterRivers.length !== 1 ? 's' : ''}`
+              : 'No features detected'}
+          </Text>
+        </Group>
+
+        {/* Detection params */}
+        <Group justify="space-between" style={{ cursor: 'pointer', userSelect: 'none' }}
+          onClick={() => setWaterDetectParamsOpen((o) => !o)}>
+          <Text size="xs" fw={500}>Detection parameters</Text>
+          <Text size="xs" c="dimmed">{waterDetectParamsOpen ? '▾' : '▸'}</Text>
+        </Group>
+        <Collapse in={waterDetectParamsOpen}>
+        <Stack gap="xs" pl="xs">
+          <NumberInput size="xs" label="Min depression depth (%)"
+            description="Minimum depth as % of elevation range"
+            value={waterDetectionParams.minDepthPct}
+            onChange={(v) => typeof v === 'number' && updateWaterDetectionParams({ minDepthPct: v })}
+            min={0.1} max={20} step={0.1} decimalScale={1} />
+          <NumberInput size="xs" label="Min lake area (pixels)"
+            value={waterDetectionParams.minAreaPx}
+            onChange={(v) => typeof v === 'number' && updateWaterDetectionParams({ minAreaPx: Math.max(1, Math.round(v)) })}
+            min={1} max={5000} step={1} />
+          <NumberInput size="xs" label="Stream accumulation (%)"
+            description="Threshold as % of map area"
+            value={waterDetectionParams.accumulationPct}
+            onChange={(v) => typeof v === 'number' && updateWaterDetectionParams({ accumulationPct: v })}
+            min={0.01} max={10} step={0.1} decimalScale={2} />
+          <NumberInput size="xs" label="Max river systems (0 = all)"
+            value={waterDetectionParams.maxRiverSystems}
+            onChange={(v) => typeof v === 'number' && updateWaterDetectionParams({ maxRiverSystems: Math.max(0, Math.round(v)) })}
+            min={0} max={50} step={1} />
+        </Stack>
+        </Collapse>
+
+        {/* ── Lakes section ── */}
+        {waterLakes.length > 0 && (
+          <>
+            <Divider label={`Lakes (${waterLakes.length})`} labelPosition="left" size="xs" />
+            <Group justify="space-between">
+              <Switch size="xs" label="Visible"
+                checked={waterLakesVisible} onChange={(e) => setWaterLakesVisible(e.target.checked)} />
+              <Button size="xs" variant="subtle" color="red"
+                onClick={() => { clearWaterFeatures(); setSelectedWaterLakeId(null) }}>
+                Delete all water
+              </Button>
+            </Group>
+            <Stack gap={4}>
+              {waterLakes.map((lake, i) => (
+                <Box key={lake.id}>
+                  <Group justify="space-between"
+                    p={4} style={{
+                      backgroundColor: lake.id === selectedWaterLakeId ? '#e8f4ff' : 'transparent',
+                      borderRadius: 4, cursor: 'pointer',
+                    }}
+                    onClick={() => setSelectedWaterLakeId(lake.id === selectedWaterLakeId ? null : lake.id)}>
+                    <Text size="xs">Lake {i + 1} ({Math.round(lake.areaPx).toLocaleString()} px²)</Text>
+                    <Button size="compact-xs" variant="subtle" color="red"
+                      onClick={(e) => { e.stopPropagation(); removeWaterLake(lake.id) }}>×</Button>
+                  </Group>
+                  {lake.id === selectedWaterLakeId && (
+                    <Stack gap="xs" pl="sm" pt={4}>
+                      <Group grow>
+                        <ColorInput size="xs" label="Fill" value={lake.color}
+                          onChange={(v) => updateWaterLake(lake.id, { color: v })} />
+                        <NumberInput size="xs" label="Opacity %"
+                          value={Math.round(lake.opacity * 100)} min={0} max={100}
+                          onChange={(v) => typeof v === 'number' && updateWaterLake(lake.id, { opacity: v / 100 })} />
+                      </Group>
+                      <TextInput size="xs" label="Label text" value={lake.label}
+                        onChange={(e) => updateWaterLake(lake.id, { label: e.target.value })} />
+                      {lake.label && (
+                        <>
+                          <Group grow>
+                            <Select size="xs" label="Font" data={FONT_OPTIONS}
+                              value={lake.labelFontFamily}
+                              onChange={(v) => v && updateWaterLake(lake.id, { labelFontFamily: v })} />
+                            <NumberInput size="xs" label="Size" min={6} max={120}
+                              value={lake.labelFontSize}
+                              onChange={(v) => typeof v === 'number' && updateWaterLake(lake.id, { labelFontSize: v })} />
+                          </Group>
+                          <Group grow>
+                            <ColorInput size="xs" label="Label color" value={lake.labelColor}
+                              onChange={(v) => updateWaterLake(lake.id, { labelColor: v })} />
+                            <Switch size="xs" label="Bold" checked={lake.labelBold}
+                              onChange={(e) => updateWaterLake(lake.id, { labelBold: e.target.checked })} />
+                            <Switch size="xs" label="Italic" checked={lake.labelItalic}
+                              onChange={(e) => updateWaterLake(lake.id, { labelItalic: e.target.checked })} />
+                          </Group>
+                        </>
+                      )}
+                    </Stack>
+                  )}
+                </Box>
+              ))}
+            </Stack>
+          </>
+        )}
+
+        {/* ── Rivers section ── */}
+        {waterRivers.length > 0 && (
+          <>
+            <Divider label={`Rivers (${waterRivers.length})`} labelPosition="left" size="xs" />
+            <Switch size="xs" label="Visible"
+              checked={waterRiversVisible} onChange={(e) => setWaterRiversVisible(e.target.checked)} />
+            <Stack gap={4}>
+              {waterRivers.map((river) => (
+                <Box key={river.id}>
+                  <Group justify="space-between"
+                    p={4} style={{
+                      backgroundColor: river.id === selectedWaterRiverId ? '#e8f4ff' : 'transparent',
+                      borderRadius: 4, cursor: 'pointer',
+                    }}
+                    onClick={() => setSelectedWaterRiverId(river.id === selectedWaterRiverId ? null : river.id)}>
+                    <Text size="xs">River {river.systemRank}</Text>
+                    <Button size="compact-xs" variant="subtle" color="red"
+                      onClick={(e) => { e.stopPropagation(); removeWaterRiver(river.id) }}>×</Button>
+                  </Group>
+                  {river.id === selectedWaterRiverId && (
+                    <Stack gap="xs" pl="sm" pt={4}>
+                      <Group grow>
+                        <ColorInput size="xs" label="Color" value={river.color}
+                          onChange={(v) => updateWaterRiver(river.id, { color: v })} />
+                        <NumberInput size="xs" label="Opacity %"
+                          value={Math.round(river.opacity * 100)} min={0} max={100}
+                          onChange={(v) => typeof v === 'number' && updateWaterRiver(river.id, { opacity: v / 100 })} />
+                      </Group>
+                      <NumberInput size="xs" label="Base stroke width"
+                        value={river.strokeWidth} min={0.5} max={20} step={0.5} decimalScale={1}
+                        onChange={(v) => typeof v === 'number' && updateWaterRiver(river.id, { strokeWidth: v })} />
+                      <TextInput size="xs" label="Label text" value={river.label}
+                        onChange={(e) => updateWaterRiver(river.id, { label: e.target.value })} />
+                      {river.label && (
+                        <>
+                          <Group grow>
+                            <Select size="xs" label="Font" data={FONT_OPTIONS}
+                              value={river.labelFontFamily}
+                              onChange={(v) => v && updateWaterRiver(river.id, { labelFontFamily: v })} />
+                            <NumberInput size="xs" label="Size" min={6} max={120}
+                              value={river.labelFontSize}
+                              onChange={(v) => typeof v === 'number' && updateWaterRiver(river.id, { labelFontSize: v })} />
+                          </Group>
+                          <Group grow>
+                            <ColorInput size="xs" label="Label color" value={river.labelColor}
+                              onChange={(v) => updateWaterRiver(river.id, { labelColor: v })} />
+                            <Switch size="xs" label="Bold" checked={river.labelBold}
+                              onChange={(e) => updateWaterRiver(river.id, { labelBold: e.target.checked })} />
+                            <Switch size="xs" label="Italic" checked={river.labelItalic}
+                              onChange={(e) => updateWaterRiver(river.id, { labelItalic: e.target.checked })} />
+                          </Group>
+                        </>
+                      )}
+                    </Stack>
+                  )}
+                </Box>
+              ))}
+            </Stack>
+          </>
+        )}
+
+      </Stack>
+      </Collapse>
+
+      {/* Confirm re-detect modal */}
+      <Modal opened={waterConfirmOpen} onClose={() => setWaterConfirmOpen(false)}
+        title="Replace water features?" size="sm">
+        <Text size="sm">
+          This will replace {waterLakes.length} lake{waterLakes.length !== 1 ? 's' : ''} and{' '}
+          {waterRivers.length} river{waterRivers.length !== 1 ? 's' : ''} with newly detected features.
+        </Text>
+        <Group mt="md" justify="flex-end">
+          <Button variant="default" size="sm" onClick={() => setWaterConfirmOpen(false)}>Cancel</Button>
+          <Button size="sm" onClick={() => { setWaterConfirmOpen(false); void runWaterDetection() }}>Detect</Button>
+        </Group>
+      </Modal>
 
       {/* ─── METADATA ──────────────────────────────────────────── */}
       <Divider my="xs" />

@@ -7,8 +7,9 @@ import type {
   MapTool, FrameConfig, TitleConfig, CompassConfig, LegendConfig, MeasureBarConfig,
   Road, RoadDefaults, GridConfig, BuildingEntry, BuildingDefaults,
   PoiEntry, PoiNewMarkerState, PrecisionSetting, CurvedLabel,
+  WaterLake, WaterRiver, WaterDetectionParams,
 } from '../types'
-import { defaultParameters, defaultStyle, defaultHillshadeParameters, defaultElevationCalibration, defaultFrameConfig, defaultTitleConfig, defaultCompassConfig, defaultLegendConfig, defaultMeasureBarConfig, TRI_COLORS, defaultRoadDefaults, defaultGridConfig, defaultBuildingDefaults, defaultPoiNewMarkerState, calToMeters } from '../types'
+import { defaultParameters, defaultStyle, defaultHillshadeParameters, defaultElevationCalibration, defaultFrameConfig, defaultTitleConfig, defaultCompassConfig, defaultLegendConfig, defaultMeasureBarConfig, TRI_COLORS, defaultRoadDefaults, defaultGridConfig, defaultBuildingDefaults, defaultPoiNewMarkerState, calToMeters, defaultWaterDetectionParams } from '../types'
 
 function calFromMeters(meters: number, cal: ElevationCalibration): number {
   if (cal.unitType === 'feet') return meters / 0.3048
@@ -86,6 +87,19 @@ interface AppActions {
   removeCurvedLabel: (id: string) => void
   setSelectedCurvedLabelId: (id: string | null) => void
   setPpi: (ppi: number) => void
+  setWaterLakes: (lakes: WaterLake[]) => void
+  setWaterRivers: (rivers: WaterRiver[]) => void
+  updateWaterLake: (id: string, updates: Partial<Omit<WaterLake, 'id'>>) => void
+  updateWaterRiver: (id: string, updates: Partial<Omit<WaterRiver, 'id'>>) => void
+  removeWaterLake: (id: string) => void
+  removeWaterRiver: (id: string) => void
+  setWaterLakesVisible: (v: boolean) => void
+  setWaterRiversVisible: (v: boolean) => void
+  setSelectedWaterLakeId: (id: string | null) => void
+  setSelectedWaterRiverId: (id: string | null) => void
+  updateWaterDetectionParams: (p: Partial<WaterDetectionParams>) => void
+  setWaterDetecting: (v: boolean) => void
+  clearWaterFeatures: () => void
   setRuggednessSeverityColor: (index: number, color: string) => void
   setMapTool: (tool: MapTool) => void
   setActiveTab: (tab: 'terrain' | 'hillshade') => void
@@ -170,6 +184,14 @@ const initialState: ProjectState = {
   curvedLabels: [],
   selectedCurvedLabelId: null,
   ppi: 300,
+  waterLakes: [],
+  waterRivers: [],
+  waterLakesVisible: true,
+  waterRiversVisible: true,
+  waterDetectionParams: defaultWaterDetectionParams,
+  selectedWaterLakeId: null,
+  selectedWaterRiverId: null,
+  waterDetecting: false,
 }
 
 export const useStore = create<ProjectState & AppActions>()(
@@ -462,6 +484,32 @@ export const useStore = create<ProjectState & AppActions>()(
 
       setPpi: (ppi) => set({ ppi }),
 
+      setWaterLakes: (lakes) => set({ waterLakes: lakes, isDirty: true }),
+      setWaterRivers: (rivers) => set({ waterRivers: rivers, isDirty: true }),
+      updateWaterLake: (id, updates) => set((s) => ({
+        waterLakes: s.waterLakes.map((l) => l.id === id ? { ...l, ...updates } : l), isDirty: true,
+      })),
+      updateWaterRiver: (id, updates) => set((s) => ({
+        waterRivers: s.waterRivers.map((r) => r.id === id ? { ...r, ...updates } : r), isDirty: true,
+      })),
+      removeWaterLake: (id) => set((s) => ({
+        waterLakes: s.waterLakes.filter((l) => l.id !== id), isDirty: true,
+        selectedWaterLakeId: s.selectedWaterLakeId === id ? null : s.selectedWaterLakeId,
+      })),
+      removeWaterRiver: (id) => set((s) => ({
+        waterRivers: s.waterRivers.filter((r) => r.id !== id), isDirty: true,
+        selectedWaterRiverId: s.selectedWaterRiverId === id ? null : s.selectedWaterRiverId,
+      })),
+      setWaterLakesVisible: (v) => set({ waterLakesVisible: v }),
+      setWaterRiversVisible: (v) => set({ waterRiversVisible: v }),
+      setSelectedWaterLakeId: (id) => set({ selectedWaterLakeId: id }),
+      setSelectedWaterRiverId: (id) => set({ selectedWaterRiverId: id }),
+      updateWaterDetectionParams: (p) => set((s) => ({
+        waterDetectionParams: { ...s.waterDetectionParams, ...p },
+      })),
+      setWaterDetecting: (v) => set({ waterDetecting: v }),
+      clearWaterFeatures: () => set({ waterLakes: [], waterRivers: [], isDirty: true }),
+
       setRuggednessSeverityColor: (index, color) =>
         set((state) => ({
           ruggednessSeverityColors: state.ruggednessSeverityColors.map((c, i) => i === index ? color : c),
@@ -617,6 +665,11 @@ export const useStore = create<ProjectState & AppActions>()(
           sagittalExceptionAcknowledged: ps.sagittalExceptionAcknowledged ?? current.sagittalExceptionAcknowledged,
           curvedLabels:                  ps.curvedLabels                  ?? current.curvedLabels,
           ppi:                           ps.ppi                           ?? current.ppi,
+          waterLakes:                    ps.waterLakes                    ?? current.waterLakes,
+          waterRivers:                   ps.waterRivers                   ?? current.waterRivers,
+          waterLakesVisible:             ps.waterLakesVisible             ?? current.waterLakesVisible,
+          waterRiversVisible:            ps.waterRiversVisible            ?? current.waterRiversVisible,
+          waterDetectionParams:          merge(current.waterDetectionParams, ps.waterDetectionParams),
         }
       },
       partialize: (state) => ({
@@ -663,6 +716,11 @@ export const useStore = create<ProjectState & AppActions>()(
         sagittalExceptionAcknowledged: state.sagittalExceptionAcknowledged,
         curvedLabels: state.curvedLabels,
         ppi: state.ppi,
+        waterLakes: state.waterLakes,
+        waterRivers: state.waterRivers,
+        waterLakesVisible: state.waterLakesVisible,
+        waterRiversVisible: state.waterRiversVisible,
+        waterDetectionParams: state.waterDetectionParams,
       }),
     }
   )

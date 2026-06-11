@@ -1937,6 +1937,14 @@ export function MapCanvas(): JSX.Element {
   const legend = useStore((s) => s.legend)
   const grid = useStore((s) => s.grid)
   const ppi = useStore((s) => s.ppi)
+  const waterLakes = useStore((s) => s.waterLakes)
+  const waterRivers = useStore((s) => s.waterRivers)
+  const waterLakesVisible = useStore((s) => s.waterLakesVisible)
+  const waterRiversVisible = useStore((s) => s.waterRiversVisible)
+  const selectedWaterLakeId = useStore((s) => s.selectedWaterLakeId)
+  const selectedWaterRiverId = useStore((s) => s.selectedWaterRiverId)
+  const setSelectedWaterLakeId = useStore((s) => s.setSelectedWaterLakeId)
+  const setSelectedWaterRiverId = useStore((s) => s.setSelectedWaterRiverId)
 
   const baseImageUrl = activeTab === 'terrain' ? terrainImageUrl : hillshadeImageUrl
   const showPlaceholder = !baseImageUrl && !heightmap && !hillshadeGenerating && !fileLoadingMessage
@@ -1951,6 +1959,11 @@ export function MapCanvas(): JSX.Element {
   const seaLevelLabelPt = (style.showSeaLevel && style.showSeaLevelLabel && contourState?.contourSet.seaLevelPath)
     ? getLabelPoint(contourState.contourSet.seaLevelPath)
     : null
+
+  // svgPinScale: converts "desired screen px" → SVG coordinate units, zoom-invariant
+  const svgPinScale = (innerMapSize && heightmap)
+    ? heightmap.width / innerMapSize.w
+    : (heightmap ? heightmap.width / 800 : 1)
 
   const toolActive = mapTool === 'elevation-flag' || mapTool === 'slope-arrow' || mapTool === 'measure-anchor' || mapTool === 'ruggedness-flag' || mapTool === 'swamp-marker' || mapTool === 'road' || mapTool === 'building' || mapTool === 'poi' || mapTool === 'curved-label'
   const flagSvgInteractive = toolActive || elevationFlags.length > 0 || slopeArrows.length > 0 || ruggednessFlags.length > 0 || swampMarkers.length > 0 || roads.length > 0 || buildings.length > 0 || pois.length > 0 || curvedLabels.length > 0
@@ -2270,6 +2283,139 @@ export function MapCanvas(): JSX.Element {
                     fill="white" stroke="#0066ff" strokeWidth={2} style={{ cursor: 'grab' }}
                     onMouseDown={(e) => { e.stopPropagation(); labelAnchorDragRef.current = { labelId: label.id, ptIdx: i } }} />
                 ))}
+              </g>
+            )
+          })}
+
+          {/* ── Water: lakes ──────────────────────────────────────────── */}
+          {waterLakesVisible && waterLakes.map((lake) => {
+            if (lake.polygon.length < 3) return null
+            const isSelected = lake.id === selectedWaterLakeId
+            const d = 'M ' + lake.polygon.map((p) => `${p.x},${p.y}`).join(' L ') + ' Z'
+            // Centroid for locator pin
+            const cx = lake.polygon.reduce((s, p) => s + p.x, 0) / lake.polygon.length
+            const cy = lake.polygon.reduce((s, p) => s + p.y, 0) / lake.polygon.length
+            const ph = svgPinScale * 28, phw = svgPinScale * 12, psw = svgPinScale * 1.5
+            return (
+              <g key={lake.id}>
+                <path d={d} fill={lake.color} fillOpacity={lake.opacity} stroke="none"
+                  style={{ cursor: 'pointer' }}
+                  onClick={(e) => { e.stopPropagation(); setSelectedWaterLakeId(lake.id === selectedWaterLakeId ? null : lake.id) }} />
+                {isSelected && <>
+                  {/* Glow outline */}
+                  <path d={d} fill="none" stroke="white" strokeWidth={svgPinScale * 6}
+                    style={{ pointerEvents: 'none' }} />
+                  <path d={d} fill="none" stroke="#0066ff" strokeWidth={svgPinScale * 3}
+                    strokeDasharray={`${svgPinScale * 10} ${svgPinScale * 5}`}
+                    style={{ pointerEvents: 'none' }} />
+                  {/* Locator pin at centroid */}
+                  <g style={{ pointerEvents: 'none' }}>
+                    <polygon points={`${cx},${cy} ${cx - phw},${cy - ph} ${cx + phw},${cy - ph}`}
+                      fill="none" stroke="white" strokeWidth={psw * 3} strokeLinejoin="round" />
+                    <polygon points={`${cx},${cy} ${cx - phw},${cy - ph} ${cx + phw},${cy - ph}`}
+                      fill="#ff6600" stroke="none" />
+                    <circle cx={cx} cy={cy - ph * 0.55} r={svgPinScale * 5} fill="white" />
+                  </g>
+                </>}
+                {lake.labelPoints && lake.label && (() => {
+                  const lp = lake.labelPoints!
+                  const lpd = catmullRomPath(lp, false)
+                  const lid = `wl-path-${lake.id}`
+                  return (
+                    <g>
+                      <defs><path id={lid} d={lpd} /></defs>
+                      <text fontFamily={lake.labelFontFamily} fontSize={lake.labelFontSize}
+                        fontWeight={lake.labelBold ? 'bold' : 'normal'}
+                        fontStyle={lake.labelItalic ? 'italic' : 'normal'}
+                        fill={lake.labelColor}
+                        stroke={lake.labelStrokeWidth > 0 ? lake.labelStrokeColor : 'none'}
+                        strokeWidth={lake.labelStrokeWidth} paintOrder="stroke fill">
+                        <textPath href={`#${lid}`} startOffset="50%" textAnchor="middle">
+                          {lake.label}
+                        </textPath>
+                      </text>
+                    </g>
+                  )
+                })()}
+              </g>
+            )
+          })}
+
+          {/* ── Water: rivers ─────────────────────────────────────────── */}
+          {waterRiversVisible && waterRivers.map((river) => {
+            const isSelected = river.id === selectedWaterRiverId
+            const maxOrd = river.segments.reduce((m, s) => Math.max(m, s.strahlerOrder), 1)
+            const ph = svgPinScale * 28, phw = svgPinScale * 12, psw = svgPinScale * 1.5
+            // Collect locator points: start, 1–2 middle, end
+            const allPts = river.segments.flatMap((s) => s.points)
+            const locPts = allPts.length > 0 ? (
+              allPts.length < 4
+                ? [allPts[0], allPts[allPts.length - 1]]
+                : [
+                    allPts[0],
+                    allPts[Math.floor(allPts.length * 0.4)],
+                    allPts[Math.floor(allPts.length * 0.7)],
+                    allPts[allPts.length - 1],
+                  ]
+            ) : []
+            return (
+              <g key={river.id} opacity={river.opacity}>
+                {river.segments.map((seg, si) => {
+                  if (seg.points.length < 2) return null
+                  const d = 'M ' + seg.points.map((p) => `${p.x},${p.y}`).join(' L ')
+                  const w = river.strokeWidth * Math.min(seg.strahlerOrder, 4) / Math.max(maxOrd, 4)
+                  return (
+                    <path key={si} d={d} fill="none" stroke={river.color}
+                      strokeWidth={Math.max(w, 0.5)} strokeLinecap="round" strokeLinejoin="round"
+                      style={{ cursor: 'pointer' }}
+                      onClick={(e) => { e.stopPropagation(); setSelectedWaterRiverId(river.id === selectedWaterRiverId ? null : river.id) }} />
+                  )
+                })}
+                {isSelected && <>
+                  {/* Glow highlight on all segments */}
+                  {river.segments.map((seg, si) => {
+                    if (seg.points.length < 2) return null
+                    const d = 'M ' + seg.points.map((p) => `${p.x},${p.y}`).join(' L ')
+                    const w = river.strokeWidth * Math.min(seg.strahlerOrder, 4) / Math.max(maxOrd, 4)
+                    return (<g key={`glow-${si}`}>
+                      <path d={d} fill="none" stroke="white"
+                        strokeWidth={w + svgPinScale * 6} strokeLinecap="round" strokeLinejoin="round"
+                        strokeOpacity={0.7} style={{ pointerEvents: 'none' }} />
+                      <path d={d} fill="none" stroke="#00aaff"
+                        strokeWidth={w + svgPinScale * 2} strokeLinecap="round" strokeLinejoin="round"
+                        strokeOpacity={0.8} style={{ pointerEvents: 'none' }} />
+                    </g>)
+                  })}
+                  {/* Locator pins at key points */}
+                  {locPts.map((pt, pi) => (
+                    <g key={`pin-${pi}`} style={{ pointerEvents: 'none' }}>
+                      <polygon points={`${pt.x},${pt.y} ${pt.x - phw},${pt.y - ph} ${pt.x + phw},${pt.y - ph}`}
+                        fill="none" stroke="white" strokeWidth={psw * 3} strokeLinejoin="round" />
+                      <polygon points={`${pt.x},${pt.y} ${pt.x - phw},${pt.y - ph} ${pt.x + phw},${pt.y - ph}`}
+                        fill="#ff6600" stroke="none" />
+                      <circle cx={pt.x} cy={pt.y - ph * 0.55} r={svgPinScale * 5} fill="white" />
+                    </g>
+                  ))}
+                </>}
+                {river.labelPoints && river.label && (() => {
+                  const lpd = catmullRomPath(river.labelPoints!, false)
+                  const lid = `wr-path-${river.id}`
+                  return (
+                    <g>
+                      <defs><path id={lid} d={lpd} /></defs>
+                      <text fontFamily={river.labelFontFamily} fontSize={river.labelFontSize}
+                        fontWeight={river.labelBold ? 'bold' : 'normal'}
+                        fontStyle={river.labelItalic ? 'italic' : 'normal'}
+                        fill={river.labelColor}
+                        stroke={river.labelStrokeWidth > 0 ? river.labelStrokeColor : 'none'}
+                        strokeWidth={river.labelStrokeWidth} paintOrder="stroke fill">
+                        <textPath href={`#${lid}`} startOffset="50%" textAnchor="middle">
+                          {river.label}
+                        </textPath>
+                      </text>
+                    </g>
+                  )
+                })()}
               </g>
             )
           })}
