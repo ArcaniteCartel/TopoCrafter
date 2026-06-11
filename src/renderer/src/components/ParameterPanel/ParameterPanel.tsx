@@ -3,7 +3,7 @@ import { Stack, Text, Slider, NumberInput, ColorInput, Switch, Divider, Group, S
 import { useStore } from '../../store/useStore'
 import { useGlobalStore } from '../../store/useGlobalStore'
 import type { FrameBorderStyle, TitleConfig, CompassConfig, FramePosition, RoadType, GridType, GridLinePattern, GridConfig, BuiltinMarkerTypeId, MarkerPrimitiveId, MarkerSymbolDescriptor, PrecisionSetting } from '../../types'
-import { TRI_LABELS, TRI_THRESHOLDS, triRangeLabel, BUILTIN_MARKER_SPECS } from '../../types'
+import { TRI_LABELS, TRI_THRESHOLDS, triRangeLabel, BUILTIN_MARKER_SPECS, calToMeters, niceBarDistance } from '../../types'
 import { computeSagittalErrorM, sagittalColor, formatSagittalError, PRECISION_CAPS, PRECISION_LABELS } from '../../utils/sagittal'
 import { BUILDING_CATALOG } from '../../data/buildings'
 import type { BuildingShape } from '../../data/buildings'
@@ -178,6 +178,8 @@ export function ParameterPanel(): JSX.Element {
   const removeCurvedLabel = useStore((s) => s.removeCurvedLabel)
   const selectedCurvedLabelId = useStore((s) => s.selectedCurvedLabelId)
   const setSelectedCurvedLabelId = useStore((s) => s.setSelectedCurvedLabelId)
+  const ppi = useStore((s) => s.ppi)
+  const setPpi = useStore((s) => s.setPpi)
   const customMarkerDefs = useGlobalStore((s) => s.customMarkerDefs)
   const addCustomMarkerDef = useGlobalStore((s) => s.addCustomMarkerDef)
   const removeCustomMarkerDef = useGlobalStore((s) => s.removeCustomMarkerDef)
@@ -201,6 +203,22 @@ export function ParameterPanel(): JSX.Element {
     ? Math.abs(realMax! - realMin!) / (mapWidth / heightmap.width)
     : null
   const hasGroundResolution = correctZFactor !== null
+  const groundResDisplay = hasGroundResolution && mapWidth && heightmap
+    ? (mapWidth / heightmap.width).toPrecision(4).replace(/\.?0+$/, '')
+    : null
+  const scaleRatio = hasGroundResolution && mapWidth && heightmap && ppi > 0
+    ? Math.round(calToMeters(mapWidth, elevationCalibration) / heightmap.width * ppi / 0.0254)
+    : null
+  const hasPpiAndWidth = ppi > 0 && hasGroundResolution
+  const scaleBarDisplayScale = legend.scaleBarUnits === 'imperial' ? 1 / 0.3048 : 1
+  const scaleBarDisplayUnit = legend.scaleBarUnits === 'imperial' ? 'ft' : 'm'
+  const scaleBarLengthDisplay = legend.scaleBarLengthM != null ? Math.round(legend.scaleBarLengthM * scaleBarDisplayScale) : 0
+  const autoBarLengthM = hasPpiAndWidth && mapWidth && heightmap
+    ? niceBarDistance((2.5 / 2.54) * ppi * calToMeters(mapWidth, elevationCalibration) / heightmap.width)
+    : null
+  const autoBarDisplay = autoBarLengthM !== null
+    ? `${Math.round(autoBarLengthM * scaleBarDisplayScale)} ${scaleBarDisplayUnit}`
+    : undefined
   const hasGeoInfo = hasGroundResolution && (
     measureBar.anchorLat !== 0 || measureBar.anchorLon !== 0 ||
     measureBar.anchorX !== null || measureBar.anchorY !== null
@@ -252,8 +270,10 @@ export function ParameterPanel(): JSX.Element {
   const [poiNewMapLabelOpen, setPoiNewMapLabelOpen] = useState(false)
   const [poiCustomLibOpen, setPoiCustomLibOpen] = useState(false)
   // Legend sub-subgroups
+  const [mapScaleOpen, setMapScaleOpen] = useState(false)
   const [legendItemsOpen, setLegendItemsOpen] = useState(false)
   const [measureBarsOpen, setMeasureBarsOpen] = useState(false)
+  const [metadataOpen, setMetadataOpen] = useState(false)
 
   const [createCustomOpen, setCreateCustomOpen] = useState(false)
   const [newCustomName, setNewCustomName] = useState('')
@@ -270,7 +290,7 @@ export function ParameterPanel(): JSX.Element {
     && majorLinesOpen && minorLinesOpen
     && titleSubOpen && compassSubOpen && legendSubOpen
     && poiEditMapLabelOpen && poiNewDefaultsOpen && poiNewMapLabelOpen && poiCustomLibOpen
-    && legendItemsOpen && measureBarsOpen
+    && mapScaleOpen && legendItemsOpen && measureBarsOpen && metadataOpen
   const toggleAll = () => {
     const next = !allOpen
     setHillshadeOpen(next); setContoursOpen(next); setStyleOpen(next)
@@ -279,7 +299,7 @@ export function ParameterPanel(): JSX.Element {
     setMajorLinesOpen(next); setMinorLinesOpen(next)
     setTitleSubOpen(next); setCompassSubOpen(next); setLegendSubOpen(next)
     setPoiEditMapLabelOpen(next); setPoiNewDefaultsOpen(next); setPoiNewMapLabelOpen(next); setPoiCustomLibOpen(next)
-    setLegendItemsOpen(next); setMeasureBarsOpen(next)
+    setMapScaleOpen(next); setLegendItemsOpen(next); setMeasureBarsOpen(next); setMetadataOpen(next)
   }
 
   const poiUnitLabel = abbr || 'm'
@@ -2430,6 +2450,165 @@ export function ParameterPanel(): JSX.Element {
           />
         </Group>
         <Group justify="space-between" style={{ cursor: 'pointer', userSelect: 'none', paddingLeft: 20 }}
+          onClick={() => setMapScaleOpen((o) => !o)}>
+          <Text fw={400} size="xs" c="dimmed">map scale</Text>
+          <Text size="xs" c="dimmed">{mapScaleOpen ? '▾' : '▸'}</Text>
+        </Group>
+        <Collapse in={mapScaleOpen}>
+        <Stack gap="md" pt={4}>
+          <Switch
+            label="Show scale ratio"
+            size="xs"
+            checked={legend.showScaleRatio}
+            onChange={(e) => updateLegend({ showScaleRatio: e.currentTarget.checked })}
+            disabled={!frame.enabled || !legend.enabled || !hasPpiAndWidth}
+            description={!hasPpiAndWidth
+              ? 'Set PPI (Metadata) and map width (Calibration) to enable'
+              : scaleRatio !== null ? `1:${scaleRatio.toLocaleString()}` : undefined}
+          />
+          {legend.showScaleRatio && frame.enabled && legend.enabled && hasPpiAndWidth && (
+            <Box pl="xs">
+              <Stack gap={4}>
+                <Group gap="xs" grow>
+                  <NumberInput
+                    label="Font size" size="xs"
+                    value={legend.scaleRatioFontSize}
+                    onChange={(v) => typeof v === 'number' && v > 0 && updateLegend({ scaleRatioFontSize: v })}
+                    min={6} max={48}
+                  />
+                  <ColorInput
+                    label="Color" size="xs"
+                    value={legend.scaleRatioColor}
+                    onChange={(v) => updateLegend({ scaleRatioColor: v })}
+                    format="hex"
+                  />
+                </Group>
+                <Group gap="xs">
+                  <Switch label="Bold" size="xs"
+                    checked={legend.scaleRatioBold}
+                    onChange={(e) => updateLegend({ scaleRatioBold: e.currentTarget.checked })} />
+                  <Switch label="Italic" size="xs"
+                    checked={legend.scaleRatioItalic}
+                    onChange={(e) => updateLegend({ scaleRatioItalic: e.currentTarget.checked })} />
+                </Group>
+              </Stack>
+            </Box>
+          )}
+          <Switch
+            label="Show scale bar"
+            size="xs"
+            checked={legend.showScaleBar}
+            onChange={(e) => updateLegend({ showScaleBar: e.currentTarget.checked })}
+            disabled={!frame.enabled || !legend.enabled || !hasPpiAndWidth}
+            description={!hasPpiAndWidth ? 'Set PPI (Metadata) and map width (Calibration) to enable' : undefined}
+          />
+          {legend.showScaleBar && frame.enabled && legend.enabled && (
+            <Box pl="xs">
+              <Stack gap={6}>
+                <SegmentedControl
+                  size="xs"
+                  data={[
+                    { value: 'line', label: 'Line' },
+                    { value: 'banded', label: 'Banded' },
+                    { value: 'open', label: 'Open' },
+                    { value: 'classic', label: 'Classic' },
+                  ]}
+                  value={legend.scaleBarStyle}
+                  onChange={(v) => updateLegend({ scaleBarStyle: v as 'line' | 'banded' | 'open' | 'classic' })}
+                />
+                <Group gap="xs" grow>
+                  <NumberInput
+                    label={`Length (${scaleBarDisplayUnit}, 0=auto)`} size="xs"
+                    value={scaleBarLengthDisplay}
+                    onChange={(v) => updateLegend({ scaleBarLengthM: typeof v === 'number' && v > 0 ? v / scaleBarDisplayScale : null })}
+                    min={0}
+                    description={legend.scaleBarLengthM === null ? `Auto: ${autoBarDisplay ?? '—'}` : undefined}
+                  />
+                  <NumberInput
+                    label="Height (px)" size="xs"
+                    value={legend.scaleBarHeight}
+                    onChange={(v) => typeof v === 'number' && v > 0 && updateLegend({ scaleBarHeight: v })}
+                    min={2} max={64}
+                  />
+                </Group>
+                <Group gap="xs" grow>
+                  <NumberInput
+                    label="Divisions" size="xs"
+                    value={legend.scaleBarDivisions}
+                    onChange={(v) => typeof v === 'number' && v >= 1 && updateLegend({ scaleBarDivisions: Math.round(v) })}
+                    min={1} max={12}
+                  />
+                  <Select
+                    label="Border" size="xs"
+                    data={[
+                      { value: 'none', label: 'None' },
+                      { value: 'solid', label: 'Solid' },
+                      { value: 'double', label: 'Double' },
+                      { value: 'rounded', label: 'Rounded' },
+                    ]}
+                    value={legend.scaleBarBorder}
+                    onChange={(v) => v && updateLegend({ scaleBarBorder: v as 'none' | 'solid' | 'double' | 'rounded' })}
+                  />
+                </Group>
+                <Group gap="xs" grow>
+                  <ColorInput
+                    label="Color 1" size="xs"
+                    value={legend.scaleBarColor1}
+                    onChange={(v) => updateLegend({ scaleBarColor1: v })}
+                    format="hex"
+                  />
+                  <ColorInput
+                    label="Color 2" size="xs"
+                    value={legend.scaleBarColor2}
+                    onChange={(v) => updateLegend({ scaleBarColor2: v })}
+                    format="hex"
+                  />
+                </Group>
+                <Switch
+                  label="Label all divisions" size="xs"
+                  checked={legend.scaleBarLabelAll}
+                  onChange={(e) => updateLegend({ scaleBarLabelAll: e.currentTarget.checked })}
+                />
+                {legend.scaleBarStyle === 'classic' && (
+                  <Switch
+                    label="Sub-labels (alternate unit)" size="xs"
+                    checked={legend.scaleBarClassicSubLabels}
+                    onChange={(e) => updateLegend({ scaleBarClassicSubLabels: e.currentTarget.checked })}
+                  />
+                )}
+                <Group gap="xs" grow>
+                  <NumberInput
+                    label="Label size" size="xs"
+                    value={legend.scaleBarLabelSize}
+                    onChange={(v) => typeof v === 'number' && v > 0 && updateLegend({ scaleBarLabelSize: v })}
+                    min={6} max={48}
+                  />
+                  <ColorInput
+                    label="Label color" size="xs"
+                    value={legend.scaleBarLabelColor}
+                    onChange={(v) => updateLegend({ scaleBarLabelColor: v })}
+                    format="hex"
+                  />
+                </Group>
+                <SegmentedControl
+                  size="xs"
+                  data={[{ value: 'metric', label: 'Metric' }, { value: 'imperial', label: 'Imperial' }]}
+                  value={legend.scaleBarUnits}
+                  onChange={(v) => updateLegend({ scaleBarUnits: v as 'metric' | 'imperial' })}
+                />
+                <SegmentedControl
+                  size="xs"
+                  data={[{ value: 'above', label: 'Above legend' }, { value: 'below', label: 'Below legend' }]}
+                  value={legend.scaleBarPosition}
+                  onChange={(v) => updateLegend({ scaleBarPosition: v as 'above' | 'below' })}
+                />
+              </Stack>
+            </Box>
+          )}
+        </Stack>
+        </Collapse>
+
+        <Group justify="space-between" style={{ cursor: 'pointer', userSelect: 'none', paddingLeft: 20 }}
           onClick={() => setLegendItemsOpen((o) => !o)}>
           <Text fw={400} size="xs" c="dimmed">items</Text>
           <Text size="xs" c="dimmed">{legendItemsOpen ? '▾' : '▸'}</Text>
@@ -2695,6 +2874,41 @@ export function ParameterPanel(): JSX.Element {
           </Collapse>
 
         </Stack>
+      </Collapse>
+
+      {/* ─── METADATA ──────────────────────────────────────────── */}
+      <Divider my="xs" />
+      <Group justify="space-between" style={{ cursor: 'pointer', userSelect: 'none' }}
+        onClick={() => setMetadataOpen((o) => !o)}>
+        <Text size="lg" c="dimmed">Metadata</Text>
+        <Text size="lg" c="dimmed">{metadataOpen ? '▾' : '▸'}</Text>
+      </Group>
+      <Collapse in={metadataOpen}>
+      <Stack gap="md" pt={4} pl="xs">
+        <Tooltip label="Helps determine the scale for printed maps" position="right" withArrow>
+          <NumberInput
+            label="PPI (pixels per inch)"
+            size="xs"
+            value={ppi}
+            onChange={(v) => typeof v === 'number' && v >= 1 && setPpi(Math.round(v))}
+            min={1}
+            max={2400}
+            step={1}
+          />
+        </Tooltip>
+        {groundResDisplay !== null && (
+          <Box>
+            <Text size="xs" fw={500} c="dimmed">Ground resolution</Text>
+            <Text size="xs" c="dimmed">{groundResDisplay} {abbr}/pixel</Text>
+          </Box>
+        )}
+        {scaleRatio !== null && (
+          <Box>
+            <Text size="xs" fw={500} c="dimmed">Map scale ratio</Text>
+            <Text size="xs" c="dimmed">1:{scaleRatio.toLocaleString()}</Text>
+          </Box>
+        )}
+      </Stack>
       </Collapse>
     </Stack>
   )

@@ -5,7 +5,7 @@ import { useStore } from '../../store/useStore'
 import { generateContours, contourToSvgPath } from '../../utils/contour'
 import type { ContourSet } from '../../utils/contour'
 import type { ElevationFlag, SlopeArrow, RuggednessFlag, SwampMarker, Road, BuildingEntry, BuildingShape, PoiEntry, PoiNewMarkerState, CustomMarkerDef, MarkerPrimitiveId, BuiltinMarkerTypeId, FrameConfig, CompassConfig, LegendConfig, ContourStyle, FramePosition, MeasureBarConfig, ElevationCalibration, HeightmapInfo, GridConfig, CurvedLabel } from '../../types'
-import { defaultCurvedLabelStyle } from '../../types'
+import { defaultCurvedLabelStyle, calToMeters, niceBarDistance } from '../../types'
 import { BUILTIN_MARKER_SPECS } from '../../types'
 import { useGlobalStore } from '../../store/useGlobalStore'
 import { BUILDING_CATALOG } from '../../data/buildings'
@@ -587,7 +587,7 @@ function GridCanvas({ grid, measureBar, calibration, mapW, mapH }: {
 // Legend overlay
 // ---------------------------------------------------------------------------
 
-function LegendOverlay({ legend, frame, style, hasElevationFlags, hasSlopeArrows, measureBar, hasRuggednessFlags, ruggednessColorBySeverity, ruggednessSeverityColors, hasSwampMarkers, swampMarkerDefaults, roads, roadDefaults, buildings, pois, customMarkerDefs, elevationCalibration }: {
+function LegendOverlay({ legend, frame, style, hasElevationFlags, hasSlopeArrows, measureBar, hasRuggednessFlags, ruggednessColorBySeverity, ruggednessSeverityColors, hasSwampMarkers, swampMarkerDefaults, roads, roadDefaults, buildings, pois, customMarkerDefs, elevationCalibration, ppi, mapW, heightmap }: {
   legend: LegendConfig; frame: FrameConfig; style: ContourStyle
   hasElevationFlags: boolean; hasSlopeArrows: boolean; measureBar?: MeasureBarConfig
   hasRuggednessFlags: boolean; ruggednessColorBySeverity: boolean; ruggednessSeverityColors: string[]
@@ -598,6 +598,9 @@ function LegendOverlay({ legend, frame, style, hasElevationFlags, hasSlopeArrows
   pois: PoiEntry[]
   customMarkerDefs: CustomMarkerDef[]
   elevationCalibration: ElevationCalibration
+  ppi?: number
+  mapW?: number
+  heightmap?: HeightmapInfo | null
 }): JSX.Element | null {
   const hasGeoAnchor = legend.showGeoAnchor && !!measureBar?.enabled && !!measureBar?.geoEnabled
   const geoAnchorLabel = hasGeoAnchor
@@ -664,7 +667,29 @@ function LegendOverlay({ legend, frame, style, hasElevationFlags, hasSlopeArrows
     }
   }
 
-  if (items.length === 0) return null
+  // Scale ratio and scale bar computation
+  const groundWidthM = elevationCalibration.mapWidth && elevationCalibration.mapWidth > 0
+    ? calToMeters(elevationCalibration.mapWidth, elevationCalibration)
+    : null
+  const scaleRatioNum = groundWidthM && ppi && ppi > 0 && heightmap && heightmap.width > 0
+    ? groundWidthM / heightmap.width * ppi / 0.0254
+    : null
+  const scaleRatioText = legend.showScaleRatio && scaleRatioNum !== null
+    ? `1:${Math.round(scaleRatioNum).toLocaleString()}`
+    : null
+  const scaleBarInfo = legend.showScaleBar && groundWidthM && ppi && ppi > 0 && mapW && mapW > 0 && heightmap && heightmap.width > 0
+    ? (() => {
+        const rawLengthM = legend.scaleBarLengthM != null && legend.scaleBarLengthM > 0
+          ? legend.scaleBarLengthM
+          : niceBarDistance((2.5 / 2.54) * ppi * groundWidthM / heightmap.width)
+        if (rawLengthM <= 0) return null
+        const barScreenPx = rawLengthM * mapW / groundWidthM
+        if (barScreenPx < 8) return null
+        return { rawLengthM, barScreenPx }
+      })()
+    : null
+
+  if (items.length === 0 && !scaleRatioText && !scaleBarInfo) return null
 
   const fs = legend.fontSize
   const rowH = fs * 1.6
@@ -672,20 +697,22 @@ function LegendOverlay({ legend, frame, style, hasElevationFlags, hasSlopeArrows
   const gapX = fs * 0.6
   const pad = fs * 0.6
   const colGap = pad
-  const maxLabelLen = Math.max(...items.map(i => i.label.length))
+  const maxLabelLen = items.length > 0 ? Math.max(...items.map(i => i.label.length)) : 0
   const colW = sampW + gapX + maxLabelLen * fs * 0.56
 
-  const cols = Math.max(1, Math.min(legend.columns, items.length))
-  const rows = Math.ceil(items.length / cols)
+  const cols = items.length > 0 ? Math.max(1, Math.min(legend.columns, items.length)) : 1
+  const rows = items.length > 0 ? Math.ceil(items.length / cols) : 0
 
   const barH = fs * 1.2
   const barLabelH = fs * 2.1
   const barTitleH = fs * 0.9
   const barSectionH = showColorBar ? (pad + barTitleH + barH + barLabelH) : 0
 
+  const headerH = scaleRatioText ? Math.max(legend.scaleRatioFontSize * 1.8, rowH) : 0
   const minBarW = showColorBar ? 5 * fs * 3.2 : 0
-  const boxW = Math.max(pad + cols * colW + (cols - 1) * colGap + pad, minBarW + 2 * pad)
-  const boxH_items = pad + rows * rowH + pad
+  const scaleBarMinW = scaleBarInfo ? scaleBarInfo.barScreenPx + 2 * pad : 0
+  const boxW = Math.max(pad + cols * colW + (cols - 1) * colGap + pad, minBarW + 2 * pad, scaleBarMinW)
+  const boxH_items = pad + headerH + rows * rowH + pad
   const boxH = boxH_items + barSectionH
   const edgeGap = Math.max(4, (frame.borderEnabled ? frame.borderWidth * 2 : 0) + 3)
 
@@ -711,7 +738,7 @@ function LegendOverlay({ legend, frame, style, hasElevationFlags, hasSlopeArrows
         const row = i % rows
         const sx1 = pad + col * (colW + colGap)
         const sx2 = sx1 + sampW
-        const midY = pad + row * rowH + rowH / 2
+        const midY = pad + headerH + row * rowH + rowH / 2
 
         let sample: JSX.Element
         if (type === 'minor') {
@@ -860,6 +887,17 @@ function LegendOverlay({ legend, frame, style, hasElevationFlags, hasSlopeArrows
       })
     })()}
 
+      {/* Scale ratio header */}
+      {scaleRatioText && (
+        <text x={boxW / 2} y={pad + headerH / 2}
+          fontSize={legend.scaleRatioFontSize} fontFamily="serif" fill={legend.scaleRatioColor}
+          dominantBaseline="middle" textAnchor="middle"
+          fontStyle={legend.scaleRatioItalic ? 'italic' : undefined}
+          fontWeight={legend.scaleRatioBold ? 'bold' : undefined}>
+          {scaleRatioText}
+        </text>
+      )}
+
       {/* TRI severity color bar */}
       {showColorBar && (() => {
         const barY = boxH_items
@@ -892,6 +930,121 @@ function LegendOverlay({ legend, frame, style, hasElevationFlags, hasSlopeArrows
                   {triRangeLabel(i, elevRange, unitAbbr)}
                 </text>
               </g>
+            ))}
+          </g>
+        )
+      })()}
+      {/* Scale bar — rendered outside the legend box via overflow="visible" */}
+      {scaleBarInfo && (() => {
+        const { rawLengthM, barScreenPx } = scaleBarInfo
+        const sbH = legend.scaleBarHeight
+        const c1 = legend.scaleBarColor1
+        const c2 = legend.scaleBarColor2
+        const sbLs = legend.scaleBarLabelSize
+        const sbLc = legend.scaleBarLabelColor
+        const divs = Math.max(1, legend.scaleBarDivisions)
+        const divW = barScreenPx / divs
+        const sbGap = 4
+        const labelGap = 2
+        const labelAreaH = sbLs * 1.5
+        const subLabelH = legend.scaleBarClassicSubLabels ? sbLs * 1.2 : 0
+        const totalH = sbH + labelGap + labelAreaH + subLabelH
+
+        const sbLeft = Math.max(pad, (boxW - barScreenPx) / 2)
+        const sbTop = legend.scaleBarPosition === 'above' ? -(sbGap + totalH) : boxH + sbGap
+        const sbBottom = sbTop + sbH
+        const mainLabelY = sbBottom + labelGap
+        const subLabelY = mainLabelY + labelAreaH
+
+        function fmtMetric(m: number): string {
+          if (m >= 1000) return `${+(m / 1000).toFixed(1)} km`
+          return `${Math.round(m)} m`
+        }
+        function fmtImperial(m: number): string {
+          const ft = m / 0.3048
+          if (ft >= 5280) return `${+(ft / 5280).toFixed(1)} mi`
+          return `${Math.round(ft)} ft`
+        }
+        const fmtMain = (m: number) => legend.scaleBarUnits === 'metric' ? fmtMetric(m) : fmtImperial(m)
+        const fmtSub  = (m: number) => legend.scaleBarUnits === 'metric' ? fmtImperial(m) : fmtMetric(m)
+
+        const labelIdxs = legend.scaleBarLabelAll
+          ? Array.from({ length: divs + 1 }, (_, i) => i)
+          : [0, divs]
+
+        function border(): JSX.Element | null {
+          if (legend.scaleBarBorder === 'none') return null
+          if (legend.scaleBarBorder === 'double') return (
+            <g fill="none" stroke={c1}>
+              <rect x={sbLeft} y={sbTop} width={barScreenPx} height={sbH} strokeWidth={1.2} />
+              <rect x={sbLeft + 1.5} y={sbTop + 1.5} width={barScreenPx - 3} height={sbH - 3} strokeWidth={0.6} />
+            </g>
+          )
+          const rx = legend.scaleBarBorder === 'rounded' ? sbH * 0.3 : 0
+          return <rect x={sbLeft} y={sbTop} width={barScreenPx} height={sbH} fill="none" stroke={c1} strokeWidth={0.8} rx={rx} />
+        }
+
+        const sty = legend.scaleBarStyle
+        return (
+          <g>
+            {sty === 'line' && (
+              <g stroke={c1} fill="none">
+                <line x1={sbLeft} y1={sbTop} x2={sbLeft} y2={sbBottom} strokeWidth={0.8} />
+                <line x1={sbLeft + barScreenPx} y1={sbTop} x2={sbLeft + barScreenPx} y2={sbBottom} strokeWidth={0.8} />
+                <line x1={sbLeft} y1={sbBottom} x2={sbLeft + barScreenPx} y2={sbBottom} strokeWidth={0.8} />
+                {Array.from({ length: divs - 1 }, (_, i) => {
+                  const x = sbLeft + (i + 1) * divW
+                  return <line key={i} x1={x} y1={sbTop + sbH * 0.4} x2={x} y2={sbBottom} strokeWidth={0.6} />
+                })}
+                {border()}
+              </g>
+            )}
+            {sty === 'banded' && (
+              <g>
+                {Array.from({ length: divs }, (_, i) => (
+                  <rect key={i} x={sbLeft + i * divW} y={sbTop} width={divW} height={sbH}
+                    fill={i % 2 === 0 ? c1 : c2} />
+                ))}
+                {border()}
+              </g>
+            )}
+            {sty === 'open' && (
+              <g>
+                {Array.from({ length: divs }, (_, i) => (
+                  <rect key={i} x={sbLeft + i * divW} y={sbTop} width={divW} height={sbH}
+                    fill={i % 2 === 0 ? c2 : 'transparent'} stroke={c1} strokeWidth={0.8} />
+                ))}
+                {border()}
+              </g>
+            )}
+            {sty === 'classic' && (
+              <g>
+                {Array.from({ length: divs }, (_, i) => {
+                  const x = sbLeft + i * divW
+                  const h2 = sbH / 2
+                  return (
+                    <g key={i}>
+                      <rect x={x} y={sbTop}      width={divW} height={h2} fill={i % 2 === 0 ? c1 : c2} />
+                      <rect x={x} y={sbTop + h2} width={divW} height={h2} fill={i % 2 === 0 ? c2 : c1} />
+                    </g>
+                  )
+                })}
+                {border()}
+              </g>
+            )}
+            {labelIdxs.map((idx) => (
+              <text key={idx} x={sbLeft + idx * divW} y={mainLabelY}
+                fontSize={sbLs} fontFamily="sans-serif" fill={sbLc}
+                dominantBaseline="hanging" textAnchor="middle">
+                {fmtMain((idx / divs) * rawLengthM)}
+              </text>
+            ))}
+            {legend.scaleBarClassicSubLabels && labelIdxs.map((idx) => (
+              <text key={idx} x={sbLeft + idx * divW} y={subLabelY}
+                fontSize={sbLs * 0.85} fontFamily="sans-serif" fill={sbLc}
+                dominantBaseline="hanging" textAnchor="middle">
+                {fmtSub((idx / divs) * rawLengthM)}
+              </text>
             ))}
           </g>
         )
@@ -1782,6 +1935,7 @@ export function MapCanvas(): JSX.Element {
   const compass = useStore((s) => s.compass)
   const legend = useStore((s) => s.legend)
   const grid = useStore((s) => s.grid)
+  const ppi = useStore((s) => s.ppi)
 
   const baseImageUrl = activeTab === 'terrain' ? terrainImageUrl : hillshadeImageUrl
   const showPlaceholder = !baseImageUrl && !heightmap && !hillshadeGenerating && !fileLoadingMessage
@@ -2893,6 +3047,9 @@ export function MapCanvas(): JSX.Element {
           pois={pois}
           customMarkerDefs={customMarkerDefs}
           elevationCalibration={elevationCalibration}
+          ppi={ppi}
+          mapW={innerMapSize?.w}
+          heightmap={heightmap}
         />
       )}
 

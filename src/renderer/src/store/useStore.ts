@@ -8,18 +8,7 @@ import type {
   Road, RoadDefaults, GridConfig, BuildingEntry, BuildingDefaults,
   PoiEntry, PoiNewMarkerState, PrecisionSetting, CurvedLabel,
 } from '../types'
-import { defaultParameters, defaultStyle, defaultHillshadeParameters, defaultElevationCalibration, defaultFrameConfig, defaultTitleConfig, defaultCompassConfig, defaultLegendConfig, defaultMeasureBarConfig, TRI_COLORS, defaultRoadDefaults, defaultGridConfig, defaultBuildingDefaults, defaultPoiNewMarkerState } from '../types'
-
-function calToMeters(value: number, cal: ElevationCalibration): number {
-  if (cal.unitType === 'feet') return value * 0.3048
-  if (cal.unitType === 'meters') return value
-  if (cal.unitType === 'custom') {
-    return cal.customBase === 'feet'
-      ? value * cal.customRatio * 0.3048
-      : value * cal.customRatio
-  }
-  return value
-}
+import { defaultParameters, defaultStyle, defaultHillshadeParameters, defaultElevationCalibration, defaultFrameConfig, defaultTitleConfig, defaultCompassConfig, defaultLegendConfig, defaultMeasureBarConfig, TRI_COLORS, defaultRoadDefaults, defaultGridConfig, defaultBuildingDefaults, defaultPoiNewMarkerState, calToMeters } from '../types'
 
 function calFromMeters(meters: number, cal: ElevationCalibration): number {
   if (cal.unitType === 'feet') return meters / 0.3048
@@ -96,6 +85,7 @@ interface AppActions {
   updateCurvedLabel: (id: string, updates: Partial<Omit<CurvedLabel, 'id'>>) => void
   removeCurvedLabel: (id: string) => void
   setSelectedCurvedLabelId: (id: string | null) => void
+  setPpi: (ppi: number) => void
   setRuggednessSeverityColor: (index: number, color: string) => void
   setMapTool: (tool: MapTool) => void
   setActiveTab: (tab: 'terrain' | 'hillshade') => void
@@ -179,6 +169,7 @@ const initialState: ProjectState = {
   sagittalExceptionAcknowledged: false,
   curvedLabels: [],
   selectedCurvedLabelId: null,
+  ppi: 300,
 }
 
 export const useStore = create<ProjectState & AppActions>()(
@@ -469,6 +460,8 @@ export const useStore = create<ProjectState & AppActions>()(
       })),
       setSelectedCurvedLabelId: (id) => set({ selectedCurvedLabelId: id }),
 
+      setPpi: (ppi) => set({ ppi }),
+
       setRuggednessSeverityColor: (index, color) =>
         set((state) => ({
           ruggednessSeverityColors: state.ruggednessSeverityColors.map((c, i) => i === index ? color : c),
@@ -529,7 +522,7 @@ export const useStore = create<ProjectState & AppActions>()(
     }),
     {
       name: 'topocrafter-state',
-      version: 3,
+      version: 4,
       storage: createJSONStorage(() => localStorage),
       migrate: (persistedState: unknown, version: number) => {
         const ps = persistedState as Record<string, unknown>
@@ -585,6 +578,9 @@ export const useStore = create<ProjectState & AppActions>()(
         if (version < 3) {
           ps.curvedLabels = ps.curvedLabels ?? []
         }
+        if (version < 4) {
+          ps.ppi = ps.ppi ?? 300
+        }
         return ps
       },
       // Deep-merge so that new fields added to nested config objects (legend, frame, etc.)
@@ -616,6 +612,7 @@ export const useStore = create<ProjectState & AppActions>()(
           precisionSetting:              ps.precisionSetting              ?? current.precisionSetting,
           sagittalExceptionAcknowledged: ps.sagittalExceptionAcknowledged ?? current.sagittalExceptionAcknowledged,
           curvedLabels:                  ps.curvedLabels                  ?? current.curvedLabels,
+          ppi:                           ps.ppi                           ?? current.ppi,
         }
       },
       partialize: (state) => ({
@@ -661,6 +658,7 @@ export const useStore = create<ProjectState & AppActions>()(
         precisionSetting: state.precisionSetting,
         sagittalExceptionAcknowledged: state.sagittalExceptionAcknowledged,
         curvedLabels: state.curvedLabels,
+        ppi: state.ppi,
       }),
     }
   )

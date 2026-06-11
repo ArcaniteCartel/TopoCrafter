@@ -169,6 +169,29 @@ export function getTriSeverity(triNorm: number): 0 | 1 | 2 | 3 | 4 {
   return 4
 }
 
+export function niceBarDistance(targetM: number): number {
+  if (targetM <= 0) return 0
+  const exp = Math.floor(Math.log10(targetM))
+  const frac = targetM / Math.pow(10, exp)
+  let mult: number
+  if (frac < 1.5) mult = 1
+  else if (frac < 3.5) mult = 2
+  else if (frac < 7.5) mult = 5
+  else mult = 10
+  return mult * Math.pow(10, exp)
+}
+
+export function calToMeters(value: number, cal: ElevationCalibration): number {
+  if (cal.unitType === 'feet') return value * 0.3048
+  if (cal.unitType === 'meters') return value
+  if (cal.unitType === 'custom') {
+    return cal.customBase === 'feet'
+      ? value * cal.customRatio * 0.3048
+      : value * cal.customRatio
+  }
+  return value
+}
+
 export function triRangeLabel(i: number, elevRange?: number, unitAbbr?: string): string {
   const lo = i === 0 ? 0 : TRI_THRESHOLDS[i - 1]
   const hi = i < TRI_THRESHOLDS.length ? TRI_THRESHOLDS[i] : null
@@ -429,6 +452,25 @@ export interface LegendConfig {
   buildingLabels: Record<string, string>  // key: `${templateId}::${color}`
   showPois: boolean
   poiLabels: Record<string, string>       // key: typeId → legend label override
+  showScaleRatio: boolean
+  showScaleBar: boolean
+  scaleBarStyle: 'line' | 'banded' | 'open' | 'classic'
+  scaleBarHeight: number
+  scaleBarDivisions: number
+  scaleBarColor1: string
+  scaleBarColor2: string
+  scaleBarLabelAll: boolean
+  scaleBarBorder: 'none' | 'solid' | 'double' | 'rounded'
+  scaleBarClassicSubLabels: boolean
+  scaleBarLengthM: number | null
+  scaleBarLabelSize: number
+  scaleBarLabelColor: string
+  scaleBarUnits: 'metric' | 'imperial'
+  scaleBarPosition: 'above' | 'below'
+  scaleRatioFontSize: number
+  scaleRatioColor: string
+  scaleRatioBold: boolean
+  scaleRatioItalic: boolean
   minorLabel: string
   majorLabel: string
   seaLevelLabel: string
@@ -467,6 +509,25 @@ export const defaultLegendConfig: LegendConfig = {
   buildingLabels: {},
   showPois: true,
   poiLabels: {},
+  showScaleRatio: false,
+  showScaleBar: false,
+  scaleBarStyle: 'line',
+  scaleBarHeight: 12,
+  scaleBarDivisions: 4,
+  scaleBarColor1: '#2E2412',
+  scaleBarColor2: '#ffffff',
+  scaleBarLabelAll: false,
+  scaleBarBorder: 'solid',
+  scaleBarClassicSubLabels: false,
+  scaleBarLengthM: null,
+  scaleBarLabelSize: 10,
+  scaleBarLabelColor: '#2E2412',
+  scaleBarUnits: 'metric',
+  scaleBarPosition: 'below',
+  scaleRatioFontSize: 10,
+  scaleRatioColor: '#2E2412',
+  scaleRatioBold: false,
+  scaleRatioItalic: true,
   minorLabel: 'Minor contour',
   majorLabel: 'Major contour',
   seaLevelLabel: 'Sea level',
@@ -658,6 +719,7 @@ export interface ProjectState {
   sagittalExceptionAcknowledged: boolean
   curvedLabels: CurvedLabel[]
   selectedCurvedLabelId: string | null
+  ppi: number
 }
 
 export const defaultParameters: ContourParameters = {
