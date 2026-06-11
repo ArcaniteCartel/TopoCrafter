@@ -1945,6 +1945,8 @@ export function MapCanvas(): JSX.Element {
   const selectedWaterRiverId = useStore((s) => s.selectedWaterRiverId)
   const setSelectedWaterLakeId = useStore((s) => s.setSelectedWaterLakeId)
   const setSelectedWaterRiverId = useStore((s) => s.setSelectedWaterRiverId)
+  const vegetationLayers = useStore((s) => s.vegetationLayers)
+  const vegetationLayersVisible = useStore((s) => s.vegetationLayersVisible)
 
   const baseImageUrl = activeTab === 'terrain' ? terrainImageUrl : hillshadeImageUrl
   const showPlaceholder = !baseImageUrl && !heightmap && !hillshadeGenerating && !fileLoadingMessage
@@ -2100,6 +2102,18 @@ export function MapCanvas(): JSX.Element {
           aria-hidden
           style={{ display: 'block', width: '100%', visibility: 'hidden' }}
         />
+      )}
+
+      {vegetationLayersVisible && heightmap && vegetationLayers.map((vl) =>
+        vl.visible && vl.dataUrl ? (
+          <img
+            key={vl.id}
+            src={vl.dataUrl}
+            alt=""
+            aria-hidden
+            style={{ display: 'block', width: '100%', position: 'absolute', top: 0, left: 0, pointerEvents: 'none' }}
+          />
+        ) : null
       )}
 
       {showOverlays && contourState && heightmap && !hillshadeGenerating && (

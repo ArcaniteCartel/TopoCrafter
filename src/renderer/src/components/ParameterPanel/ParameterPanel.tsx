@@ -8,6 +8,8 @@ import { computeSagittalErrorM, sagittalColor, formatSagittalError, PRECISION_CA
 import { BUILDING_CATALOG } from '../../data/buildings'
 import type { BuildingShape } from '../../data/buildings'
 import { detectWaterFeatures } from '../../utils/hydrology'
+import { generateVegetation } from '../../utils/vegetation'
+import type { VegetationTextureStyle } from '../../types'
 
 const DASH_OPTIONS = [
   { value: 'solid', label: 'Solid' },
@@ -209,6 +211,12 @@ export function ParameterPanel(): JSX.Element {
   const updateWaterDetectionParams = useStore((s) => s.updateWaterDetectionParams)
   const setWaterDetecting = useStore((s) => s.setWaterDetecting)
   const clearWaterFeatures = useStore((s) => s.clearWaterFeatures)
+  const vegetationLayers = useStore((s) => s.vegetationLayers)
+  const vegetationLayersVisible = useStore((s) => s.vegetationLayersVisible)
+  const addVegetationLayer = useStore((s) => s.addVegetationLayer)
+  const updateVegetationLayer = useStore((s) => s.updateVegetationLayer)
+  const removeVegetationLayer = useStore((s) => s.removeVegetationLayer)
+  const setVegetationLayersVisible = useStore((s) => s.setVegetationLayersVisible)
 
   const { unitType, customName, customAbbr, customBase, customRatio, realMin, realMax, realInterval, mapWidth } = elevationCalibration
 
@@ -228,6 +236,8 @@ export function ParameterPanel(): JSX.Element {
   const groundResDisplay = hasGroundResolution && mapWidth && heightmap
     ? (mapWidth / heightmap.width).toPrecision(4).replace(/\.?0+$/, '')
     : null
+  // calibration units per pixel — used to convert spread controls
+  const spreadPxToUnit = (mapWidth != null && heightmap) ? mapWidth / heightmap.width : null
   const scaleRatio = hasGroundResolution && mapWidth && heightmap && ppi > 0
     ? Math.round(calToMeters(mapWidth, elevationCalibration) / heightmap.width * ppi / 0.0254)
     : null
@@ -299,6 +309,8 @@ export function ParameterPanel(): JSX.Element {
   const [waterOpen, setWaterOpen] = useState(false)
   const [waterDetectParamsOpen, setWaterDetectParamsOpen] = useState(false)
   const [waterConfirmOpen, setWaterConfirmOpen] = useState(false)
+  const [vegetationOpen, setVegetationOpen] = useState(false)
+  const [vegetationOpenLayers, setVegetationOpenLayers] = useState<Record<string, boolean>>({})
 
   const [createCustomOpen, setCreateCustomOpen] = useState(false)
   const [newCustomName, setNewCustomName] = useState('')
@@ -419,6 +431,30 @@ export function ParameterPanel(): JSX.Element {
       setWaterConfirmOpen(true)
     } else {
       void runWaterDetection()
+    }
+  }
+
+  const runVegetationGeneration = async (layerId: string) => {
+    if (!heightmap) return
+    updateVegetationLayer(layerId, { generating: true })
+    await new Promise<void>((res) => setTimeout(res, 50))
+    try {
+      const layer = vegetationLayers.find((l) => l.id === layerId)
+      if (!layer) return
+      const dataUrl = generateVegetation({
+        heightData: heightmap.data,
+        mapWidth: heightmap.width,
+        mapHeight: heightmap.height,
+        minValue: heightmap.minValue,
+        maxValue: heightmap.maxValue,
+        waterLakes,
+        waterRivers,
+        layer,
+        pixelsPerUnit: spreadPxToUnit ? 1 / spreadPxToUnit : 1,
+      })
+      updateVegetationLayer(layerId, { dataUrl, generating: false })
+    } catch {
+      updateVegetationLayer(layerId, { generating: false })
     }
   }
 
@@ -3121,6 +3157,236 @@ export function ParameterPanel(): JSX.Element {
           <Button size="sm" onClick={() => { setWaterConfirmOpen(false); void runWaterDetection() }}>Detect</Button>
         </Group>
       </Modal>
+
+      {/* ─── VEGETATION ────────────────────────────────────────── */}
+      <Divider my="xs" />
+      <Group justify="space-between" style={{ cursor: 'pointer', userSelect: 'none' }}
+        onClick={() => setVegetationOpen((o) => !o)}>
+        <Group gap="xs">
+          <Switch
+            checked={vegetationLayersVisible}
+            onChange={(e) => setVegetationLayersVisible(e.currentTarget.checked)}
+            onClick={(e) => e.stopPropagation()}
+            size="xs"
+          />
+          <Text size="lg" c="dimmed">Vegetation</Text>
+        </Group>
+        <Text size="lg" c="dimmed">{vegetationOpen ? '▾' : '▸'}</Text>
+      </Group>
+      <Collapse in={vegetationOpen}>
+      <Stack gap="md" pt={4} pl="xs">
+        <Group>
+          <Button
+            size="xs"
+            variant="default"
+            disabled={waterLakes.length + waterRivers.length === 0}
+            onClick={addVegetationLayer}
+          >
+            Add Layer
+          </Button>
+          {waterLakes.length + waterRivers.length === 0 && (
+            <Text size="xs" c="dimmed" style={{ fontStyle: 'italic' }}>Detect water features first</Text>
+          )}
+        </Group>
+
+        {vegetationLayers.map((vl, idx) => (
+          <Box key={vl.id} style={{ border: '1px solid var(--mantine-color-default-border)', borderRadius: 6, padding: 8 }}>
+            <Group justify="space-between" style={{ cursor: 'pointer' }}
+              onClick={() => setVegetationOpenLayers((s) => ({ ...s, [vl.id]: !s[vl.id] }))}>
+              <Group gap="xs">
+                <Switch
+                  checked={vl.visible}
+                  onChange={(e) => updateVegetationLayer(vl.id, { visible: e.currentTarget.checked })}
+                  onClick={(e) => e.stopPropagation()}
+                  size="xs"
+                />
+                <TextInput
+                  value={vl.name}
+                  onChange={(e) => updateVegetationLayer(vl.id, { name: e.currentTarget.value })}
+                  size="xs"
+                  style={{ width: 130 }}
+                  onClick={(e) => e.stopPropagation()}
+                />
+              </Group>
+              <Group gap={4}>
+                <Text size="xs" c="dimmed">{vegetationOpenLayers[vl.id] ? '▾' : '▸'}</Text>
+              </Group>
+            </Group>
+
+            <Collapse in={!!vegetationOpenLayers[vl.id]}>
+            <Stack gap="xs" pt="xs">
+              <Text size="xs" fw={500} c="dimmed">Layer {idx + 1}</Text>
+
+              {/* Generate button */}
+              <Group>
+                <Button
+                  size="xs"
+                  loading={vl.generating}
+                  disabled={!heightmap || vl.generating}
+                  onClick={() => void runVegetationGeneration(vl.id)}
+                >
+                  {vl.dataUrl ? 'Re-generate' : 'Generate'}
+                </Button>
+                <Button size="xs" variant="subtle" color="red"
+                  onClick={() => removeVegetationLayer(vl.id)}>Remove</Button>
+              </Group>
+
+              {/* Color + opacity */}
+              <Group grow>
+                <ColorInput
+                  label="Color"
+                  size="xs"
+                  value={vl.color}
+                  onChange={(v) => updateVegetationLayer(vl.id, { color: v })}
+                  swatches={['#2d6a4f','#3a7d44','#52b788','#74c69d','#1b4332','#40916c','#95d5b2']}
+                />
+                <NumberInput
+                  label="Opacity %"
+                  size="xs"
+                  value={Math.round(vl.opacity * 100)}
+                  onChange={(v) => typeof v === 'number' && updateVegetationLayer(vl.id, { opacity: Math.max(0.10, Math.min(0.70, v / 100)) })}
+                  min={10} max={70} step={5}
+                />
+              </Group>
+
+              {/* Water spread */}
+              <Group grow>
+                <NumberInput
+                  label={`Lake spread (${spreadPxToUnit ? abbr : 'px'})`}
+                  size="xs"
+                  value={vl.lakeSpread}
+                  onChange={(v) => typeof v === 'number' && updateVegetationLayer(vl.id, { lakeSpread: Math.max(0, v) })}
+                  min={0} step={spreadPxToUnit ? 10 : 5} decimalScale={0}
+                />
+                <NumberInput
+                  label={`River spread (${spreadPxToUnit ? abbr : 'px'})`}
+                  size="xs"
+                  value={vl.riverSpread}
+                  onChange={(v) => typeof v === 'number' && updateVegetationLayer(vl.id, { riverSpread: Math.max(0, v) })}
+                  min={0} step={spreadPxToUnit ? 10 : 5} decimalScale={0}
+                />
+              </Group>
+
+              {/* Texture */}
+              <Select
+                label="Texture"
+                size="xs"
+                value={vl.textureStyle}
+                onChange={(v) => v && updateVegetationLayer(vl.id, { textureStyle: v as VegetationTextureStyle })}
+                data={[
+                  { value: 'gradient', label: 'Gradient' },
+                  { value: 'organic',  label: 'Organic (fBm noise)' },
+                  { value: 'stipple',  label: 'Stipple (Bayer dither)' },
+                  { value: 'hatch',    label: 'Hatch (diagonal lines)' },
+                  { value: 'cellular', label: 'Cellular (Worley noise)' },
+                ]}
+              />
+
+              {/* Global noise */}
+              <Group grow>
+                <NumberInput
+                  label="Noisiness"
+                  size="xs"
+                  value={Math.round(vl.noisiness * 100)}
+                  onChange={(v) => typeof v === 'number' && updateVegetationLayer(vl.id, { noisiness: Math.max(0, Math.min(1, v / 100)) })}
+                  min={0} max={100} step={5}
+                />
+                <NumberInput
+                  label="Noise scale"
+                  size="xs"
+                  value={vl.noiseScale}
+                  onChange={(v) => typeof v === 'number' && updateVegetationLayer(vl.id, { noiseScale: Math.max(0.1, Math.min(5, v)) })}
+                  min={0.1} max={5} step={0.1} decimalScale={1}
+                />
+              </Group>
+
+              {/* Style-specific params */}
+              {vl.textureStyle === 'organic' && (
+                <NumberInput
+                  label="fBm octaves"
+                  size="xs"
+                  value={vl.organicOctaves}
+                  onChange={(v) => typeof v === 'number' && updateVegetationLayer(vl.id, { organicOctaves: Math.max(1, Math.min(8, Math.round(v))) })}
+                  min={1} max={8} step={1}
+                />
+              )}
+              {vl.textureStyle === 'stipple' && (
+                <NumberInput
+                  label="Stipple density"
+                  size="xs"
+                  value={Math.round(vl.stippleDensity * 100)}
+                  onChange={(v) => typeof v === 'number' && updateVegetationLayer(vl.id, { stippleDensity: Math.max(0, Math.min(1, v / 100)) })}
+                  min={0} max={100} step={5}
+                />
+              )}
+              {vl.textureStyle === 'hatch' && (
+                <Group grow>
+                  <NumberInput
+                    label="Angle (°)"
+                    size="xs"
+                    value={vl.hatchAngle}
+                    onChange={(v) => typeof v === 'number' && updateVegetationLayer(vl.id, { hatchAngle: ((v % 180) + 180) % 180 })}
+                    min={0} max={179} step={15}
+                  />
+                  <NumberInput
+                    label="Spacing (px)"
+                    size="xs"
+                    value={vl.hatchSpacing}
+                    onChange={(v) => typeof v === 'number' && updateVegetationLayer(vl.id, { hatchSpacing: Math.max(2, v) })}
+                    min={2} max={50} step={1}
+                  />
+                </Group>
+              )}
+              {vl.textureStyle === 'cellular' && (
+                <NumberInput
+                  label="Jitter"
+                  size="xs"
+                  value={Math.round(vl.cellularJitter * 100)}
+                  onChange={(v) => typeof v === 'number' && updateVegetationLayer(vl.id, { cellularJitter: Math.max(0, Math.min(1, v / 100)) })}
+                  min={0} max={100} step={5}
+                />
+              )}
+
+              {/* Elevation thinning */}
+              <Text size="xs" fw={500} c="dimmed" mt={4}>Elevation thinning</Text>
+              <Group grow>
+                <NumberInput
+                  label="Start elev %"
+                  size="xs"
+                  value={vl.elevStartPct}
+                  onChange={(v) => typeof v === 'number' && updateVegetationLayer(vl.id, { elevStartPct: Math.max(0, Math.min(99, v)) })}
+                  min={0} max={99} step={5}
+                />
+                <NumberInput
+                  label="Thin range %"
+                  size="xs"
+                  value={vl.elevThinRangePct}
+                  onChange={(v) => typeof v === 'number' && updateVegetationLayer(vl.id, { elevThinRangePct: Math.max(1, Math.min(50, v)) })}
+                  min={1} max={50} step={5}
+                />
+              </Group>
+              <Group grow>
+                <NumberInput
+                  label="Variation"
+                  size="xs"
+                  value={Math.round(vl.elevVariation * 100)}
+                  onChange={(v) => typeof v === 'number' && updateVegetationLayer(vl.id, { elevVariation: Math.max(0, Math.min(1, v / 100)) })}
+                  min={0} max={100} step={5}
+                />
+                <NumberInput
+                  label="Water attenuation"
+                  size="xs"
+                  value={Math.round(vl.waterAttenuation * 100)}
+                  onChange={(v) => typeof v === 'number' && updateVegetationLayer(vl.id, { waterAttenuation: Math.max(0, Math.min(1, v / 100)) })}
+                  min={0} max={100} step={5}
+                />
+              </Group>
+            </Stack>
+            </Collapse>
+          </Box>
+        ))}
+      </Stack>
+      </Collapse>
 
       {/* ─── METADATA ──────────────────────────────────────────── */}
       <Divider my="xs" />

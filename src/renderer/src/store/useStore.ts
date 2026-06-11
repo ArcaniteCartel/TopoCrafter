@@ -8,8 +8,9 @@ import type {
   Road, RoadDefaults, GridConfig, BuildingEntry, BuildingDefaults,
   PoiEntry, PoiNewMarkerState, PrecisionSetting, CurvedLabel,
   WaterLake, WaterRiver, WaterDetectionParams,
+  VegetationLayer,
 } from '../types'
-import { defaultParameters, defaultStyle, defaultHillshadeParameters, defaultElevationCalibration, defaultFrameConfig, defaultTitleConfig, defaultCompassConfig, defaultLegendConfig, defaultMeasureBarConfig, TRI_COLORS, defaultRoadDefaults, defaultGridConfig, defaultBuildingDefaults, defaultPoiNewMarkerState, calToMeters, defaultWaterDetectionParams } from '../types'
+import { defaultParameters, defaultStyle, defaultHillshadeParameters, defaultElevationCalibration, defaultFrameConfig, defaultTitleConfig, defaultCompassConfig, defaultLegendConfig, defaultMeasureBarConfig, TRI_COLORS, defaultRoadDefaults, defaultGridConfig, defaultBuildingDefaults, defaultPoiNewMarkerState, calToMeters, defaultWaterDetectionParams, defaultVegetationLayer } from '../types'
 
 function calFromMeters(meters: number, cal: ElevationCalibration): number {
   if (cal.unitType === 'feet') return meters / 0.3048
@@ -100,6 +101,10 @@ interface AppActions {
   updateWaterDetectionParams: (p: Partial<WaterDetectionParams>) => void
   setWaterDetecting: (v: boolean) => void
   clearWaterFeatures: () => void
+  addVegetationLayer: () => void
+  updateVegetationLayer: (id: string, updates: Partial<Omit<VegetationLayer, 'id'>>) => void
+  removeVegetationLayer: (id: string) => void
+  setVegetationLayersVisible: (v: boolean) => void
   setRuggednessSeverityColor: (index: number, color: string) => void
   setMapTool: (tool: MapTool) => void
   setActiveTab: (tab: 'terrain' | 'hillshade') => void
@@ -192,6 +197,8 @@ const initialState: ProjectState = {
   selectedWaterLakeId: null,
   selectedWaterRiverId: null,
   waterDetecting: false,
+  vegetationLayers: [],
+  vegetationLayersVisible: true,
 }
 
 export const useStore = create<ProjectState & AppActions>()(
@@ -510,6 +517,27 @@ export const useStore = create<ProjectState & AppActions>()(
       setWaterDetecting: (v) => set({ waterDetecting: v }),
       clearWaterFeatures: () => set({ waterLakes: [], waterRivers: [], isDirty: true }),
 
+      addVegetationLayer: () =>
+        set((state) => {
+          const next = state.vegetationLayers.length + 1
+          const id = `veg-${Date.now()}`
+          return { vegetationLayers: [...state.vegetationLayers, defaultVegetationLayer(id, next)], isDirty: true }
+        }),
+
+      updateVegetationLayer: (id, updates) =>
+        set((state) => ({
+          vegetationLayers: state.vegetationLayers.map((l) => l.id === id ? { ...l, ...updates } : l),
+          isDirty: true,
+        })),
+
+      removeVegetationLayer: (id) =>
+        set((state) => ({
+          vegetationLayers: state.vegetationLayers.filter((l) => l.id !== id),
+          isDirty: true,
+        })),
+
+      setVegetationLayersVisible: (v) => set({ vegetationLayersVisible: v }),
+
       setRuggednessSeverityColor: (index, color) =>
         set((state) => ({
           ruggednessSeverityColors: state.ruggednessSeverityColors.map((c, i) => i === index ? color : c),
@@ -670,6 +698,10 @@ export const useStore = create<ProjectState & AppActions>()(
           waterLakesVisible:             ps.waterLakesVisible             ?? current.waterLakesVisible,
           waterRiversVisible:            ps.waterRiversVisible            ?? current.waterRiversVisible,
           waterDetectionParams:          merge(current.waterDetectionParams, ps.waterDetectionParams),
+          vegetationLayers:              (ps.vegetationLayers ?? current.vegetationLayers).map(
+            (l) => ({ ...l, dataUrl: null, generating: false })
+          ),
+          vegetationLayersVisible:       ps.vegetationLayersVisible ?? current.vegetationLayersVisible,
         }
       },
       partialize: (state) => ({
@@ -721,6 +753,10 @@ export const useStore = create<ProjectState & AppActions>()(
         waterLakesVisible: state.waterLakesVisible,
         waterRiversVisible: state.waterRiversVisible,
         waterDetectionParams: state.waterDetectionParams,
+        vegetationLayers: state.vegetationLayers.map(({ dataUrl: _d, generating: _g, ...rest }) => ({
+          ...rest, dataUrl: null, generating: false,
+        })),
+        vegetationLayersVisible: state.vegetationLayersVisible,
       }),
     }
   )

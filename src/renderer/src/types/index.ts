@@ -291,6 +291,58 @@ export const defaultWaterDetectionParams: WaterDetectionParams = {
   maxRiverSystems: 5,
 }
 
+export type VegetationTextureStyle = 'gradient' | 'organic' | 'stipple' | 'hatch' | 'cellular'
+
+export interface VegetationLayer {
+  id: string
+  name: string
+  visible: boolean
+  color: string
+  opacity: number          // 0.10–0.70
+  lakeSpread: number       // BFS radius in display units (ft/m/custom) or px when uncalibrated
+  riverSpread: number      // BFS radius in display units (ft/m/custom) or px when uncalibrated
+  textureStyle: VegetationTextureStyle
+  noisiness: number        // 0–1 global noise strength
+  noiseScale: number       // 0.1–5 spatial frequency
+  organicOctaves: number   // fBm octaves 1–8
+  stippleDensity: number   // 0–1 Bayer dither threshold
+  hatchAngle: number       // degrees 0–179
+  hatchSpacing: number     // px between hatch lines
+  cellularJitter: number   // 0–1 Worley noise jitter
+  elevStartPct: number     // elevation % where thinning begins (0–100)
+  elevThinRangePct: number // range % over which density drops to zero (1–50)
+  elevVariation: number    // 0–1 noise on the thinning cutoff
+  waterAttenuation: number // 0–1 how much proximity suppresses elevation thinning
+  dataUrl: string | null   // generated canvas output — not persisted
+  generating: boolean      // not persisted
+}
+
+export function defaultVegetationLayer(id: string, index: number): VegetationLayer {
+  return {
+    id,
+    name: `Vegetation ${index}`,
+    visible: true,
+    color: '#3a7d44',
+    opacity: 0.35,
+    lakeSpread: 40,
+    riverSpread: 25,
+    textureStyle: 'organic',
+    noisiness: 0.5,
+    noiseScale: 1.0,
+    organicOctaves: 4,
+    stippleDensity: 0.5,
+    hatchAngle: 45,
+    hatchSpacing: 6,
+    cellularJitter: 0.8,
+    elevStartPct: 65,
+    elevThinRangePct: 20,
+    elevVariation: 0.3,
+    waterAttenuation: 0.7,
+    dataUrl: null,
+    generating: false,
+  }
+}
+
 export type MapTool = 'none' | 'elevation-flag' | 'slope-arrow' | 'measure-anchor' | 'ruggedness-flag' | 'swamp-marker' | 'road' | 'building' | 'poi' | 'curved-label'
 
 export type BuiltinMarkerTypeId = 'mine' | 'bridge' | 'cave'
@@ -781,6 +833,8 @@ export interface ProjectState {
   selectedWaterLakeId: string | null
   selectedWaterRiverId: string | null
   waterDetecting: boolean
+  vegetationLayers: VegetationLayer[]
+  vegetationLayersVisible: boolean
 }
 
 export const defaultParameters: ContourParameters = {
