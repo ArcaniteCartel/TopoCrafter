@@ -1928,8 +1928,9 @@ export function MapCanvas(): JSX.Element {
 
   const mapZoom = useStore((s) => s.mapZoom)
   const setMapZoom = useStore((s) => s.setMapZoom)
-  const overlayOnly = useStore((s) => s.overlayOnly)
+  const hillshadeView = useStore((s) => s.hillshadeView)
   const overlayBrightness = useStore((s) => s.overlayBrightness)
+  const showOverlays = hillshadeView !== 'hillshade-only'
   const frame = useStore((s) => s.frame)
   const title = useStore((s) => s.title)
   const compass = useStore((s) => s.compass)
@@ -2066,20 +2067,20 @@ export function MapCanvas(): JSX.Element {
       {/* Inner map area — position relative so SVG overlays stack correctly */}
       <div ref={innerMapRef} style={{
         position: 'relative',
-        backgroundColor: overlayOnly
+        backgroundColor: hillshadeView === 'overlay-only'
           ? `rgb(${Math.round(255 * (0.85 + 0.15 * overlayBrightness))},` +
             `${Math.round(255 * (0.85 + 0.15 * overlayBrightness))},` +
             `${Math.round(255 * (0.85 + 0.15 * overlayBrightness))})`
           : undefined,
       }}>
-      {baseImageUrl && !overlayOnly && (
+      {baseImageUrl && hillshadeView !== 'overlay-only' && (
         <img
           src={baseImageUrl}
           alt={activeTab === 'terrain' ? 'Terrain' : 'Hillshade'}
           style={{ display: 'block', width: '100%' }}
         />
       )}
-      {baseImageUrl && overlayOnly && (
+      {baseImageUrl && hillshadeView === 'overlay-only' && (
         <img
           src={baseImageUrl}
           alt=""
@@ -2088,7 +2089,7 @@ export function MapCanvas(): JSX.Element {
         />
       )}
 
-      {contourState && heightmap && !hillshadeGenerating && (
+      {showOverlays && contourState && heightmap && !hillshadeGenerating && (
         <svg
           id="contour-svg"
           viewBox={`0 0 ${heightmap.width} ${heightmap.height}`}
@@ -2214,7 +2215,7 @@ export function MapCanvas(): JSX.Element {
       )}
 
       {/* Annotation overlay — separate SVG at full opacity, handles all tool interaction */}
-      {heightmap && (
+      {showOverlays && heightmap && (
         <svg
           id="annotation-svg"
           ref={flagSvgRef}
@@ -2967,7 +2968,7 @@ export function MapCanvas(): JSX.Element {
       )}
 
       {/* Grid overlay — on top of all other layers */}
-      {grid.enabled && heightmap && innerMapSize && (
+      {showOverlays && grid.enabled && heightmap && innerMapSize && (
         <GridCanvas
           grid={grid}
           measureBar={measureBar}
@@ -2978,7 +2979,7 @@ export function MapCanvas(): JSX.Element {
       )}
 
       {/* Curved labels — zOrder 75–100, above grid */}
-      {heightmap && curvedLabels.some(l => l.zOrder >= 75) && (
+      {showOverlays && heightmap && curvedLabels.some(l => l.zOrder >= 75) && (
         <svg
           viewBox={`0 0 ${heightmap.width} ${heightmap.height}`}
           style={{

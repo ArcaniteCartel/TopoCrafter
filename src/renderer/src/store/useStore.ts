@@ -91,7 +91,7 @@ interface AppActions {
   setActiveTab: (tab: 'terrain' | 'hillshade') => void
   setMapZoom: (zoom: number) => void
   setMapDisplaySize: (size: { w: number; h: number } | null) => void
-  setOverlayOnly: (val: boolean) => void
+  setHillshadeView: (view: 'combined' | 'hillshade-only' | 'overlay-only') => void
   setOverlayBrightness: (brightness: number) => void
   updateFrame: (f: Partial<FrameConfig>) => void
   updateTitle: (t: Partial<TitleConfig>) => void
@@ -157,7 +157,7 @@ const initialState: ProjectState = {
   snapshotElevationCalibration: null,
   mapZoom: 100,
   mapDisplaySize: null,
-  overlayOnly: false,
+  hillshadeView: 'combined',
   overlayBrightness: 0.65,
   frame: defaultFrameConfig,
   title: defaultTitleConfig,
@@ -475,7 +475,7 @@ export const useStore = create<ProjectState & AppActions>()(
 
       setMapDisplaySize: (size) => set({ mapDisplaySize: size }),
 
-      setOverlayOnly: (val) => set({ overlayOnly: val }),
+      setHillshadeView: (view) => set({ hillshadeView: view }),
 
       setOverlayBrightness: (brightness) => set({ overlayBrightness: brightness }),
 
@@ -522,7 +522,7 @@ export const useStore = create<ProjectState & AppActions>()(
     }),
     {
       name: 'topocrafter-state',
-      version: 4,
+      version: 5,
       storage: createJSONStorage(() => localStorage),
       migrate: (persistedState: unknown, version: number) => {
         const ps = persistedState as Record<string, unknown>
@@ -581,6 +581,10 @@ export const useStore = create<ProjectState & AppActions>()(
         if (version < 4) {
           ps.ppi = ps.ppi ?? 300
         }
+        if (version < 5) {
+          ps.hillshadeView = (ps as Record<string, unknown>).overlayOnly === true ? 'overlay-only' : 'combined'
+          delete (ps as Record<string, unknown>).overlayOnly
+        }
         return ps
       },
       // Deep-merge so that new fields added to nested config objects (legend, frame, etc.)
@@ -624,7 +628,7 @@ export const useStore = create<ProjectState & AppActions>()(
         elevationCalibration: state.elevationCalibration,
         activeTab: state.activeTab,
         mapZoom: state.mapZoom,
-        overlayOnly: state.overlayOnly,
+        hillshadeView: state.hillshadeView,
         overlayBrightness: state.overlayBrightness,
         frame: state.frame,
         title: state.title,

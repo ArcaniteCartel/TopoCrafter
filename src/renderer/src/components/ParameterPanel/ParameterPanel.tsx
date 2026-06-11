@@ -153,8 +153,8 @@ export function ParameterPanel(): JSX.Element {
   const removeRoad = useStore((s) => s.removeRoad)
   const selectedRoadId = useStore((s) => s.selectedRoadId)
   const setSelectedRoadId = useStore((s) => s.setSelectedRoadId)
-  const overlayOnly = useStore((s) => s.overlayOnly)
-  const setOverlayOnly = useStore((s) => s.setOverlayOnly)
+  const hillshadeView = useStore((s) => s.hillshadeView)
+  const setHillshadeView = useStore((s) => s.setHillshadeView)
   const overlayBrightness = useStore((s) => s.overlayBrightness)
   const setOverlayBrightness = useStore((s) => s.setOverlayBrightness)
   const grid = useStore((s) => s.grid)
@@ -384,23 +384,25 @@ export function ParameterPanel(): JSX.Element {
         <>
           <Group justify="space-between" style={{ cursor: 'pointer', userSelect: 'none' }}
             onClick={() => setHillshadeOpen((o) => !o)}>
-            <Group gap="xs" align="center">
-              <Text fw={600} size="sm" c="dimmed" tt="uppercase" style={{ letterSpacing: 1 }}>
-                Hillshade
-              </Text>
-              <Switch
-                size="xs"
-                label="Overlay only"
-                checked={overlayOnly}
-                onClick={(e) => e.stopPropagation()}
-                onChange={(e) => setOverlayOnly(e.currentTarget.checked)}
-              />
-            </Group>
+            <Text fw={600} size="sm" c="dimmed" tt="uppercase" style={{ letterSpacing: 1 }}>
+              Hillshade
+            </Text>
             <Text size="lg" c="dimmed">{hillshadeOpen ? '▾' : '▸'}</Text>
           </Group>
 
           <Collapse in={hillshadeOpen}>
           <Stack gap="md">
+          <SegmentedControl
+            size="xs"
+            fullWidth
+            data={[
+              { value: 'combined', label: 'Combined' },
+              { value: 'hillshade-only', label: 'Hillshade only' },
+              { value: 'overlay-only', label: 'Overlay only' },
+            ]}
+            value={hillshadeView}
+            onChange={(v) => setHillshadeView(v as 'combined' | 'hillshade-only' | 'overlay-only')}
+          />
           <Stack gap={4}>
             <Text size="xs" fw={500}>Sun Azimuth</Text>
             <Slider
@@ -410,7 +412,7 @@ export function ParameterPanel(): JSX.Element {
               value={hillshadeParams.azimuth}
               onChange={(v) => updateHillshadeParams({ azimuth: v })}
               label={(v) => `${v}°`}
-              disabled={hillshadeDisabled || overlayOnly}
+              disabled={hillshadeDisabled || hillshadeView === 'overlay-only'}
             />
           </Stack>
 
@@ -423,7 +425,7 @@ export function ParameterPanel(): JSX.Element {
               value={hillshadeParams.altitude}
               onChange={(v) => updateHillshadeParams({ altitude: v })}
               label={(v) => `${v}°`}
-              disabled={hillshadeDisabled || overlayOnly}
+              disabled={hillshadeDisabled || hillshadeView === 'overlay-only'}
             />
           </Stack>
 
@@ -438,7 +440,7 @@ export function ParameterPanel(): JSX.Element {
                   value={hillshadeParams.verticalExaggeration}
                   onChange={(v) => updateHillshadeParams({ verticalExaggeration: v })}
                   label={(v) => `${v.toFixed(1)}×`}
-                  disabled={hillshadeDisabled || overlayOnly}
+                  disabled={hillshadeDisabled || hillshadeView === 'overlay-only'}
                 />
               </Stack>
               <NumberInput
@@ -460,7 +462,7 @@ export function ParameterPanel(): JSX.Element {
                 value={hillshadeParams.zFactor}
                 onChange={(v) => updateHillshadeParams({ zFactor: v })}
                 label={(v) => `${v}×`}
-                disabled={hillshadeDisabled || overlayOnly}
+                disabled={hillshadeDisabled || hillshadeView === 'overlay-only'}
               />
             </Stack>
           )}
@@ -474,7 +476,7 @@ export function ParameterPanel(): JSX.Element {
               value={intensityToIndex(hillshadeParams.intensity)}
               onChange={(i) => updateHillshadeParams({ intensity: INTENSITY_STOPS[i] })}
               label={(i) => formatIntensity(INTENSITY_STOPS[i])}
-              disabled={hillshadeDisabled || overlayOnly}
+              disabled={hillshadeDisabled || hillshadeView === 'overlay-only'}
             />
           </Stack>
 
@@ -484,8 +486,8 @@ export function ParameterPanel(): JSX.Element {
               min={0.3}
               max={0.9}
               step={0.05}
-              value={overlayOnly ? overlayBrightness : hillshadeParams.brightness}
-              onChange={(v) => overlayOnly ? setOverlayBrightness(v) : updateHillshadeParams({ brightness: v })}
+              value={hillshadeView === 'overlay-only' ? overlayBrightness : hillshadeParams.brightness}
+              onChange={(v) => hillshadeView === 'overlay-only' ? setOverlayBrightness(v) : updateHillshadeParams({ brightness: v })}
               label={(v) => `${Math.round(v * 100)}%`}
               disabled={hillshadeDisabled}
             />

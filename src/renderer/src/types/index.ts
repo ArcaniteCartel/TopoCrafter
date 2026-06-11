@@ -707,7 +707,7 @@ export interface ProjectState {
   snapshotElevationCalibration: ElevationCalibration | null
   mapZoom: number
   mapDisplaySize: { w: number; h: number } | null
-  overlayOnly: boolean
+  hillshadeView: 'combined' | 'hillshade-only' | 'overlay-only'
   overlayBrightness: number
   frame: FrameConfig
   title: TitleConfig
