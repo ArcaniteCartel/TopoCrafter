@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+﻿import { useEffect, useRef, useState } from 'react'
 import { Stack, Text, Slider, NumberInput, ColorInput, Switch, Divider, Group, Select, TextInput, Collapse, Checkbox, SegmentedControl, Box, Button, Radio, Tooltip, Alert, Modal } from '@mantine/core'
 import { useStore } from '../../store/useStore'
 import { useGlobalStore } from '../../store/useGlobalStore'
@@ -322,7 +322,7 @@ export function ParameterPanel(): JSX.Element {
   const [newCustomSizeM, setNewCustomSizeM] = useState(10)
   const [newCustomStrokeWeight, setNewCustomStrokeWeight] = useState(1.5)
 
-  const allOpen = hillshadeOpen && contoursOpen && styleOpen && labelStylingOpen && seaLevelOpen && markersOpen && roadsOpen && buildingsOpen && gridsOpen && geoOpen && framingOpen
+  const allOpen = hillshadeOpen && contoursOpen && styleOpen && labelStylingOpen && seaLevelOpen && markersOpen && roadsOpen && buildingsOpen && gridsOpen && waterOpen && vegetationOpen && geoOpen && framingOpen
     && elevFlagsSubOpen && slopeArrowsSubOpen && ruggedSubOpen && swampSubOpen && poisSubOpen && labelsSubOpen
     && majorLinesOpen && minorLinesOpen
     && titleSubOpen && compassSubOpen && legendSubOpen
@@ -331,7 +331,7 @@ export function ParameterPanel(): JSX.Element {
   const toggleAll = () => {
     const next = !allOpen
     setHillshadeOpen(next); setContoursOpen(next); setStyleOpen(next)
-    setLabelStylingOpen(next); setSeaLevelOpen(next); setMarkersOpen(next); setRoadsOpen(next); setBuildingsOpen(next); setGridsOpen(next); setGeoOpen(next); setFramingOpen(next)
+    setLabelStylingOpen(next); setSeaLevelOpen(next); setMarkersOpen(next); setRoadsOpen(next); setBuildingsOpen(next); setGridsOpen(next); setWaterOpen(next); setVegetationOpen(next); setGeoOpen(next); setFramingOpen(next)
     setElevFlagsSubOpen(next); setSlopeArrowsSubOpen(next); setRuggedSubOpen(next); setSwampSubOpen(next); setPoisSubOpen(next); setLabelsSubOpen(next)
     setMajorLinesOpen(next); setMinorLinesOpen(next)
     setTitleSubOpen(next); setCompassSubOpen(next); setLegendSubOpen(next)
@@ -1926,6 +1926,429 @@ export function ParameterPanel(): JSX.Element {
       </Stack>
       </Collapse>
 
+      {/* ─── WATER FEATURES ────────────────────────────────────── */}
+      <Divider my="xs" />
+      <Group justify="space-between" style={{ cursor: 'pointer', userSelect: 'none' }}
+        onClick={() => setWaterOpen((o) => !o)}>
+        <Text size="lg" c="dimmed">Water Features</Text>
+        <Text size="lg" c="dimmed">{waterOpen ? '▾' : '▸'}</Text>
+      </Group>
+      <Collapse in={waterOpen}>
+      <Stack gap="md" pt={4} pl="xs">
+
+        {/* Detection controls */}
+        <Group>
+          <Button size="xs" onClick={handleDetectClick}
+            loading={waterDetecting} disabled={!heightmap || waterDetecting}>
+            {waterLakes.length + waterRivers.length > 0 ? 'Re-detect' : 'Detect'}
+          </Button>
+          <Text size="xs" c="dimmed" style={{ fontStyle: 'italic' }}>
+            {waterDetecting ? 'Detecting…' : waterLakes.length + waterRivers.length > 0
+              ? `${waterLakes.length} lake${waterLakes.length !== 1 ? 's' : ''}, ${waterRivers.length} river${waterRivers.length !== 1 ? 's' : ''}`
+              : 'No features detected'}
+          </Text>
+        </Group>
+
+        {/* Detection params */}
+        <Group justify="space-between" style={{ cursor: 'pointer', userSelect: 'none' }}
+          onClick={() => setWaterDetectParamsOpen((o) => !o)}>
+          <Text size="xs" fw={500}>Detection parameters</Text>
+          <Text size="xs" c="dimmed">{waterDetectParamsOpen ? '▾' : '▸'}</Text>
+        </Group>
+        <Collapse in={waterDetectParamsOpen}>
+        <Stack gap="xs" pl="xs">
+          <NumberInput size="xs" label="Min depression depth (%)"
+            description="Minimum depth as % of elevation range"
+            value={waterDetectionParams.minDepthPct}
+            onChange={(v) => typeof v === 'number' && updateWaterDetectionParams({ minDepthPct: v })}
+            min={0.1} max={20} step={0.1} decimalScale={1} />
+          <NumberInput size="xs" label="Min lake area (pixels)"
+            value={waterDetectionParams.minAreaPx}
+            onChange={(v) => typeof v === 'number' && updateWaterDetectionParams({ minAreaPx: Math.max(1, Math.round(v)) })}
+            min={1} max={5000} step={1} />
+          <NumberInput size="xs" label="Stream accumulation (%)"
+            description="Threshold as % of map area"
+            value={waterDetectionParams.accumulationPct}
+            onChange={(v) => typeof v === 'number' && updateWaterDetectionParams({ accumulationPct: v })}
+            min={0.01} max={10} step={0.1} decimalScale={2} />
+          <NumberInput size="xs" label="Max river systems (0 = all)"
+            value={waterDetectionParams.maxRiverSystems}
+            onChange={(v) => typeof v === 'number' && updateWaterDetectionParams({ maxRiverSystems: Math.max(0, Math.round(v)) })}
+            min={0} max={50} step={1} />
+        </Stack>
+        </Collapse>
+
+        {/* ── Lakes section ── */}
+        {waterLakes.length > 0 && (
+          <>
+            <Divider label={`Lakes (${waterLakes.length})`} labelPosition="left" size="xs" />
+            <Group justify="space-between">
+              <Switch size="xs" label="Visible"
+                checked={waterLakesVisible} onChange={(e) => setWaterLakesVisible(e.target.checked)} />
+              <Button size="xs" variant="subtle" color="red"
+                onClick={() => { clearWaterFeatures(); clearSelection() }}>
+                Delete all water
+              </Button>
+            </Group>
+            <Stack gap={4}>
+              {waterLakes.map((lake, i) => (
+                <Box key={lake.id}>
+                  <Group justify="space-between"
+                    p={4} style={{
+                      backgroundColor: selectedItems.some(s => s.type === 'water-lake' && s.id === lake.id) ? '#e8f4ff' : 'transparent',
+                      borderRadius: 4, cursor: 'pointer',
+                    }}
+                    onClick={() => selectItem('water-lake', lake.id)}>
+                    <Text size="xs">Lake {i + 1} ({Math.round(lake.areaPx).toLocaleString()} px²)</Text>
+                    <Button size="compact-xs" variant="subtle" color="red"
+                      onClick={(e) => { e.stopPropagation(); removeWaterLake(lake.id) }}>×</Button>
+                  </Group>
+                  {selectedWaterLakeId === lake.id && (
+                    <Stack gap="xs" pl="sm" pt={4}>
+                      <Group grow>
+                        <ColorInput size="xs" label="Fill" value={lake.color}
+                          onChange={(v) => updateWaterLake(lake.id, { color: v })} />
+                        <NumberInput size="xs" label="Opacity %"
+                          value={Math.round(lake.opacity * 100)} min={0} max={100}
+                          onChange={(v) => typeof v === 'number' && updateWaterLake(lake.id, { opacity: v / 100 })} />
+                      </Group>
+                      <TextInput size="xs" label="Label text" value={lake.label}
+                        onChange={(e) => updateWaterLake(lake.id, { label: e.target.value })} />
+                      {lake.label && (
+                        <>
+                          <Group grow>
+                            <Select size="xs" label="Font" data={FONT_OPTIONS}
+                              value={lake.labelFontFamily}
+                              onChange={(v) => v && updateWaterLake(lake.id, { labelFontFamily: v })} />
+                            <NumberInput size="xs" label="Size" min={6} max={120}
+                              value={lake.labelFontSize}
+                              onChange={(v) => typeof v === 'number' && updateWaterLake(lake.id, { labelFontSize: v })} />
+                          </Group>
+                          <Group grow>
+                            <ColorInput size="xs" label="Label color" value={lake.labelColor}
+                              onChange={(v) => updateWaterLake(lake.id, { labelColor: v })} />
+                            <Switch size="xs" label="Bold" checked={lake.labelBold}
+                              onChange={(e) => updateWaterLake(lake.id, { labelBold: e.target.checked })} />
+                            <Switch size="xs" label="Italic" checked={lake.labelItalic}
+                              onChange={(e) => updateWaterLake(lake.id, { labelItalic: e.target.checked })} />
+                          </Group>
+                        </>
+                      )}
+                    </Stack>
+                  )}
+                </Box>
+              ))}
+            </Stack>
+          </>
+        )}
+
+        {/* ── Rivers section ── */}
+        {waterRivers.length > 0 && (
+          <>
+            <Divider label={`Rivers (${waterRivers.length})`} labelPosition="left" size="xs" />
+            <Switch size="xs" label="Visible"
+              checked={waterRiversVisible} onChange={(e) => setWaterRiversVisible(e.target.checked)} />
+            <Stack gap={4}>
+              {waterRivers.map((river) => (
+                <Box key={river.id}>
+                  <Group justify="space-between"
+                    p={4} style={{
+                      backgroundColor: selectedItems.some(s => s.type === 'water-river' && s.id === river.id) ? '#e8f4ff' : 'transparent',
+                      borderRadius: 4, cursor: 'pointer',
+                    }}
+                    onClick={() => selectItem('water-river', river.id)}>
+                    <Text size="xs">River {river.systemRank}</Text>
+                    <Button size="compact-xs" variant="subtle" color="red"
+                      onClick={(e) => { e.stopPropagation(); removeWaterRiver(river.id) }}>×</Button>
+                  </Group>
+                  {selectedWaterRiverId === river.id && (
+                    <Stack gap="xs" pl="sm" pt={4}>
+                      <Group grow>
+                        <ColorInput size="xs" label="Color" value={river.color}
+                          onChange={(v) => updateWaterRiver(river.id, { color: v })} />
+                        <NumberInput size="xs" label="Opacity %"
+                          value={Math.round(river.opacity * 100)} min={0} max={100}
+                          onChange={(v) => typeof v === 'number' && updateWaterRiver(river.id, { opacity: v / 100 })} />
+                      </Group>
+                      <NumberInput size="xs" label="Base stroke width"
+                        value={river.strokeWidth} min={0.5} max={20} step={0.5} decimalScale={1}
+                        onChange={(v) => typeof v === 'number' && updateWaterRiver(river.id, { strokeWidth: v })} />
+                      <TextInput size="xs" label="Label text" value={river.label}
+                        onChange={(e) => updateWaterRiver(river.id, { label: e.target.value })} />
+                      {river.label && (
+                        <>
+                          <Group grow>
+                            <Select size="xs" label="Font" data={FONT_OPTIONS}
+                              value={river.labelFontFamily}
+                              onChange={(v) => v && updateWaterRiver(river.id, { labelFontFamily: v })} />
+                            <NumberInput size="xs" label="Size" min={6} max={120}
+                              value={river.labelFontSize}
+                              onChange={(v) => typeof v === 'number' && updateWaterRiver(river.id, { labelFontSize: v })} />
+                          </Group>
+                          <Group grow>
+                            <ColorInput size="xs" label="Label color" value={river.labelColor}
+                              onChange={(v) => updateWaterRiver(river.id, { labelColor: v })} />
+                            <Switch size="xs" label="Bold" checked={river.labelBold}
+                              onChange={(e) => updateWaterRiver(river.id, { labelBold: e.target.checked })} />
+                            <Switch size="xs" label="Italic" checked={river.labelItalic}
+                              onChange={(e) => updateWaterRiver(river.id, { labelItalic: e.target.checked })} />
+                          </Group>
+                        </>
+                      )}
+                    </Stack>
+                  )}
+                </Box>
+              ))}
+            </Stack>
+          </>
+        )}
+
+      </Stack>
+      </Collapse>
+
+      {/* Confirm re-detect modal */}
+      <Modal opened={waterConfirmOpen} onClose={() => setWaterConfirmOpen(false)}
+        title="Replace water features?" size="sm">
+        <Text size="sm">
+          This will replace {waterLakes.length} lake{waterLakes.length !== 1 ? 's' : ''} and{' '}
+          {waterRivers.length} river{waterRivers.length !== 1 ? 's' : ''} with newly detected features.
+        </Text>
+        <Group mt="md" justify="flex-end">
+          <Button variant="default" size="sm" onClick={() => setWaterConfirmOpen(false)}>Cancel</Button>
+          <Button size="sm" onClick={() => { setWaterConfirmOpen(false); void runWaterDetection() }}>Detect</Button>
+        </Group>
+      </Modal>
+
+      {/* ─── VEGETATION ────────────────────────────────────────── */}
+      <Divider my="xs" />
+      <Group justify="space-between" style={{ cursor: 'pointer', userSelect: 'none' }}
+        onClick={() => setVegetationOpen((o) => !o)}>
+        <Group gap="xs">
+          <Switch
+            checked={vegetationLayersVisible}
+            onChange={(e) => setVegetationLayersVisible(e.currentTarget.checked)}
+            onClick={(e) => e.stopPropagation()}
+            size="xs"
+          />
+          <Text size="lg" c="dimmed">Vegetation</Text>
+        </Group>
+        <Text size="lg" c="dimmed">{vegetationOpen ? '▾' : '▸'}</Text>
+      </Group>
+      <Collapse in={vegetationOpen}>
+      <Stack gap="md" pt={4} pl="xs">
+        <Group>
+          <Button
+            size="xs"
+            variant="default"
+            disabled={waterLakes.length + waterRivers.length === 0}
+            onClick={addVegetationLayer}
+          >
+            Add Layer
+          </Button>
+          {waterLakes.length + waterRivers.length === 0 && (
+            <Text size="xs" c="dimmed" style={{ fontStyle: 'italic' }}>Detect water features first</Text>
+          )}
+        </Group>
+
+        {vegetationLayers.map((vl, idx) => (
+          <Box key={vl.id} style={{ border: '1px solid var(--mantine-color-default-border)', borderRadius: 6, padding: 8 }}>
+            <Group justify="space-between" style={{ cursor: 'pointer' }}
+              onClick={() => setVegetationOpenLayers((s) => ({ ...s, [vl.id]: !s[vl.id] }))}>
+              <Group gap="xs">
+                <Switch
+                  checked={vl.visible}
+                  onChange={(e) => updateVegetationLayer(vl.id, { visible: e.currentTarget.checked })}
+                  onClick={(e) => e.stopPropagation()}
+                  size="xs"
+                />
+                <TextInput
+                  value={vl.name}
+                  onChange={(e) => updateVegetationLayer(vl.id, { name: e.currentTarget.value })}
+                  size="xs"
+                  style={{ width: 130 }}
+                  onClick={(e) => e.stopPropagation()}
+                />
+              </Group>
+              <Group gap={4}>
+                <Text size="xs" c="dimmed">{vegetationOpenLayers[vl.id] ? '▾' : '▸'}</Text>
+              </Group>
+            </Group>
+
+            <Collapse in={!!vegetationOpenLayers[vl.id]}>
+            <Stack gap="xs" pt="xs">
+              <Text size="xs" fw={500} c="dimmed">Layer {idx + 1}</Text>
+
+              {/* Generate button */}
+              <Group>
+                <Button
+                  size="xs"
+                  loading={vl.generating}
+                  disabled={!heightmap || vl.generating}
+                  onClick={() => void runVegetationGeneration(vl.id)}
+                >
+                  {vl.dataUrl ? 'Re-generate' : 'Generate'}
+                </Button>
+                <Button size="xs" variant="subtle" color="red"
+                  onClick={() => removeVegetationLayer(vl.id)}>Remove</Button>
+              </Group>
+
+              {/* Color + opacity */}
+              <Group grow>
+                <ColorInput
+                  label="Color"
+                  size="xs"
+                  value={vl.color}
+                  onChange={(v) => updateVegetationLayer(vl.id, { color: v })}
+                  swatches={['#2d6a4f','#3a7d44','#52b788','#74c69d','#1b4332','#40916c','#95d5b2']}
+                />
+                <NumberInput
+                  label="Opacity %"
+                  size="xs"
+                  value={Math.round(vl.opacity * 100)}
+                  onChange={(v) => typeof v === 'number' && updateVegetationLayer(vl.id, { opacity: Math.max(0.10, Math.min(0.70, v / 100)) })}
+                  min={10} max={70} step={5}
+                />
+              </Group>
+
+              {/* Water spread */}
+              <Group grow>
+                <NumberInput
+                  label={`Lake spread (${spreadPxToUnit ? abbr : 'px'})`}
+                  size="xs"
+                  value={vl.lakeSpread}
+                  onChange={(v) => typeof v === 'number' && updateVegetationLayer(vl.id, { lakeSpread: Math.max(0, v) })}
+                  min={0} step={spreadPxToUnit ? 10 : 5} decimalScale={0}
+                />
+                <NumberInput
+                  label={`River spread (${spreadPxToUnit ? abbr : 'px'})`}
+                  size="xs"
+                  value={vl.riverSpread}
+                  onChange={(v) => typeof v === 'number' && updateVegetationLayer(vl.id, { riverSpread: Math.max(0, v) })}
+                  min={0} step={spreadPxToUnit ? 10 : 5} decimalScale={0}
+                />
+              </Group>
+
+              {/* Texture */}
+              <Select
+                label="Texture"
+                size="xs"
+                value={vl.textureStyle}
+                onChange={(v) => v && updateVegetationLayer(vl.id, { textureStyle: v as VegetationTextureStyle })}
+                data={[
+                  { value: 'gradient', label: 'Gradient' },
+                  { value: 'organic',  label: 'Organic (fBm noise)' },
+                  { value: 'stipple',  label: 'Stipple (Bayer dither)' },
+                  { value: 'hatch',    label: 'Hatch (diagonal lines)' },
+                  { value: 'cellular', label: 'Cellular (Worley noise)' },
+                ]}
+              />
+
+              {/* Global noise */}
+              <Group grow>
+                <NumberInput
+                  label="Noisiness"
+                  size="xs"
+                  value={Math.round(vl.noisiness * 100)}
+                  onChange={(v) => typeof v === 'number' && updateVegetationLayer(vl.id, { noisiness: Math.max(0, Math.min(1, v / 100)) })}
+                  min={0} max={100} step={5}
+                />
+                <NumberInput
+                  label="Noise scale"
+                  size="xs"
+                  value={vl.noiseScale}
+                  onChange={(v) => typeof v === 'number' && updateVegetationLayer(vl.id, { noiseScale: Math.max(0.1, Math.min(5, v)) })}
+                  min={0.1} max={5} step={0.1} decimalScale={1}
+                />
+              </Group>
+
+              {/* Style-specific params */}
+              {vl.textureStyle === 'organic' && (
+                <NumberInput
+                  label="fBm octaves"
+                  size="xs"
+                  value={vl.organicOctaves}
+                  onChange={(v) => typeof v === 'number' && updateVegetationLayer(vl.id, { organicOctaves: Math.max(1, Math.min(8, Math.round(v))) })}
+                  min={1} max={8} step={1}
+                />
+              )}
+              {vl.textureStyle === 'stipple' && (
+                <NumberInput
+                  label="Stipple density"
+                  size="xs"
+                  value={Math.round(vl.stippleDensity * 100)}
+                  onChange={(v) => typeof v === 'number' && updateVegetationLayer(vl.id, { stippleDensity: Math.max(0, Math.min(1, v / 100)) })}
+                  min={0} max={100} step={5}
+                />
+              )}
+              {vl.textureStyle === 'hatch' && (
+                <Group grow>
+                  <NumberInput
+                    label="Angle (°)"
+                    size="xs"
+                    value={vl.hatchAngle}
+                    onChange={(v) => typeof v === 'number' && updateVegetationLayer(vl.id, { hatchAngle: ((v % 180) + 180) % 180 })}
+                    min={0} max={179} step={15}
+                  />
+                  <NumberInput
+                    label="Spacing (px)"
+                    size="xs"
+                    value={vl.hatchSpacing}
+                    onChange={(v) => typeof v === 'number' && updateVegetationLayer(vl.id, { hatchSpacing: Math.max(2, v) })}
+                    min={2} max={50} step={1}
+                  />
+                </Group>
+              )}
+              {vl.textureStyle === 'cellular' && (
+                <NumberInput
+                  label="Jitter"
+                  size="xs"
+                  value={Math.round(vl.cellularJitter * 100)}
+                  onChange={(v) => typeof v === 'number' && updateVegetationLayer(vl.id, { cellularJitter: Math.max(0, Math.min(1, v / 100)) })}
+                  min={0} max={100} step={5}
+                />
+              )}
+
+              {/* Elevation thinning */}
+              <Text size="xs" fw={500} c="dimmed" mt={4}>Elevation thinning</Text>
+              <Group grow>
+                <NumberInput
+                  label="Start elev %"
+                  size="xs"
+                  value={vl.elevStartPct}
+                  onChange={(v) => typeof v === 'number' && updateVegetationLayer(vl.id, { elevStartPct: Math.max(0, Math.min(99, v)) })}
+                  min={0} max={99} step={5}
+                />
+                <NumberInput
+                  label="Thin range %"
+                  size="xs"
+                  value={vl.elevThinRangePct}
+                  onChange={(v) => typeof v === 'number' && updateVegetationLayer(vl.id, { elevThinRangePct: Math.max(1, Math.min(50, v)) })}
+                  min={1} max={50} step={5}
+                />
+              </Group>
+              <Group grow>
+                <NumberInput
+                  label="Variation"
+                  size="xs"
+                  value={Math.round(vl.elevVariation * 100)}
+                  onChange={(v) => typeof v === 'number' && updateVegetationLayer(vl.id, { elevVariation: Math.max(0, Math.min(1, v / 100)) })}
+                  min={0} max={100} step={5}
+                />
+                <NumberInput
+                  label="Water attenuation"
+                  size="xs"
+                  value={Math.round(vl.waterAttenuation * 100)}
+                  onChange={(v) => typeof v === 'number' && updateVegetationLayer(vl.id, { waterAttenuation: Math.max(0, Math.min(1, v / 100)) })}
+                  min={0} max={100} step={5}
+                />
+              </Group>
+            </Stack>
+            </Collapse>
+          </Box>
+        ))}
+      </Stack>
+      </Collapse>
+
       <Divider />
 
       <Group
@@ -2962,429 +3385,6 @@ export function ParameterPanel(): JSX.Element {
           </Collapse>
 
         </Stack>
-      </Collapse>
-
-      {/* ─── WATER FEATURES ────────────────────────────────────── */}
-      <Divider my="xs" />
-      <Group justify="space-between" style={{ cursor: 'pointer', userSelect: 'none' }}
-        onClick={() => setWaterOpen((o) => !o)}>
-        <Text size="lg" c="dimmed">Water Features</Text>
-        <Text size="lg" c="dimmed">{waterOpen ? '▾' : '▸'}</Text>
-      </Group>
-      <Collapse in={waterOpen}>
-      <Stack gap="md" pt={4} pl="xs">
-
-        {/* Detection controls */}
-        <Group>
-          <Button size="xs" onClick={handleDetectClick}
-            loading={waterDetecting} disabled={!heightmap || waterDetecting}>
-            {waterLakes.length + waterRivers.length > 0 ? 'Re-detect' : 'Detect'}
-          </Button>
-          <Text size="xs" c="dimmed" style={{ fontStyle: 'italic' }}>
-            {waterDetecting ? 'Detecting…' : waterLakes.length + waterRivers.length > 0
-              ? `${waterLakes.length} lake${waterLakes.length !== 1 ? 's' : ''}, ${waterRivers.length} river${waterRivers.length !== 1 ? 's' : ''}`
-              : 'No features detected'}
-          </Text>
-        </Group>
-
-        {/* Detection params */}
-        <Group justify="space-between" style={{ cursor: 'pointer', userSelect: 'none' }}
-          onClick={() => setWaterDetectParamsOpen((o) => !o)}>
-          <Text size="xs" fw={500}>Detection parameters</Text>
-          <Text size="xs" c="dimmed">{waterDetectParamsOpen ? '▾' : '▸'}</Text>
-        </Group>
-        <Collapse in={waterDetectParamsOpen}>
-        <Stack gap="xs" pl="xs">
-          <NumberInput size="xs" label="Min depression depth (%)"
-            description="Minimum depth as % of elevation range"
-            value={waterDetectionParams.minDepthPct}
-            onChange={(v) => typeof v === 'number' && updateWaterDetectionParams({ minDepthPct: v })}
-            min={0.1} max={20} step={0.1} decimalScale={1} />
-          <NumberInput size="xs" label="Min lake area (pixels)"
-            value={waterDetectionParams.minAreaPx}
-            onChange={(v) => typeof v === 'number' && updateWaterDetectionParams({ minAreaPx: Math.max(1, Math.round(v)) })}
-            min={1} max={5000} step={1} />
-          <NumberInput size="xs" label="Stream accumulation (%)"
-            description="Threshold as % of map area"
-            value={waterDetectionParams.accumulationPct}
-            onChange={(v) => typeof v === 'number' && updateWaterDetectionParams({ accumulationPct: v })}
-            min={0.01} max={10} step={0.1} decimalScale={2} />
-          <NumberInput size="xs" label="Max river systems (0 = all)"
-            value={waterDetectionParams.maxRiverSystems}
-            onChange={(v) => typeof v === 'number' && updateWaterDetectionParams({ maxRiverSystems: Math.max(0, Math.round(v)) })}
-            min={0} max={50} step={1} />
-        </Stack>
-        </Collapse>
-
-        {/* ── Lakes section ── */}
-        {waterLakes.length > 0 && (
-          <>
-            <Divider label={`Lakes (${waterLakes.length})`} labelPosition="left" size="xs" />
-            <Group justify="space-between">
-              <Switch size="xs" label="Visible"
-                checked={waterLakesVisible} onChange={(e) => setWaterLakesVisible(e.target.checked)} />
-              <Button size="xs" variant="subtle" color="red"
-                onClick={() => { clearWaterFeatures(); clearSelection() }}>
-                Delete all water
-              </Button>
-            </Group>
-            <Stack gap={4}>
-              {waterLakes.map((lake, i) => (
-                <Box key={lake.id}>
-                  <Group justify="space-between"
-                    p={4} style={{
-                      backgroundColor: selectedItems.some(s => s.type === 'water-lake' && s.id === lake.id) ? '#e8f4ff' : 'transparent',
-                      borderRadius: 4, cursor: 'pointer',
-                    }}
-                    onClick={() => selectItem('water-lake', lake.id)}>
-                    <Text size="xs">Lake {i + 1} ({Math.round(lake.areaPx).toLocaleString()} px²)</Text>
-                    <Button size="compact-xs" variant="subtle" color="red"
-                      onClick={(e) => { e.stopPropagation(); removeWaterLake(lake.id) }}>×</Button>
-                  </Group>
-                  {selectedWaterLakeId === lake.id && (
-                    <Stack gap="xs" pl="sm" pt={4}>
-                      <Group grow>
-                        <ColorInput size="xs" label="Fill" value={lake.color}
-                          onChange={(v) => updateWaterLake(lake.id, { color: v })} />
-                        <NumberInput size="xs" label="Opacity %"
-                          value={Math.round(lake.opacity * 100)} min={0} max={100}
-                          onChange={(v) => typeof v === 'number' && updateWaterLake(lake.id, { opacity: v / 100 })} />
-                      </Group>
-                      <TextInput size="xs" label="Label text" value={lake.label}
-                        onChange={(e) => updateWaterLake(lake.id, { label: e.target.value })} />
-                      {lake.label && (
-                        <>
-                          <Group grow>
-                            <Select size="xs" label="Font" data={FONT_OPTIONS}
-                              value={lake.labelFontFamily}
-                              onChange={(v) => v && updateWaterLake(lake.id, { labelFontFamily: v })} />
-                            <NumberInput size="xs" label="Size" min={6} max={120}
-                              value={lake.labelFontSize}
-                              onChange={(v) => typeof v === 'number' && updateWaterLake(lake.id, { labelFontSize: v })} />
-                          </Group>
-                          <Group grow>
-                            <ColorInput size="xs" label="Label color" value={lake.labelColor}
-                              onChange={(v) => updateWaterLake(lake.id, { labelColor: v })} />
-                            <Switch size="xs" label="Bold" checked={lake.labelBold}
-                              onChange={(e) => updateWaterLake(lake.id, { labelBold: e.target.checked })} />
-                            <Switch size="xs" label="Italic" checked={lake.labelItalic}
-                              onChange={(e) => updateWaterLake(lake.id, { labelItalic: e.target.checked })} />
-                          </Group>
-                        </>
-                      )}
-                    </Stack>
-                  )}
-                </Box>
-              ))}
-            </Stack>
-          </>
-        )}
-
-        {/* ── Rivers section ── */}
-        {waterRivers.length > 0 && (
-          <>
-            <Divider label={`Rivers (${waterRivers.length})`} labelPosition="left" size="xs" />
-            <Switch size="xs" label="Visible"
-              checked={waterRiversVisible} onChange={(e) => setWaterRiversVisible(e.target.checked)} />
-            <Stack gap={4}>
-              {waterRivers.map((river) => (
-                <Box key={river.id}>
-                  <Group justify="space-between"
-                    p={4} style={{
-                      backgroundColor: selectedItems.some(s => s.type === 'water-river' && s.id === river.id) ? '#e8f4ff' : 'transparent',
-                      borderRadius: 4, cursor: 'pointer',
-                    }}
-                    onClick={() => selectItem('water-river', river.id)}>
-                    <Text size="xs">River {river.systemRank}</Text>
-                    <Button size="compact-xs" variant="subtle" color="red"
-                      onClick={(e) => { e.stopPropagation(); removeWaterRiver(river.id) }}>×</Button>
-                  </Group>
-                  {selectedWaterRiverId === river.id && (
-                    <Stack gap="xs" pl="sm" pt={4}>
-                      <Group grow>
-                        <ColorInput size="xs" label="Color" value={river.color}
-                          onChange={(v) => updateWaterRiver(river.id, { color: v })} />
-                        <NumberInput size="xs" label="Opacity %"
-                          value={Math.round(river.opacity * 100)} min={0} max={100}
-                          onChange={(v) => typeof v === 'number' && updateWaterRiver(river.id, { opacity: v / 100 })} />
-                      </Group>
-                      <NumberInput size="xs" label="Base stroke width"
-                        value={river.strokeWidth} min={0.5} max={20} step={0.5} decimalScale={1}
-                        onChange={(v) => typeof v === 'number' && updateWaterRiver(river.id, { strokeWidth: v })} />
-                      <TextInput size="xs" label="Label text" value={river.label}
-                        onChange={(e) => updateWaterRiver(river.id, { label: e.target.value })} />
-                      {river.label && (
-                        <>
-                          <Group grow>
-                            <Select size="xs" label="Font" data={FONT_OPTIONS}
-                              value={river.labelFontFamily}
-                              onChange={(v) => v && updateWaterRiver(river.id, { labelFontFamily: v })} />
-                            <NumberInput size="xs" label="Size" min={6} max={120}
-                              value={river.labelFontSize}
-                              onChange={(v) => typeof v === 'number' && updateWaterRiver(river.id, { labelFontSize: v })} />
-                          </Group>
-                          <Group grow>
-                            <ColorInput size="xs" label="Label color" value={river.labelColor}
-                              onChange={(v) => updateWaterRiver(river.id, { labelColor: v })} />
-                            <Switch size="xs" label="Bold" checked={river.labelBold}
-                              onChange={(e) => updateWaterRiver(river.id, { labelBold: e.target.checked })} />
-                            <Switch size="xs" label="Italic" checked={river.labelItalic}
-                              onChange={(e) => updateWaterRiver(river.id, { labelItalic: e.target.checked })} />
-                          </Group>
-                        </>
-                      )}
-                    </Stack>
-                  )}
-                </Box>
-              ))}
-            </Stack>
-          </>
-        )}
-
-      </Stack>
-      </Collapse>
-
-      {/* Confirm re-detect modal */}
-      <Modal opened={waterConfirmOpen} onClose={() => setWaterConfirmOpen(false)}
-        title="Replace water features?" size="sm">
-        <Text size="sm">
-          This will replace {waterLakes.length} lake{waterLakes.length !== 1 ? 's' : ''} and{' '}
-          {waterRivers.length} river{waterRivers.length !== 1 ? 's' : ''} with newly detected features.
-        </Text>
-        <Group mt="md" justify="flex-end">
-          <Button variant="default" size="sm" onClick={() => setWaterConfirmOpen(false)}>Cancel</Button>
-          <Button size="sm" onClick={() => { setWaterConfirmOpen(false); void runWaterDetection() }}>Detect</Button>
-        </Group>
-      </Modal>
-
-      {/* ─── VEGETATION ────────────────────────────────────────── */}
-      <Divider my="xs" />
-      <Group justify="space-between" style={{ cursor: 'pointer', userSelect: 'none' }}
-        onClick={() => setVegetationOpen((o) => !o)}>
-        <Group gap="xs">
-          <Switch
-            checked={vegetationLayersVisible}
-            onChange={(e) => setVegetationLayersVisible(e.currentTarget.checked)}
-            onClick={(e) => e.stopPropagation()}
-            size="xs"
-          />
-          <Text size="lg" c="dimmed">Vegetation</Text>
-        </Group>
-        <Text size="lg" c="dimmed">{vegetationOpen ? '▾' : '▸'}</Text>
-      </Group>
-      <Collapse in={vegetationOpen}>
-      <Stack gap="md" pt={4} pl="xs">
-        <Group>
-          <Button
-            size="xs"
-            variant="default"
-            disabled={waterLakes.length + waterRivers.length === 0}
-            onClick={addVegetationLayer}
-          >
-            Add Layer
-          </Button>
-          {waterLakes.length + waterRivers.length === 0 && (
-            <Text size="xs" c="dimmed" style={{ fontStyle: 'italic' }}>Detect water features first</Text>
-          )}
-        </Group>
-
-        {vegetationLayers.map((vl, idx) => (
-          <Box key={vl.id} style={{ border: '1px solid var(--mantine-color-default-border)', borderRadius: 6, padding: 8 }}>
-            <Group justify="space-between" style={{ cursor: 'pointer' }}
-              onClick={() => setVegetationOpenLayers((s) => ({ ...s, [vl.id]: !s[vl.id] }))}>
-              <Group gap="xs">
-                <Switch
-                  checked={vl.visible}
-                  onChange={(e) => updateVegetationLayer(vl.id, { visible: e.currentTarget.checked })}
-                  onClick={(e) => e.stopPropagation()}
-                  size="xs"
-                />
-                <TextInput
-                  value={vl.name}
-                  onChange={(e) => updateVegetationLayer(vl.id, { name: e.currentTarget.value })}
-                  size="xs"
-                  style={{ width: 130 }}
-                  onClick={(e) => e.stopPropagation()}
-                />
-              </Group>
-              <Group gap={4}>
-                <Text size="xs" c="dimmed">{vegetationOpenLayers[vl.id] ? '▾' : '▸'}</Text>
-              </Group>
-            </Group>
-
-            <Collapse in={!!vegetationOpenLayers[vl.id]}>
-            <Stack gap="xs" pt="xs">
-              <Text size="xs" fw={500} c="dimmed">Layer {idx + 1}</Text>
-
-              {/* Generate button */}
-              <Group>
-                <Button
-                  size="xs"
-                  loading={vl.generating}
-                  disabled={!heightmap || vl.generating}
-                  onClick={() => void runVegetationGeneration(vl.id)}
-                >
-                  {vl.dataUrl ? 'Re-generate' : 'Generate'}
-                </Button>
-                <Button size="xs" variant="subtle" color="red"
-                  onClick={() => removeVegetationLayer(vl.id)}>Remove</Button>
-              </Group>
-
-              {/* Color + opacity */}
-              <Group grow>
-                <ColorInput
-                  label="Color"
-                  size="xs"
-                  value={vl.color}
-                  onChange={(v) => updateVegetationLayer(vl.id, { color: v })}
-                  swatches={['#2d6a4f','#3a7d44','#52b788','#74c69d','#1b4332','#40916c','#95d5b2']}
-                />
-                <NumberInput
-                  label="Opacity %"
-                  size="xs"
-                  value={Math.round(vl.opacity * 100)}
-                  onChange={(v) => typeof v === 'number' && updateVegetationLayer(vl.id, { opacity: Math.max(0.10, Math.min(0.70, v / 100)) })}
-                  min={10} max={70} step={5}
-                />
-              </Group>
-
-              {/* Water spread */}
-              <Group grow>
-                <NumberInput
-                  label={`Lake spread (${spreadPxToUnit ? abbr : 'px'})`}
-                  size="xs"
-                  value={vl.lakeSpread}
-                  onChange={(v) => typeof v === 'number' && updateVegetationLayer(vl.id, { lakeSpread: Math.max(0, v) })}
-                  min={0} step={spreadPxToUnit ? 10 : 5} decimalScale={0}
-                />
-                <NumberInput
-                  label={`River spread (${spreadPxToUnit ? abbr : 'px'})`}
-                  size="xs"
-                  value={vl.riverSpread}
-                  onChange={(v) => typeof v === 'number' && updateVegetationLayer(vl.id, { riverSpread: Math.max(0, v) })}
-                  min={0} step={spreadPxToUnit ? 10 : 5} decimalScale={0}
-                />
-              </Group>
-
-              {/* Texture */}
-              <Select
-                label="Texture"
-                size="xs"
-                value={vl.textureStyle}
-                onChange={(v) => v && updateVegetationLayer(vl.id, { textureStyle: v as VegetationTextureStyle })}
-                data={[
-                  { value: 'gradient', label: 'Gradient' },
-                  { value: 'organic',  label: 'Organic (fBm noise)' },
-                  { value: 'stipple',  label: 'Stipple (Bayer dither)' },
-                  { value: 'hatch',    label: 'Hatch (diagonal lines)' },
-                  { value: 'cellular', label: 'Cellular (Worley noise)' },
-                ]}
-              />
-
-              {/* Global noise */}
-              <Group grow>
-                <NumberInput
-                  label="Noisiness"
-                  size="xs"
-                  value={Math.round(vl.noisiness * 100)}
-                  onChange={(v) => typeof v === 'number' && updateVegetationLayer(vl.id, { noisiness: Math.max(0, Math.min(1, v / 100)) })}
-                  min={0} max={100} step={5}
-                />
-                <NumberInput
-                  label="Noise scale"
-                  size="xs"
-                  value={vl.noiseScale}
-                  onChange={(v) => typeof v === 'number' && updateVegetationLayer(vl.id, { noiseScale: Math.max(0.1, Math.min(5, v)) })}
-                  min={0.1} max={5} step={0.1} decimalScale={1}
-                />
-              </Group>
-
-              {/* Style-specific params */}
-              {vl.textureStyle === 'organic' && (
-                <NumberInput
-                  label="fBm octaves"
-                  size="xs"
-                  value={vl.organicOctaves}
-                  onChange={(v) => typeof v === 'number' && updateVegetationLayer(vl.id, { organicOctaves: Math.max(1, Math.min(8, Math.round(v))) })}
-                  min={1} max={8} step={1}
-                />
-              )}
-              {vl.textureStyle === 'stipple' && (
-                <NumberInput
-                  label="Stipple density"
-                  size="xs"
-                  value={Math.round(vl.stippleDensity * 100)}
-                  onChange={(v) => typeof v === 'number' && updateVegetationLayer(vl.id, { stippleDensity: Math.max(0, Math.min(1, v / 100)) })}
-                  min={0} max={100} step={5}
-                />
-              )}
-              {vl.textureStyle === 'hatch' && (
-                <Group grow>
-                  <NumberInput
-                    label="Angle (°)"
-                    size="xs"
-                    value={vl.hatchAngle}
-                    onChange={(v) => typeof v === 'number' && updateVegetationLayer(vl.id, { hatchAngle: ((v % 180) + 180) % 180 })}
-                    min={0} max={179} step={15}
-                  />
-                  <NumberInput
-                    label="Spacing (px)"
-                    size="xs"
-                    value={vl.hatchSpacing}
-                    onChange={(v) => typeof v === 'number' && updateVegetationLayer(vl.id, { hatchSpacing: Math.max(2, v) })}
-                    min={2} max={50} step={1}
-                  />
-                </Group>
-              )}
-              {vl.textureStyle === 'cellular' && (
-                <NumberInput
-                  label="Jitter"
-                  size="xs"
-                  value={Math.round(vl.cellularJitter * 100)}
-                  onChange={(v) => typeof v === 'number' && updateVegetationLayer(vl.id, { cellularJitter: Math.max(0, Math.min(1, v / 100)) })}
-                  min={0} max={100} step={5}
-                />
-              )}
-
-              {/* Elevation thinning */}
-              <Text size="xs" fw={500} c="dimmed" mt={4}>Elevation thinning</Text>
-              <Group grow>
-                <NumberInput
-                  label="Start elev %"
-                  size="xs"
-                  value={vl.elevStartPct}
-                  onChange={(v) => typeof v === 'number' && updateVegetationLayer(vl.id, { elevStartPct: Math.max(0, Math.min(99, v)) })}
-                  min={0} max={99} step={5}
-                />
-                <NumberInput
-                  label="Thin range %"
-                  size="xs"
-                  value={vl.elevThinRangePct}
-                  onChange={(v) => typeof v === 'number' && updateVegetationLayer(vl.id, { elevThinRangePct: Math.max(1, Math.min(50, v)) })}
-                  min={1} max={50} step={5}
-                />
-              </Group>
-              <Group grow>
-                <NumberInput
-                  label="Variation"
-                  size="xs"
-                  value={Math.round(vl.elevVariation * 100)}
-                  onChange={(v) => typeof v === 'number' && updateVegetationLayer(vl.id, { elevVariation: Math.max(0, Math.min(1, v / 100)) })}
-                  min={0} max={100} step={5}
-                />
-                <NumberInput
-                  label="Water attenuation"
-                  size="xs"
-                  value={Math.round(vl.waterAttenuation * 100)}
-                  onChange={(v) => typeof v === 'number' && updateVegetationLayer(vl.id, { waterAttenuation: Math.max(0, Math.min(1, v / 100)) })}
-                  min={0} max={100} step={5}
-                />
-              </Group>
-            </Stack>
-            </Collapse>
-          </Box>
-        ))}
-      </Stack>
       </Collapse>
 
       {/* ─── METADATA ──────────────────────────────────────────── */}
