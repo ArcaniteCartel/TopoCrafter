@@ -154,8 +154,9 @@ export function ParameterPanel(): JSX.Element {
   const updateRoadDefaults = useStore((s) => s.updateRoadDefaults)
   const updateRoad = useStore((s) => s.updateRoad)
   const removeRoad = useStore((s) => s.removeRoad)
-  const selectedRoadId = useStore((s) => s.selectedRoadId)
-  const setSelectedRoadId = useStore((s) => s.setSelectedRoadId)
+  const selectedItems = useStore((s) => s.selectedItems)
+  const selectItem = useStore((s) => s.selectItem)
+  const clearSelection = useStore((s) => s.clearSelection)
   const hillshadeView = useStore((s) => s.hillshadeView)
   const setHillshadeView = useStore((s) => s.setHillshadeView)
   const overlayBrightness = useStore((s) => s.overlayBrightness)
@@ -174,13 +175,16 @@ export function ParameterPanel(): JSX.Element {
   const updatePoiNewMarker = useStore((s) => s.updatePoiNewMarker)
   const updatePoi = useStore((s) => s.updatePoi)
   const removePoi = useStore((s) => s.removePoi)
-  const selectedPoiId = useStore((s) => s.selectedPoiId)
-  const setSelectedPoiId = useStore((s) => s.setSelectedPoiId)
   const curvedLabels = useStore((s) => s.curvedLabels)
   const updateCurvedLabel = useStore((s) => s.updateCurvedLabel)
   const removeCurvedLabel = useStore((s) => s.removeCurvedLabel)
-  const selectedCurvedLabelId = useStore((s) => s.selectedCurvedLabelId)
-  const setSelectedCurvedLabelId = useStore((s) => s.setSelectedCurvedLabelId)
+  // Derive single-selection helpers — editing panels only appear for single selections
+  const singleSel = selectedItems.length === 1 ? selectedItems[0] : null
+  const selectedRoadId = singleSel?.type === 'road' ? singleSel.id : null
+  const selectedPoiId = singleSel?.type === 'poi' ? singleSel.id : null
+  const selectedCurvedLabelId = singleSel?.type === 'curved-label' ? singleSel.id : null
+  const selectedWaterLakeId = singleSel?.type === 'water-lake' ? singleSel.id : null
+  const selectedWaterRiverId = singleSel?.type === 'water-river' ? singleSel.id : null
   const ppi = useStore((s) => s.ppi)
   const setPpi = useStore((s) => s.setPpi)
   const customMarkerDefs = useGlobalStore((s) => s.customMarkerDefs)
@@ -196,8 +200,6 @@ export function ParameterPanel(): JSX.Element {
   const waterRiversVisible = useStore((s) => s.waterRiversVisible)
   const waterDetectionParams = useStore((s) => s.waterDetectionParams)
   const waterDetecting = useStore((s) => s.waterDetecting)
-  const selectedWaterLakeId = useStore((s) => s.selectedWaterLakeId)
-  const selectedWaterRiverId = useStore((s) => s.selectedWaterRiverId)
   const setWaterLakes = useStore((s) => s.setWaterLakes)
   const setWaterRivers = useStore((s) => s.setWaterRivers)
   const updateWaterLake = useStore((s) => s.updateWaterLake)
@@ -206,8 +208,6 @@ export function ParameterPanel(): JSX.Element {
   const removeWaterRiver = useStore((s) => s.removeWaterRiver)
   const setWaterLakesVisible = useStore((s) => s.setWaterLakesVisible)
   const setWaterRiversVisible = useStore((s) => s.setWaterRiversVisible)
-  const setSelectedWaterLakeId = useStore((s) => s.setSelectedWaterLakeId)
-  const setSelectedWaterRiverId = useStore((s) => s.setSelectedWaterRiverId)
   const updateWaterDetectionParams = useStore((s) => s.updateWaterDetectionParams)
   const setWaterDetecting = useStore((s) => s.setWaterDetecting)
   const clearWaterFeatures = useStore((s) => s.clearWaterFeatures)
@@ -419,8 +419,7 @@ export function ParameterPanel(): JSX.Element {
       )
       setWaterLakes(result.lakes)
       setWaterRivers(result.rivers)
-      setSelectedWaterLakeId(null)
-      setSelectedWaterRiverId(null)
+      clearSelection()
     } finally {
       setWaterDetecting(false)
     }
@@ -1288,7 +1287,7 @@ export function ParameterPanel(): JSX.Element {
                     </Collapse>
 
                     <Button size="xs" color="red" variant="light"
-                      onClick={() => { removePoi(sel.id); setSelectedPoiId(null) }}>
+                      onClick={() => { removePoi(sel.id); clearSelection() }}>
                       Delete marker
                     </Button>
                   </Stack>
@@ -1634,7 +1633,7 @@ export function ParameterPanel(): JSX.Element {
                     onChange={(v) => { const n = Number(v); if (n >= 0 && n <= 100) updateCurvedLabel(sel.id, { zOrder: n }) }} />
 
                   <Button size="xs" color="red" variant="light"
-                    onClick={() => { removeCurvedLabel(sel.id); setSelectedCurvedLabelId(null) }}>
+                    onClick={() => { removeCurvedLabel(sel.id); clearSelection() }}>
                     Delete label
                   </Button>
                 </Stack>
@@ -1778,7 +1777,7 @@ export function ParameterPanel(): JSX.Element {
                   variant="light"
                   onClick={() => {
                     removeRoad(selectedRoadId)
-                    setSelectedRoadId(null)
+                    clearSelection()
                   }}
                 >
                   Delete selected road
@@ -3025,7 +3024,7 @@ export function ParameterPanel(): JSX.Element {
               <Switch size="xs" label="Visible"
                 checked={waterLakesVisible} onChange={(e) => setWaterLakesVisible(e.target.checked)} />
               <Button size="xs" variant="subtle" color="red"
-                onClick={() => { clearWaterFeatures(); setSelectedWaterLakeId(null) }}>
+                onClick={() => { clearWaterFeatures(); clearSelection() }}>
                 Delete all water
               </Button>
             </Group>
@@ -3034,15 +3033,15 @@ export function ParameterPanel(): JSX.Element {
                 <Box key={lake.id}>
                   <Group justify="space-between"
                     p={4} style={{
-                      backgroundColor: lake.id === selectedWaterLakeId ? '#e8f4ff' : 'transparent',
+                      backgroundColor: selectedItems.some(s => s.type === 'water-lake' && s.id === lake.id) ? '#e8f4ff' : 'transparent',
                       borderRadius: 4, cursor: 'pointer',
                     }}
-                    onClick={() => setSelectedWaterLakeId(lake.id === selectedWaterLakeId ? null : lake.id)}>
+                    onClick={() => selectItem('water-lake', lake.id)}>
                     <Text size="xs">Lake {i + 1} ({Math.round(lake.areaPx).toLocaleString()} px²)</Text>
                     <Button size="compact-xs" variant="subtle" color="red"
                       onClick={(e) => { e.stopPropagation(); removeWaterLake(lake.id) }}>×</Button>
                   </Group>
-                  {lake.id === selectedWaterLakeId && (
+                  {selectedWaterLakeId === lake.id && (
                     <Stack gap="xs" pl="sm" pt={4}>
                       <Group grow>
                         <ColorInput size="xs" label="Fill" value={lake.color}
@@ -3092,15 +3091,15 @@ export function ParameterPanel(): JSX.Element {
                 <Box key={river.id}>
                   <Group justify="space-between"
                     p={4} style={{
-                      backgroundColor: river.id === selectedWaterRiverId ? '#e8f4ff' : 'transparent',
+                      backgroundColor: selectedItems.some(s => s.type === 'water-river' && s.id === river.id) ? '#e8f4ff' : 'transparent',
                       borderRadius: 4, cursor: 'pointer',
                     }}
-                    onClick={() => setSelectedWaterRiverId(river.id === selectedWaterRiverId ? null : river.id)}>
+                    onClick={() => selectItem('water-river', river.id)}>
                     <Text size="xs">River {river.systemRank}</Text>
                     <Button size="compact-xs" variant="subtle" color="red"
                       onClick={(e) => { e.stopPropagation(); removeWaterRiver(river.id) }}>×</Button>
                   </Group>
-                  {river.id === selectedWaterRiverId && (
+                  {selectedWaterRiverId === river.id && (
                     <Stack gap="xs" pl="sm" pt={4}>
                       <Group grow>
                         <ColorInput size="xs" label="Color" value={river.color}

@@ -1,10 +1,10 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { Center, Text, Stack, Loader, Overlay } from '@mantine/core'
+import { Center, Text, Stack, Loader, Overlay, Modal, Button, Group } from '@mantine/core'
 import type { ContourMultiPolygon } from 'd3-contour'
 import { useStore } from '../../store/useStore'
 import { generateContours, contourToSvgPath } from '../../utils/contour'
 import type { ContourSet } from '../../utils/contour'
-import type { ElevationFlag, SlopeArrow, RuggednessFlag, SwampMarker, Road, BuildingEntry, BuildingShape, PoiEntry, PoiNewMarkerState, CustomMarkerDef, MarkerPrimitiveId, BuiltinMarkerTypeId, FrameConfig, CompassConfig, LegendConfig, ContourStyle, FramePosition, MeasureBarConfig, ElevationCalibration, HeightmapInfo, GridConfig, CurvedLabel } from '../../types'
+import type { ElevationFlag, SlopeArrow, RuggednessFlag, SwampMarker, Road, BuildingEntry, BuildingShape, PoiEntry, PoiNewMarkerState, CustomMarkerDef, MarkerPrimitiveId, BuiltinMarkerTypeId, FrameConfig, CompassConfig, LegendConfig, ContourStyle, FramePosition, MeasureBarConfig, ElevationCalibration, HeightmapInfo, GridConfig, CurvedLabel, SelectableItemType } from '../../types'
 import { defaultCurvedLabelStyle, calToMeters, niceBarDistance } from '../../types'
 import { BUILTIN_MARKER_SPECS } from '../../types'
 import { useGlobalStore } from '../../store/useGlobalStore'
@@ -219,8 +219,7 @@ interface ContourState {
   maxElevation: number
 }
 
-type SelectedItem = { type: 'flag' | 'slope-arrow' | 'ruggedness-flag' | 'swamp-marker' | 'road' | 'building' | 'poi'; id: string }
-type DragRef = { type: 'flag' | 'slope-arrow' | 'ruggedness-flag' | 'swamp-marker' | 'building' | 'poi'; itemId: string; startX: number; startY: number; moved: boolean }
+type DragRef = { type: 'elevation-flag' | 'slope-arrow' | 'ruggedness-flag' | 'swamp-marker' | 'building' | 'poi'; itemId: string; startX: number; startY: number; moved: boolean }
 type DragPos = { x: number; y: number; elevation?: number; angleDeg?: number; slopeDeg?: number; triNorm?: number }
 
 // ---------------------------------------------------------------------------
@@ -1349,8 +1348,11 @@ export function MapCanvas(): JSX.Element {
   const removeRoad = useStore((s) => s.removeRoad)
   const roadsVisible = useStore((s) => s.roadsVisible)
   const roadDefaults = useStore((s) => s.roadDefaults)
-  const selectedRoadId = useStore((s) => s.selectedRoadId)
-  const setSelectedRoadId = useStore((s) => s.setSelectedRoadId)
+  const selectedItems = useStore((s) => s.selectedItems)
+  const selectItem = useStore((s) => s.selectItem)
+  const shiftSelectItem = useStore((s) => s.shiftSelectItem)
+  const clearSelection = useStore((s) => s.clearSelection)
+  const deleteSelected = useStore((s) => s.deleteSelected)
   const buildings = useStore((s) => s.buildings)
   const addBuilding = useStore((s) => s.addBuilding)
   const updateBuilding = useStore((s) => s.updateBuilding)
@@ -1363,14 +1365,10 @@ export function MapCanvas(): JSX.Element {
   const removePoi = useStore((s) => s.removePoi)
   const poisVisible = useStore((s) => s.poisVisible)
   const poiNewMarker = useStore((s) => s.poiNewMarker)
-  const selectedPoiId = useStore((s) => s.selectedPoiId)
-  const setSelectedPoiId = useStore((s) => s.setSelectedPoiId)
   const curvedLabels = useStore((s) => s.curvedLabels)
   const addCurvedLabel = useStore((s) => s.addCurvedLabel)
   const updateCurvedLabel = useStore((s) => s.updateCurvedLabel)
   const removeCurvedLabel = useStore((s) => s.removeCurvedLabel)
-  const selectedCurvedLabelId = useStore((s) => s.selectedCurvedLabelId)
-  const setSelectedCurvedLabelId = useStore((s) => s.setSelectedCurvedLabelId)
   const customMarkerDefs = useGlobalStore((s) => s.customMarkerDefs)
   const elevationFlagDefaults = useStore((s) => s.elevationFlagDefaults)
   const slopeArrowDefaults = useStore((s) => s.slopeArrowDefaults)
@@ -1411,16 +1409,19 @@ export function MapCanvas(): JSX.Element {
 
   const [contourState, setContourState] = useState<ContourState | null>(null)
 
-  // Unified selection and drag state for all annotation tools
-  const [selectedItem, setSelectedItem] = useState<SelectedItem | null>(null)
+  const [confirmMultiDeleteOpen, setConfirmMultiDeleteOpen] = useState(false)
+
+  // Drag state for annotation tools
   const [dragPos, setDragPos] = useState<DragPos | null>(null)
   const [hoverPos, setHoverPos] = useState<DragPos | null>(null)
   const dragRef = useRef<DragRef | null>(null)
   const flagSvgRef = useRef<SVGSVGElement>(null)
-  const selectedItemRef = useRef<SelectedItem | null>(null)
-  selectedItemRef.current = selectedItem
-  const selectedCurvedLabelIdRef = useRef<string | null>(selectedCurvedLabelId)
-  selectedCurvedLabelIdRef.current = selectedCurvedLabelId
+  const selectedItemsRef = useRef(selectedItems)
+  selectedItemsRef.current = selectedItems
+  // Derived single-item refs for key handlers
+  const singleCurvedLabelId = selectedItems.length === 1 && selectedItems[0].type === 'curved-label' ? selectedItems[0].id : null
+  const singleCurvedLabelIdRef = useRef<string | null>(singleCurvedLabelId)
+  singleCurvedLabelIdRef.current = singleCurvedLabelId
 
   // Road drawing state
   const [inProgressPts, setInProgressPts] = useState<{ x: number; y: number }[]>([])
@@ -1547,9 +1548,13 @@ export function MapCanvas(): JSX.Element {
     return { angleDeg, slopeDeg }
   }, [])
 
-  // Escape cancels the active tool; Delete removes the selected annotation
+  // Escape cancels active tool / clears selection; Delete removes selected items
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
+      // Don't intercept Delete while user is typing
+      const active = document.activeElement
+      const isTyping = active instanceof HTMLInputElement || active instanceof HTMLTextAreaElement
+
       if (e.key === 'Escape') {
         if (mapTool === 'road' && inProgressPtsRef.current.length > 0) {
           setInProgressPts([])
@@ -1562,9 +1567,7 @@ export function MapCanvas(): JSX.Element {
           return
         }
         setMapTool('none')
-        setSelectedItem(null)
-        setSelectedPoiId(null)
-        setSelectedCurvedLabelId(null)
+        clearSelection()
         dragRef.current = null
         setDragPos(null)
         setHoverPos(null)
@@ -1577,34 +1580,28 @@ export function MapCanvas(): JSX.Element {
         commitLabel(inProgressLabelPtsRef.current)
         return
       }
-      if (e.key === 'Tab' && selectedCurvedLabelIdRef.current && inProgressLabelPtsRef.current.length === 0) {
+      if (e.key === 'Tab' && singleCurvedLabelIdRef.current && inProgressLabelPtsRef.current.length === 0) {
         e.preventDefault()
         const labels = curvedLabelsRef.current
-        const idx = labels.findIndex(l => l.id === selectedCurvedLabelIdRef.current)
+        const idx = labels.findIndex(l => l.id === singleCurvedLabelIdRef.current)
         const next = labels[idx + 1]
-        setSelectedCurvedLabelId(next?.id ?? null)
+        if (next) selectItem('curved-label', next.id)
+        else clearSelection()
         return
       }
-      if (e.key === 'Delete' && selectedItemRef.current) {
-        const { type, id } = selectedItemRef.current
-        if (type === 'flag') removeElevationFlag(id)
-        else if (type === 'slope-arrow') removeSlopeArrow(id)
-        else if (type === 'ruggedness-flag') removeRuggednessFlag(id)
-        else if (type === 'swamp-marker') removeSwampMarker(id)
-        else if (type === 'road') { removeRoad(id); setSelectedRoadId(null) }
-        else if (type === 'building') removeBuilding(id)
-        else if (type === 'poi') removePoi(id)
-        setSelectedItem(null)
-        setSelectedPoiId(null)
-      }
-      if (e.key === 'Delete' && selectedCurvedLabelIdRef.current) {
-        removeCurvedLabel(selectedCurvedLabelIdRef.current)
-        setSelectedCurvedLabelId(null)
+      if (e.key === 'Delete' && !isTyping) {
+        const items = selectedItemsRef.current
+        if (items.length === 0) return
+        if (items.length === 1) {
+          deleteSelected()
+        } else {
+          setConfirmMultiDeleteOpen(true)
+        }
       }
     }
     document.addEventListener('keydown', handleKeyDown)
     return () => document.removeEventListener('keydown', handleKeyDown)
-  }, [mapTool, setMapTool, removeElevationFlag, removeSlopeArrow, removeRuggednessFlag, removeSwampMarker, removeRoad, setSelectedRoadId, removeBuilding])
+  }, [mapTool, setMapTool, clearSelection, selectItem, deleteSelected])
 
   // Document-level drag handlers so drag works even when cursor leaves the SVG
   useEffect(() => {
@@ -1618,7 +1615,7 @@ export function MapCanvas(): JSX.Element {
         dragRef.current.moved = true
       }
       if (!dragRef.current.moved) return
-      if (dragRef.current.type === 'flag') {
+      if (dragRef.current.type === 'elevation-flag') {
         const elevation = computeElevationAt(pt.x, pt.y)
         setDragPos({ x: pt.x, y: pt.y, elevation: elevation ?? 0 })
       } else if (dragRef.current.type === 'slope-arrow') {
@@ -1637,7 +1634,7 @@ export function MapCanvas(): JSX.Element {
       if (moved) {
         const pt = getSvgPoint(e.clientX, e.clientY)
         if (pt) {
-          if (type === 'flag') {
+          if (type === 'elevation-flag') {
             const elev = computeElevationAt(pt.x, pt.y) ?? 0
             updateElevationFlag(itemId, { x: pt.x, y: pt.y, elevation: elev })
           } else if (type === 'slope-arrow') {
@@ -1655,8 +1652,9 @@ export function MapCanvas(): JSX.Element {
           }
         }
       } else {
-        setSelectedItem({ type, id: itemId })
-        setSelectedPoiId(type === 'poi' ? itemId : null)
+        // click (no drag) — select the item
+        if (e.shiftKey) shiftSelectItem(type as SelectableItemType, itemId)
+        else selectItem(type as SelectableItemType, itemId)
       }
       dragRef.current = null
       setDragPos(null)
@@ -1667,7 +1665,7 @@ export function MapCanvas(): JSX.Element {
       document.removeEventListener('mousemove', onMove)
       document.removeEventListener('mouseup', onUp)
     }
-  }, [getSvgPoint, computeElevationAt, computeSlopeAt, computeTriAt, updateElevationFlag, updateSlopeArrow, updateRuggednessFlag, updateSwampMarker, updateBuilding, updatePoi, setSelectedPoiId])
+  }, [getSvgPoint, computeElevationAt, computeSlopeAt, computeTriAt, updateElevationFlag, updateSlopeArrow, updateRuggednessFlag, updateSwampMarker, updateBuilding, updatePoi, selectItem, shiftSelectItem])
 
   // Road anchor point drag — document-level so drag continues outside SVG
   useEffect(() => {
@@ -1759,7 +1757,7 @@ export function MapCanvas(): JSX.Element {
     if (pts.length < 2) { setInProgressLabelPts([]); setLabelHoverPt(null); return }
     const id = crypto.randomUUID()
     addCurvedLabel({ id, points: pts, ...defaultCurvedLabelStyle })
-    setSelectedCurvedLabelId(id)
+    selectItem('curved-label', id)
     setMapTool('none')
     setInProgressLabelPts([])
     setLabelHoverPt(null)
@@ -1807,7 +1805,7 @@ export function MapCanvas(): JSX.Element {
     setRoadHoverPt(null)
   }
 
-  function handleItemMouseDown(e: React.MouseEvent, type: 'flag' | 'slope-arrow' | 'ruggedness-flag' | 'swamp-marker' | 'building' | 'poi', itemId: string) {
+  function handleItemMouseDown(e: React.MouseEvent, type: DragRef['type'], itemId: string) {
     e.stopPropagation()
     const pt = getSvgPoint(e.clientX, e.clientY)
     if (!pt) return
@@ -1855,9 +1853,7 @@ export function MapCanvas(): JSX.Element {
       setInProgressLabelPts(prev => [...prev, { x: pt.x, y: pt.y }])
       return
     }
-    setSelectedItem(null)
-    setSelectedPoiId(null)
-    setSelectedCurvedLabelId(null)
+    clearSelection()
   }
 
   // Fires for background mouseup — drag/select is handled by the document listener
@@ -1941,10 +1937,6 @@ export function MapCanvas(): JSX.Element {
   const waterRivers = useStore((s) => s.waterRivers)
   const waterLakesVisible = useStore((s) => s.waterLakesVisible)
   const waterRiversVisible = useStore((s) => s.waterRiversVisible)
-  const selectedWaterLakeId = useStore((s) => s.selectedWaterLakeId)
-  const selectedWaterRiverId = useStore((s) => s.selectedWaterRiverId)
-  const setSelectedWaterLakeId = useStore((s) => s.setSelectedWaterLakeId)
-  const setSelectedWaterRiverId = useStore((s) => s.setSelectedWaterRiverId)
   const vegetationLayers = useStore((s) => s.vegetationLayers)
   const vegetationLayersVisible = useStore((s) => s.vegetationLayersVisible)
 
@@ -2191,21 +2183,23 @@ export function MapCanvas(): JSX.Element {
           {curvedLabels.filter(l => l.zOrder < 25).sort((a, b) => a.zOrder - b.zOrder).map(label => {
             const pts = label.flip ? [...label.points].reverse() : label.points
             const pathD = catmullRomPath(pts, false)
-            const isSelected = label.id === selectedCurvedLabelId
+            const isSelected = selectedItems.some(s => s.type === 'curved-label' && s.id === label.id)
             const hitW = Math.max(label.fontSize * 1.5, 20)
             return (
               <g key={label.id} opacity={label.opacity}>
                 <defs><path id={`cl-path-${label.id}`} d={pathD} /></defs>
                 <path d={pathD} stroke="transparent" strokeWidth={hitW} fill="none"
                   style={{ cursor: mapTool === 'curved-label' ? 'crosshair' : 'pointer' }}
-                  onClick={(e) => { if (mapTool === 'curved-label') return; e.stopPropagation(); setSelectedCurvedLabelId(label.id) }} />
+                  onMouseDown={(e) => { if (mapTool !== 'curved-label') e.stopPropagation() }}
+                  onClick={(e) => { if (mapTool === 'curved-label') return; e.stopPropagation(); if (e.shiftKey) shiftSelectItem('curved-label', label.id); else selectItem('curved-label', label.id) }} />
                 <text fontFamily={label.fontFamily} fontSize={label.fontSize}
                   fontWeight={label.bold ? 'bold' : 'normal'} fontStyle={label.italic ? 'italic' : 'normal'}
                   fill={label.color} stroke={label.strokeWidth > 0 ? label.strokeColor : 'none'}
                   strokeWidth={label.strokeWidth} paintOrder="stroke fill"
                   dominantBaseline={(label.side === 'right') !== label.flip ? 'hanging' : undefined}
                   style={{ cursor: mapTool === 'curved-label' ? 'crosshair' : 'pointer' }}
-                  onClick={(e) => { if (mapTool === 'curved-label') return; e.stopPropagation(); setSelectedCurvedLabelId(label.id) }}>
+                  onMouseDown={(e) => { if (mapTool !== 'curved-label') e.stopPropagation() }}
+                  onClick={(e) => { if (mapTool === 'curved-label') return; e.stopPropagation(); if (e.shiftKey) shiftSelectItem('curved-label', label.id); else selectItem('curved-label', label.id) }}>
                   <textPath href={`#cl-path-${label.id}`} startOffset={`${label.startOffset}%`} textAnchor="middle"
                     >{label.text}</textPath>
                 </text>
@@ -2274,21 +2268,23 @@ export function MapCanvas(): JSX.Element {
           {curvedLabels.filter(l => l.zOrder >= 25 && l.zOrder < 50).sort((a, b) => a.zOrder - b.zOrder).map(label => {
             const pts = label.flip ? [...label.points].reverse() : label.points
             const pathD = catmullRomPath(pts, false)
-            const isSelected = label.id === selectedCurvedLabelId
+            const isSelected = selectedItems.some(s => s.type === 'curved-label' && s.id === label.id)
             const hitW = Math.max(label.fontSize * 1.5, 20)
             return (
               <g key={label.id} opacity={label.opacity}>
                 <defs><path id={`cl-path-${label.id}`} d={pathD} /></defs>
                 <path d={pathD} stroke="transparent" strokeWidth={hitW} fill="none"
                   style={{ cursor: mapTool === 'curved-label' ? 'crosshair' : 'pointer' }}
-                  onClick={(e) => { if (mapTool === 'curved-label') return; e.stopPropagation(); setSelectedCurvedLabelId(label.id) }} />
+                  onMouseDown={(e) => { if (mapTool !== 'curved-label') e.stopPropagation() }}
+                  onClick={(e) => { if (mapTool === 'curved-label') return; e.stopPropagation(); if (e.shiftKey) shiftSelectItem('curved-label', label.id); else selectItem('curved-label', label.id) }} />
                 <text fontFamily={label.fontFamily} fontSize={label.fontSize}
                   fontWeight={label.bold ? 'bold' : 'normal'} fontStyle={label.italic ? 'italic' : 'normal'}
                   fill={label.color} stroke={label.strokeWidth > 0 ? label.strokeColor : 'none'}
                   strokeWidth={label.strokeWidth} paintOrder="stroke fill"
                   dominantBaseline={(label.side === 'right') !== label.flip ? 'hanging' : undefined}
                   style={{ cursor: mapTool === 'curved-label' ? 'crosshair' : 'pointer' }}
-                  onClick={(e) => { if (mapTool === 'curved-label') return; e.stopPropagation(); setSelectedCurvedLabelId(label.id) }}>
+                  onMouseDown={(e) => { if (mapTool !== 'curved-label') e.stopPropagation() }}
+                  onClick={(e) => { if (mapTool === 'curved-label') return; e.stopPropagation(); if (e.shiftKey) shiftSelectItem('curved-label', label.id); else selectItem('curved-label', label.id) }}>
                   <textPath href={`#cl-path-${label.id}`} startOffset={`${label.startOffset}%`} textAnchor="middle"
                     >{label.text}</textPath>
                 </text>
@@ -2304,7 +2300,7 @@ export function MapCanvas(): JSX.Element {
           {/* ── Water: lakes ──────────────────────────────────────────── */}
           {waterLakesVisible && waterLakes.map((lake) => {
             if (lake.polygon.length < 3) return null
-            const isSelected = lake.id === selectedWaterLakeId
+            const isSelected = selectedItems.some(s => s.type === 'water-lake' && s.id === lake.id)
             const d = 'M ' + lake.polygon.map((p) => `${p.x},${p.y}`).join(' L ') + ' Z'
             // Centroid for locator pin
             const cx = lake.polygon.reduce((s, p) => s + p.x, 0) / lake.polygon.length
@@ -2314,7 +2310,8 @@ export function MapCanvas(): JSX.Element {
               <g key={lake.id}>
                 <path d={d} fill={lake.color} fillOpacity={lake.opacity} stroke="none"
                   style={{ cursor: 'pointer' }}
-                  onClick={(e) => { e.stopPropagation(); setSelectedWaterLakeId(lake.id === selectedWaterLakeId ? null : lake.id) }} />
+                  onMouseDown={(e) => e.stopPropagation()}
+                  onClick={(e) => { e.stopPropagation(); if (e.shiftKey) shiftSelectItem('water-lake', lake.id); else selectItem('water-lake', lake.id) }} />
                 {isSelected && <>
                   {/* Glow outline */}
                   <path d={d} fill="none" stroke="white" strokeWidth={svgPinScale * 6}
@@ -2357,7 +2354,7 @@ export function MapCanvas(): JSX.Element {
 
           {/* ── Water: rivers ─────────────────────────────────────────── */}
           {waterRiversVisible && waterRivers.map((river) => {
-            const isSelected = river.id === selectedWaterRiverId
+            const isSelected = selectedItems.some(s => s.type === 'water-river' && s.id === river.id)
             const maxOrd = river.segments.reduce((m, s) => Math.max(m, s.strahlerOrder), 1)
             const ph = svgPinScale * 28, phw = svgPinScale * 12, psw = svgPinScale * 1.5
             // Collect locator points: start, 1–2 middle, end
@@ -2378,11 +2375,19 @@ export function MapCanvas(): JSX.Element {
                   if (seg.points.length < 2) return null
                   const d = 'M ' + seg.points.map((p) => `${p.x},${p.y}`).join(' L ')
                   const w = river.strokeWidth * Math.min(seg.strahlerOrder, 4) / Math.max(maxOrd, 4)
+                  const visW = Math.max(w, 0.5)
                   return (
-                    <path key={si} d={d} fill="none" stroke={river.color}
-                      strokeWidth={Math.max(w, 0.5)} strokeLinecap="round" strokeLinejoin="round"
-                      style={{ cursor: 'pointer' }}
-                      onClick={(e) => { e.stopPropagation(); setSelectedWaterRiverId(river.id === selectedWaterRiverId ? null : river.id) }} />
+                    <g key={si}>
+                      {/* Wide transparent hit area so thin streams are easy to click */}
+                      <path d={d} fill="none" stroke="transparent"
+                        strokeWidth={Math.max(visW + 8, 10)} strokeLinecap="round"
+                        style={{ cursor: 'pointer' }}
+                        onMouseDown={(e) => e.stopPropagation()}
+                        onClick={(e) => { e.stopPropagation(); if (e.shiftKey) shiftSelectItem('water-river', river.id); else selectItem('water-river', river.id) }} />
+                      <path d={d} fill="none" stroke={river.color}
+                        strokeWidth={visW} strokeLinecap="round" strokeLinejoin="round"
+                        style={{ pointerEvents: 'none' }} />
+                    </g>
                   )
                 })}
                 {isSelected && <>
@@ -2488,20 +2493,21 @@ export function MapCanvas(): JSX.Element {
               : road.type === 'trail'
               ? `${sw} ${sw * 2} ${sw * 5} ${sw * 2}`
               : undefined
-            const isSelected = selectedItem?.type === 'road' && selectedItem.id === road.id
+            const isSelected = selectedItems.some(s => s.type === 'road' && s.id === road.id)
             const centerPath = catmullRomPath(road.points, road.closed)
             return (
               <g key={road.id}
                 mask={roads.length > 1 ? `url(#road-mask-${road.id})` : undefined}
                 opacity={road.opacity}>
                 {/* Hit area (transparent wide stroke for click detection) */}
-                <path d={centerPath} stroke="transparent" strokeWidth={tw + sw * 4} fill="none"
+                <path d={centerPath} stroke="transparent" strokeWidth={Math.max(tw + sw * 4, 10)} fill="none"
                   style={{ cursor: mapTool === 'road' ? 'crosshair' : 'pointer' }}
+                  onMouseDown={(e) => { if (mapTool !== 'road') e.stopPropagation() }}
                   onClick={(e) => {
                     if (mapTool === 'road') return
                     e.stopPropagation()
-                    setSelectedRoadId(road.id)
-                    setSelectedItem({ type: 'road', id: road.id })
+                    if (e.shiftKey) shiftSelectItem('road', road.id)
+                    else selectItem('road', road.id)
                   }} />
                 {isSingleLine ? (
                   <path d={centerPath} stroke={road.color} strokeWidth={sw} fill="none"
@@ -2541,11 +2547,11 @@ export function MapCanvas(): JSX.Element {
 
           {/* Elevation flags */}
           {elevationFlagsVisible && elevationFlags.map((flag) => {
-            const isDragging = dragPos !== null && dragRef.current?.itemId === flag.id && dragRef.current.type === 'flag'
+            const isDragging = dragPos !== null && dragRef.current?.itemId === flag.id && dragRef.current.type === 'elevation-flag'
             const fx = isDragging ? dragPos!.x : flag.x
             const fy = isDragging ? dragPos!.y : flag.y
             const displayElev = isDragging ? (dragPos!.elevation ?? flag.elevation) : flag.elevation
-            const isSelected = selectedItem?.type === 'flag' && selectedItem.id === flag.id
+            const isSelected = selectedItems.some(s => s.type === 'elevation-flag' && s.id === flag.id)
             const s = labelFontSize
             const flagColor = isSelected ? style.majorColor : style.labelColor
             const strokeW = bw(isSelected ? 2 : 1.5, flag.boldness)
@@ -2554,7 +2560,7 @@ export function MapCanvas(): JSX.Element {
               <g
                 key={flag.id}
                 opacity={flag.opacity ?? 1}
-                onMouseDown={(e) => handleItemMouseDown(e, 'flag', flag.id)}
+                onMouseDown={(e) => handleItemMouseDown(e, 'elevation-flag', flag.id)}
                 style={{ cursor: isSelected ? 'grab' : 'pointer' }}
               >
                 <line
@@ -2599,7 +2605,7 @@ export function MapCanvas(): JSX.Element {
             const fy = isDragging ? dragPos!.y : arrow.y
             const displayAngle = isDragging ? (dragPos!.angleDeg ?? arrow.angleDeg) : arrow.angleDeg
             const displaySlope = isDragging ? (dragPos!.slopeDeg ?? arrow.slopeDeg) : arrow.slopeDeg
-            const isSelected = selectedItem?.type === 'slope-arrow' && selectedItem.id === arrow.id
+            const isSelected = selectedItems.some(s => s.type === 'slope-arrow' && s.id === arrow.id)
             const s = labelFontSize
             const arrowColor = isSelected ? style.majorColor : style.labelColor
             const strokeW = bw(isSelected ? 2 : 1.5, arrow.boldness)
@@ -2675,7 +2681,7 @@ export function MapCanvas(): JSX.Element {
             const fx = isDragging ? dragPos!.x : flag.x
             const fy = isDragging ? dragPos!.y : flag.y
             const displayTri = isDragging ? (dragPos!.triNorm ?? flag.triNorm) : flag.triNorm
-            const isSelected = selectedItem?.type === 'ruggedness-flag' && selectedItem.id === flag.id
+            const isSelected = selectedItems.some(s => s.type === 'ruggedness-flag' && s.id === flag.id)
             const s = labelFontSize
             const severity = getTriSeverity(displayTri)
             const flagColor = ruggednessColorBySeverity ? (ruggednessSeverityColors[severity] ?? TRI_COLORS[severity]) : style.labelColor
@@ -2721,7 +2727,7 @@ export function MapCanvas(): JSX.Element {
             const isDragging = dragPos !== null && dragRef.current?.itemId === marker.id && dragRef.current.type === 'swamp-marker'
             const fx = isDragging ? dragPos!.x : marker.x
             const fy = isDragging ? dragPos!.y : marker.y
-            const isSelected = selectedItem?.type === 'swamp-marker' && selectedItem.id === marker.id
+            const isSelected = selectedItems.some(s => s.type === 'swamp-marker' && s.id === marker.id)
             const s = labelFontSize * marker.sizeFactor
             const strokeW = bw(isSelected ? 2 : 1.5, marker.boldness)
             const color = marker.color
@@ -2754,7 +2760,7 @@ export function MapCanvas(): JSX.Element {
             const isDragging = dragPos !== null && dragRef.current?.itemId === building.id && dragRef.current.type === 'building'
             const fx = isDragging ? dragPos!.x : building.x
             const fy = isDragging ? dragPos!.y : building.y
-            const isSelected = selectedItem?.type === 'building' && selectedItem.id === building.id
+            const isSelected = selectedItems.some(s => s.type === 'building' && s.id === building.id)
             const pw = building.widthM * pixelsPerMeter
             const pd = building.depthM * pixelsPerMeter
             const d = buildingPath(building.shape, fx, fy, pw, pd)
@@ -2785,7 +2791,7 @@ export function MapCanvas(): JSX.Element {
             const isDragging = dragPos !== null && dragRef.current?.itemId === poi.id && dragRef.current.type === 'poi'
             const fx = isDragging ? dragPos!.x : poi.x
             const fy = isDragging ? dragPos!.y : poi.y
-            const isSelected = selectedPoiId === poi.id
+            const isSelected = selectedItems.some(s => s.type === 'poi' && s.id === poi.id)
             const displayPoi: PoiEntry = { ...poi, x: fx, y: fy }
             const labelSizePx = (poi.labelSizeM ?? 8) * pixelsPerMeter
             const symbolRadius = poi.typeId === 'bridge'
@@ -2829,21 +2835,23 @@ export function MapCanvas(): JSX.Element {
           {curvedLabels.filter(l => l.zOrder >= 50 && l.zOrder < 75).sort((a, b) => a.zOrder - b.zOrder).map(label => {
             const pts = label.flip ? [...label.points].reverse() : label.points
             const pathD = catmullRomPath(pts, false)
-            const isSelected = label.id === selectedCurvedLabelId
+            const isSelected = selectedItems.some(s => s.type === 'curved-label' && s.id === label.id)
             const hitW = Math.max(label.fontSize * 1.5, 20)
             return (
               <g key={label.id} opacity={label.opacity}>
                 <defs><path id={`cl-path-${label.id}`} d={pathD} /></defs>
                 <path d={pathD} stroke="transparent" strokeWidth={hitW} fill="none"
                   style={{ cursor: mapTool === 'curved-label' ? 'crosshair' : 'pointer' }}
-                  onClick={(e) => { if (mapTool === 'curved-label') return; e.stopPropagation(); setSelectedCurvedLabelId(label.id) }} />
+                  onMouseDown={(e) => { if (mapTool !== 'curved-label') e.stopPropagation() }}
+                  onClick={(e) => { if (mapTool === 'curved-label') return; e.stopPropagation(); if (e.shiftKey) shiftSelectItem('curved-label', label.id); else selectItem('curved-label', label.id) }} />
                 <text fontFamily={label.fontFamily} fontSize={label.fontSize}
                   fontWeight={label.bold ? 'bold' : 'normal'} fontStyle={label.italic ? 'italic' : 'normal'}
                   fill={label.color} stroke={label.strokeWidth > 0 ? label.strokeColor : 'none'}
                   strokeWidth={label.strokeWidth} paintOrder="stroke fill"
                   dominantBaseline={(label.side === 'right') !== label.flip ? 'hanging' : undefined}
                   style={{ cursor: mapTool === 'curved-label' ? 'crosshair' : 'pointer' }}
-                  onClick={(e) => { if (mapTool === 'curved-label') return; e.stopPropagation(); setSelectedCurvedLabelId(label.id) }}>
+                  onMouseDown={(e) => { if (mapTool !== 'curved-label') e.stopPropagation() }}
+                  onClick={(e) => { if (mapTool === 'curved-label') return; e.stopPropagation(); if (e.shiftKey) shiftSelectItem('curved-label', label.id); else selectItem('curved-label', label.id) }}>
                   <textPath href={`#cl-path-${label.id}`} startOffset={`${label.startOffset}%`} textAnchor="middle"
                     >{label.text}</textPath>
                 </text>
@@ -3146,26 +3154,28 @@ export function MapCanvas(): JSX.Element {
             position: 'absolute', top: 0, left: 0, width: '100%', height: '100%',
             pointerEvents: mapTool === 'curved-label' ? 'none' : 'auto',
           }}
-          onClick={() => { setSelectedCurvedLabelId(null); setSelectedItem(null); setSelectedPoiId(null) }}
+          onClick={() => clearSelection()}
         >
           {curvedLabels.filter(l => l.zOrder >= 75).sort((a, b) => a.zOrder - b.zOrder).map(label => {
             const pts = label.flip ? [...label.points].reverse() : label.points
             const pathD = catmullRomPath(pts, false)
-            const isSelected = label.id === selectedCurvedLabelId
+            const isSelected = selectedItems.some(s => s.type === 'curved-label' && s.id === label.id)
             const hitW = Math.max(label.fontSize * 1.5, 20)
             return (
               <g key={label.id} opacity={label.opacity}>
                 <defs><path id={`cl-path-${label.id}`} d={pathD} /></defs>
                 <path d={pathD} stroke="transparent" strokeWidth={hitW} fill="none"
                   style={{ cursor: 'pointer', pointerEvents: 'auto' }}
-                  onClick={(e) => { e.stopPropagation(); setSelectedCurvedLabelId(label.id) }} />
+                  onMouseDown={(e) => e.stopPropagation()}
+                  onClick={(e) => { e.stopPropagation(); if (e.shiftKey) shiftSelectItem('curved-label', label.id); else selectItem('curved-label', label.id) }} />
                 <text fontFamily={label.fontFamily} fontSize={label.fontSize}
                   fontWeight={label.bold ? 'bold' : 'normal'} fontStyle={label.italic ? 'italic' : 'normal'}
                   fill={label.color} stroke={label.strokeWidth > 0 ? label.strokeColor : 'none'}
                   strokeWidth={label.strokeWidth} paintOrder="stroke fill"
                   dominantBaseline={(label.side === 'right') !== label.flip ? 'hanging' : undefined}
                   style={{ cursor: 'pointer', pointerEvents: 'auto' }}
-                  onClick={(e) => { e.stopPropagation(); setSelectedCurvedLabelId(label.id) }}>
+                  onMouseDown={(e) => e.stopPropagation()}
+                  onClick={(e) => { e.stopPropagation(); if (e.shiftKey) shiftSelectItem('curved-label', label.id); else selectItem('curved-label', label.id) }}>
                   <textPath href={`#cl-path-${label.id}`} startOffset={`${label.startOffset}%`} textAnchor="middle"
                     >{label.text}</textPath>
                 </text>
@@ -3245,6 +3255,17 @@ export function MapCanvas(): JSX.Element {
           </Center>
         </Overlay>
       )}
+
+      <Modal opened={confirmMultiDeleteOpen} onClose={() => setConfirmMultiDeleteOpen(false)}
+        title="Delete selected items?" size="sm">
+        <Text size="sm">
+          This will permanently delete {selectedItems.length} selected item{selectedItems.length !== 1 ? 's' : ''}.
+        </Text>
+        <Group mt="md" justify="flex-end">
+          <Button variant="default" size="sm" onClick={() => setConfirmMultiDeleteOpen(false)}>Cancel</Button>
+          <Button size="sm" color="red" onClick={() => { setConfirmMultiDeleteOpen(false); deleteSelected() }}>Delete</Button>
+        </Group>
+      </Modal>
     </div>
   )
 }

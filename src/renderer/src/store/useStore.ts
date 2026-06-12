@@ -8,7 +8,7 @@ import type {
   Road, RoadDefaults, GridConfig, BuildingEntry, BuildingDefaults,
   PoiEntry, PoiNewMarkerState, PrecisionSetting, CurvedLabel,
   WaterLake, WaterRiver, WaterDetectionParams,
-  VegetationLayer,
+  VegetationLayer, SelectableItemType,
 } from '../types'
 import { defaultParameters, defaultStyle, defaultHillshadeParameters, defaultElevationCalibration, defaultFrameConfig, defaultTitleConfig, defaultCompassConfig, defaultLegendConfig, defaultMeasureBarConfig, TRI_COLORS, defaultRoadDefaults, defaultGridConfig, defaultBuildingDefaults, defaultPoiNewMarkerState, calToMeters, defaultWaterDetectionParams, defaultVegetationLayer } from '../types'
 
@@ -71,7 +71,6 @@ interface AppActions {
   removeRoad: (id: string) => void
   setRoadsVisible: (v: boolean) => void
   updateRoadDefaults: (d: Partial<RoadDefaults>) => void
-  setSelectedRoadId: (id: string | null) => void
   addBuilding: (b: BuildingEntry) => void
   updateBuilding: (id: string, updates: Partial<Omit<BuildingEntry, 'id'>>) => void
   removeBuilding: (id: string) => void
@@ -82,11 +81,13 @@ interface AppActions {
   removePoi: (id: string) => void
   setPoisVisible: (v: boolean) => void
   updatePoiNewMarker: (d: Partial<PoiNewMarkerState>) => void
-  setSelectedPoiId: (id: string | null) => void
   addCurvedLabel: (label: CurvedLabel) => void
   updateCurvedLabel: (id: string, updates: Partial<Omit<CurvedLabel, 'id'>>) => void
   removeCurvedLabel: (id: string) => void
-  setSelectedCurvedLabelId: (id: string | null) => void
+  selectItem: (type: SelectableItemType, id: string) => void
+  shiftSelectItem: (type: SelectableItemType, id: string) => void
+  clearSelection: () => void
+  deleteSelected: () => void
   setPpi: (ppi: number) => void
   setWaterLakes: (lakes: WaterLake[]) => void
   setWaterRivers: (rivers: WaterRiver[]) => void
@@ -96,8 +97,6 @@ interface AppActions {
   removeWaterRiver: (id: string) => void
   setWaterLakesVisible: (v: boolean) => void
   setWaterRiversVisible: (v: boolean) => void
-  setSelectedWaterLakeId: (id: string | null) => void
-  setSelectedWaterRiverId: (id: string | null) => void
   updateWaterDetectionParams: (p: Partial<WaterDetectionParams>) => void
   setWaterDetecting: (v: boolean) => void
   clearWaterFeatures: () => void
@@ -161,14 +160,12 @@ const initialState: ProjectState = {
   roads: [],
   roadsVisible: true,
   roadDefaults: defaultRoadDefaults,
-  selectedRoadId: null,
   buildings: [],
   buildingsVisible: true,
   buildingDefaults: defaultBuildingDefaults,
   pois: [],
   poisVisible: true,
   poiNewMarker: defaultPoiNewMarkerState,
-  selectedPoiId: null,
   mapTool: 'none',
   snapshotParams: null,
   snapshotStyle: null,
@@ -187,16 +184,14 @@ const initialState: ProjectState = {
   precisionSetting: 'medium' as PrecisionSetting,
   sagittalExceptionAcknowledged: false,
   curvedLabels: [],
-  selectedCurvedLabelId: null,
   ppi: 300,
   waterLakes: [],
   waterRivers: [],
   waterLakesVisible: true,
   waterRiversVisible: true,
   waterDetectionParams: defaultWaterDetectionParams,
-  selectedWaterLakeId: null,
-  selectedWaterRiverId: null,
   waterDetecting: false,
+  selectedItems: [],
   vegetationLayers: [],
   vegetationLayersVisible: true,
 }
@@ -455,7 +450,6 @@ export const useStore = create<ProjectState & AppActions>()(
       })),
       setRoadsVisible: (v) => set({ roadsVisible: v }),
       updateRoadDefaults: (d) => set((state) => ({ roadDefaults: { ...state.roadDefaults, ...d } })),
-      setSelectedRoadId: (id) => set({ selectedRoadId: id }),
 
       addBuilding: (b) => set((state) => ({ buildings: [...state.buildings, b], isDirty: true })),
       updateBuilding: (id, updates) => set((state) => ({
@@ -473,11 +467,10 @@ export const useStore = create<ProjectState & AppActions>()(
       })),
       removePoi: (id) => set((state) => ({
         pois: state.pois.filter((p) => p.id !== id), isDirty: true,
-        selectedPoiId: state.selectedPoiId === id ? null : state.selectedPoiId,
+        selectedItems: state.selectedItems.filter((s) => !(s.type === 'poi' && s.id === id)),
       })),
       setPoisVisible: (v) => set({ poisVisible: v }),
       updatePoiNewMarker: (d) => set((state) => ({ poiNewMarker: { ...state.poiNewMarker, ...d } })),
-      setSelectedPoiId: (id) => set({ selectedPoiId: id }),
 
       addCurvedLabel: (label) => set((state) => ({ curvedLabels: [...state.curvedLabels, label], isDirty: true })),
       updateCurvedLabel: (id, updates) => set((state) => ({
@@ -485,9 +478,38 @@ export const useStore = create<ProjectState & AppActions>()(
       })),
       removeCurvedLabel: (id) => set((state) => ({
         curvedLabels: state.curvedLabels.filter((l) => l.id !== id), isDirty: true,
-        selectedCurvedLabelId: state.selectedCurvedLabelId === id ? null : state.selectedCurvedLabelId,
+        selectedItems: state.selectedItems.filter((s) => !(s.type === 'curved-label' && s.id === id)),
       })),
-      setSelectedCurvedLabelId: (id) => set({ selectedCurvedLabelId: id }),
+
+      selectItem: (type, id) => set({ selectedItems: [{ type, id }] }),
+      shiftSelectItem: (type, id) => set((state) => {
+        const exists = state.selectedItems.some((s) => s.type === type && s.id === id)
+        return {
+          selectedItems: exists
+            ? state.selectedItems.filter((s) => !(s.type === type && s.id === id))
+            : [...state.selectedItems, { type, id }],
+        }
+      }),
+      clearSelection: () => set({ selectedItems: [] }),
+      deleteSelected: () => set((state) => {
+        const sel = state.selectedItems
+        if (!sel.length) return {}
+        const idsOf = (t: SelectableItemType) => new Set(sel.filter((s) => s.type === t).map((s) => s.id))
+        return {
+          elevationFlags:  state.elevationFlags.filter((f) => !idsOf('elevation-flag').has(f.id)),
+          slopeArrows:     state.slopeArrows.filter((f) => !idsOf('slope-arrow').has(f.id)),
+          ruggednessFlags: state.ruggednessFlags.filter((f) => !idsOf('ruggedness-flag').has(f.id)),
+          swampMarkers:    state.swampMarkers.filter((f) => !idsOf('swamp-marker').has(f.id)),
+          roads:           state.roads.filter((f) => !idsOf('road').has(f.id)),
+          buildings:       state.buildings.filter((f) => !idsOf('building').has(f.id)),
+          pois:            state.pois.filter((f) => !idsOf('poi').has(f.id)),
+          curvedLabels:    state.curvedLabels.filter((f) => !idsOf('curved-label').has(f.id)),
+          waterLakes:      state.waterLakes.filter((f) => !idsOf('water-lake').has(f.id)),
+          waterRivers:     state.waterRivers.filter((f) => !idsOf('water-river').has(f.id)),
+          selectedItems: [],
+          isDirty: true,
+        }
+      }),
 
       setPpi: (ppi) => set({ ppi }),
 
@@ -501,16 +523,14 @@ export const useStore = create<ProjectState & AppActions>()(
       })),
       removeWaterLake: (id) => set((s) => ({
         waterLakes: s.waterLakes.filter((l) => l.id !== id), isDirty: true,
-        selectedWaterLakeId: s.selectedWaterLakeId === id ? null : s.selectedWaterLakeId,
+        selectedItems: s.selectedItems.filter((si) => !(si.type === 'water-lake' && si.id === id)),
       })),
       removeWaterRiver: (id) => set((s) => ({
         waterRivers: s.waterRivers.filter((r) => r.id !== id), isDirty: true,
-        selectedWaterRiverId: s.selectedWaterRiverId === id ? null : s.selectedWaterRiverId,
+        selectedItems: s.selectedItems.filter((si) => !(si.type === 'water-river' && si.id === id)),
       })),
       setWaterLakesVisible: (v) => set({ waterLakesVisible: v }),
       setWaterRiversVisible: (v) => set({ waterRiversVisible: v }),
-      setSelectedWaterLakeId: (id) => set({ selectedWaterLakeId: id }),
-      setSelectedWaterRiverId: (id) => set({ selectedWaterRiverId: id }),
       updateWaterDetectionParams: (p) => set((s) => ({
         waterDetectionParams: { ...s.waterDetectionParams, ...p },
       })),
@@ -698,6 +718,7 @@ export const useStore = create<ProjectState & AppActions>()(
           waterLakesVisible:             ps.waterLakesVisible             ?? current.waterLakesVisible,
           waterRiversVisible:            ps.waterRiversVisible            ?? current.waterRiversVisible,
           waterDetectionParams:          merge(current.waterDetectionParams, ps.waterDetectionParams),
+          selectedItems:                 [],  // never restore selection across sessions
           vegetationLayers:              (ps.vegetationLayers ?? current.vegetationLayers).map(
             (l) => ({ ...l, dataUrl: null, generating: false })
           ),

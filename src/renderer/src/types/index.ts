@@ -343,6 +343,10 @@ export function defaultVegetationLayer(id: string, index: number): VegetationLay
   }
 }
 
+export type SelectableItemType =
+  | 'elevation-flag' | 'slope-arrow' | 'ruggedness-flag' | 'swamp-marker'
+  | 'road' | 'building' | 'poi' | 'curved-label' | 'water-lake' | 'water-river'
+
 export type MapTool = 'none' | 'elevation-flag' | 'slope-arrow' | 'measure-anchor' | 'ruggedness-flag' | 'swamp-marker' | 'road' | 'building' | 'poi' | 'curved-label'
 
 export type BuiltinMarkerTypeId = 'mine' | 'bridge' | 'cave'
@@ -797,14 +801,12 @@ export interface ProjectState {
   roads: Road[]
   roadsVisible: boolean
   roadDefaults: RoadDefaults
-  selectedRoadId: string | null
   buildings: BuildingEntry[]
   buildingsVisible: boolean
   buildingDefaults: BuildingDefaults
   pois: PoiEntry[]
   poisVisible: boolean
   poiNewMarker: PoiNewMarkerState
-  selectedPoiId: string | null
   mapTool: MapTool
   snapshotParams: ContourParameters | null
   snapshotStyle: ContourStyle | null
@@ -823,16 +825,14 @@ export interface ProjectState {
   precisionSetting: PrecisionSetting
   sagittalExceptionAcknowledged: boolean
   curvedLabels: CurvedLabel[]
-  selectedCurvedLabelId: string | null
   ppi: number
   waterLakes: WaterLake[]
   waterRivers: WaterRiver[]
   waterLakesVisible: boolean
   waterRiversVisible: boolean
   waterDetectionParams: WaterDetectionParams
-  selectedWaterLakeId: string | null
-  selectedWaterRiverId: string | null
   waterDetecting: boolean
+  selectedItems: { type: SelectableItemType; id: string }[]
   vegetationLayers: VegetationLayer[]
   vegetationLayersVisible: boolean
 }
