@@ -97,6 +97,7 @@ interface AppActions {
   removeWaterRiver: (id: string) => void
   setWaterLakesVisible: (v: boolean) => void
   setWaterRiversVisible: (v: boolean) => void
+  setRiverBaseStrokeWidth: (w: number) => void
   updateWaterDetectionParams: (p: Partial<WaterDetectionParams>) => void
   setWaterDetecting: (v: boolean) => void
   clearWaterFeatures: () => void
@@ -189,6 +190,7 @@ const initialState: ProjectState = {
   waterRivers: [],
   waterLakesVisible: true,
   waterRiversVisible: true,
+  riverBaseStrokeWidth: 3,
   waterDetectionParams: defaultWaterDetectionParams,
   waterDetecting: false,
   selectedItems: [],
@@ -531,6 +533,7 @@ export const useStore = create<ProjectState & AppActions>()(
       })),
       setWaterLakesVisible: (v) => set({ waterLakesVisible: v }),
       setWaterRiversVisible: (v) => set({ waterRiversVisible: v }),
+      setRiverBaseStrokeWidth: (w) => set({ riverBaseStrokeWidth: w, isDirty: true }),
       updateWaterDetectionParams: (p) => set((s) => ({
         waterDetectionParams: { ...s.waterDetectionParams, ...p },
       })),
@@ -717,6 +720,7 @@ export const useStore = create<ProjectState & AppActions>()(
           waterRivers:                   ps.waterRivers                   ?? current.waterRivers,
           waterLakesVisible:             ps.waterLakesVisible             ?? current.waterLakesVisible,
           waterRiversVisible:            ps.waterRiversVisible            ?? current.waterRiversVisible,
+          riverBaseStrokeWidth:          ps.riverBaseStrokeWidth          ?? current.riverBaseStrokeWidth,
           waterDetectionParams:          merge(current.waterDetectionParams, ps.waterDetectionParams),
           selectedItems:                 [],  // never restore selection across sessions
           vegetationLayers:              (ps.vegetationLayers ?? current.vegetationLayers).map(
@@ -773,6 +777,7 @@ export const useStore = create<ProjectState & AppActions>()(
         waterRivers: state.waterRivers,
         waterLakesVisible: state.waterLakesVisible,
         waterRiversVisible: state.waterRiversVisible,
+        riverBaseStrokeWidth: state.riverBaseStrokeWidth,
         waterDetectionParams: state.waterDetectionParams,
         vegetationLayers: state.vegetationLayers.map(({ dataUrl: _d, generating: _g, ...rest }) => ({
           ...rest, dataUrl: null, generating: false,

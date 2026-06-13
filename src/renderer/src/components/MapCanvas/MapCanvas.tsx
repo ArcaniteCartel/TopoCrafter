@@ -1952,6 +1952,7 @@ export function MapCanvas(): JSX.Element {
   const ppi = useStore((s) => s.ppi)
   const waterLakes = useStore((s) => s.waterLakes)
   const waterRivers = useStore((s) => s.waterRivers)
+  const riverBaseStrokeWidth = useStore((s) => s.riverBaseStrokeWidth)
   const waterLakesVisible = useStore((s) => s.waterLakesVisible)
   const waterRiversVisible = useStore((s) => s.waterRiversVisible)
   const vegetationLayers = useStore((s) => s.vegetationLayers)
@@ -2370,9 +2371,10 @@ export function MapCanvas(): JSX.Element {
           })}
 
           {/* ── Water: rivers ─────────────────────────────────────────── */}
-          {waterRiversVisible && waterRivers.map((river) => {
+          {waterRiversVisible && (() => {
+            const globalMaxAccum = Math.max(...waterRivers.map(r => r.maxAccumulation), 1)
+            return waterRivers.map((river) => {
             const isSelected = selectedItems.some(s => s.type === 'water-river' && s.id === river.id)
-            const maxOrd = river.segments.reduce((m, s) => Math.max(m, s.strahlerOrder), 1)
             const ph = svgPinScale * 28, phw = svgPinScale * 12, psw = svgPinScale * 1.5
             // Collect locator points: start, 1–2 middle, end
             const allPts = river.segments.flatMap((s) => s.points)
@@ -2391,7 +2393,7 @@ export function MapCanvas(): JSX.Element {
                 {river.segments.map((seg, si) => {
                   if (seg.points.length < 2) return null
                   const d = 'M ' + seg.points.map((p) => `${p.x},${p.y}`).join(' L ')
-                  const w = river.strokeWidth * Math.min(seg.strahlerOrder, 4) / Math.max(maxOrd, 4)
+                  const w = riverBaseStrokeWidth * Math.sqrt(seg.flowAccum / globalMaxAccum)
                   const visW = Math.max(w, 0.5)
                   return (
                     <g key={si}>
@@ -2412,7 +2414,7 @@ export function MapCanvas(): JSX.Element {
                   {river.segments.map((seg, si) => {
                     if (seg.points.length < 2) return null
                     const d = 'M ' + seg.points.map((p) => `${p.x},${p.y}`).join(' L ')
-                    const w = river.strokeWidth * Math.min(seg.strahlerOrder, 4) / Math.max(maxOrd, 4)
+                    const w = riverBaseStrokeWidth * Math.sqrt(seg.flowAccum / globalMaxAccum)
                     return (<g key={`glow-${si}`}>
                       <path d={d} fill="none" stroke="white"
                         strokeWidth={w + svgPinScale * 6} strokeLinecap="round" strokeLinejoin="round"
@@ -2454,7 +2456,8 @@ export function MapCanvas(): JSX.Element {
                 })()}
               </g>
             )
-          })}
+          })
+          })()}
 
           {/* SVG defs: road masks + center paths for textPath */}
           {roads.length > 0 && (

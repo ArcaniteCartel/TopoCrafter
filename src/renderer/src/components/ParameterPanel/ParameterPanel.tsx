@@ -208,6 +208,8 @@ export function ParameterPanel(): JSX.Element {
   const removeWaterRiver = useStore((s) => s.removeWaterRiver)
   const setWaterLakesVisible = useStore((s) => s.setWaterLakesVisible)
   const setWaterRiversVisible = useStore((s) => s.setWaterRiversVisible)
+  const riverBaseStrokeWidth = useStore((s) => s.riverBaseStrokeWidth)
+  const setRiverBaseStrokeWidth = useStore((s) => s.setRiverBaseStrokeWidth)
   const updateWaterDetectionParams = useStore((s) => s.updateWaterDetectionParams)
   const setWaterDetecting = useStore((s) => s.setWaterDetecting)
   const clearWaterFeatures = useStore((s) => s.clearWaterFeatures)
@@ -2129,8 +2131,15 @@ export function ParameterPanel(): JSX.Element {
         {waterRivers.length > 0 && (
           <>
             <Divider label={`Rivers (${waterRivers.length})`} labelPosition="left" size="xs" />
-            <Switch size="xs" label="Visible"
-              checked={waterRiversVisible} onChange={(e) => setWaterRiversVisible(e.target.checked)} />
+            <Group align="center" gap="md">
+              <Switch size="xs" label="Visible"
+                checked={waterRiversVisible} onChange={(e) => setWaterRiversVisible(e.target.checked)} />
+              <NumberInput size="xs" label="Base stroke width"
+                description="Cartographic exaggeration factor — river widths scale by √(flow accumulation) relative to the largest river system. Increasing this widens all rivers proportionally."
+                value={riverBaseStrokeWidth} min={0.5} max={30} step={0.5} decimalScale={1}
+                style={{ flex: 1 }}
+                onChange={(v) => typeof v === 'number' && setRiverBaseStrokeWidth(v)} />
+            </Group>
             <Stack gap={4}>
               {waterRivers.map((river) => (
                 <Box key={river.id}>
@@ -2153,9 +2162,6 @@ export function ParameterPanel(): JSX.Element {
                           value={Math.round(river.opacity * 100)} min={0} max={100}
                           onChange={(v) => typeof v === 'number' && updateWaterRiver(river.id, { opacity: v / 100 })} />
                       </Group>
-                      <NumberInput size="xs" label="Base stroke width"
-                        value={river.strokeWidth} min={0.5} max={20} step={0.5} decimalScale={1}
-                        onChange={(v) => typeof v === 'number' && updateWaterRiver(river.id, { strokeWidth: v })} />
                       <TextInput size="xs" label="Label text" value={river.label}
                         onChange={(e) => updateWaterRiver(river.id, { label: e.target.value })} />
                       {river.label && (

@@ -291,9 +291,9 @@ function topoSort(
 // ── Segment tracing from topological order ───────────────────────────────────
 
 function buildSegments(
-  topoOrder: number[], dir: Int8Array, strahler: Float32Array,
+  topoOrder: number[], dir: Int8Array, strahler: Float32Array, accum: Float32Array,
   streamCells: Set<number>, w: number, h: number
-): Array<{ points: { x: number; y: number }[]; strahlerOrder: number }> {
+): Array<{ points: { x: number; y: number }[]; strahlerOrder: number; flowAccum: number }> {
   // Build explicit upstream list per cell (flows INTO each cell)
   const upstream = new Map<number, number[]>()
   for (const idx of topoOrder) upstream.set(idx, [])
@@ -309,14 +309,14 @@ function buildSegments(
   }
 
   const openSeg = new Map<number, { x: number; y: number }[]>()
-  const segments: Array<{ points: { x: number; y: number }[]; strahlerOrder: number }> = []
+  const segments: Array<{ points: { x: number; y: number }[]; strahlerOrder: number; flowAccum: number }> = []
 
   function closeSeg(lastCell: number): void {
     const pts = openSeg.get(lastCell)
     if (!pts) return
     openSeg.delete(lastCell)
     if (pts.length >= 2) {
-      segments.push({ points: douglasPeucker(pts, 1.5), strahlerOrder: strahler[lastCell] || 1 })
+      segments.push({ points: douglasPeucker(pts, 1.5), strahlerOrder: strahler[lastCell] || 1, flowAccum: accum[lastCell] })
     }
   }
 
@@ -353,13 +353,13 @@ function buildSegments(
     if (hasDownstream) {
       openSeg.set(idx, pts)
     } else if (pts.length >= 2) {
-      segments.push({ points: douglasPeucker(pts, 1.5), strahlerOrder: strahler[idx] || 1 })
+      segments.push({ points: douglasPeucker(pts, 1.5), strahlerOrder: strahler[idx] || 1, flowAccum: accum[idx] })
     }
   }
 
   for (const [lastCell, pts] of openSeg) {
     if (pts.length >= 2) {
-      segments.push({ points: douglasPeucker(pts, 1.5), strahlerOrder: strahler[lastCell] || 1 })
+      segments.push({ points: douglasPeucker(pts, 1.5), strahlerOrder: strahler[lastCell] || 1, flowAccum: accum[lastCell] })
     }
   }
 
@@ -495,7 +495,7 @@ export function detectWaterFeatures(
   const rivers: WaterRiver[] = keep.map(({ cells, maxAccum }, rank) => {
     const sysSet = new Set(cells)
     const topo = topoSort(sysSet, dir, width, height)
-    const segments = buildSegments(topo, dir, strahler, streamCells, width, height)
+    const segments = buildSegments(topo, dir, strahler, accum, streamCells, width, height)
 
     // Main stem = topo-ordered cells with max Strahler order
     const maxOrd = Math.max(...cells.map((i) => strahler[i]))
@@ -511,7 +511,6 @@ export function detectWaterFeatures(
       maxAccumulation: maxAccum,
       color: '#2060a0',
       opacity: 0.8,
-      strokeWidth: 3,
       label: '',
       labelColor: '#1a3a5c',
       labelFontSize: 14,

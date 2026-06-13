@@ -272,11 +272,10 @@ export interface WaterRiver {
   id: string
   systemId: number
   systemRank: number
-  segments: Array<{ points: { x: number; y: number }[]; strahlerOrder: number }>
+  segments: Array<{ points: { x: number; y: number }[]; strahlerOrder: number; flowAccum: number }>
   maxAccumulation: number
   color: string
   opacity: number
-  strokeWidth: number
   label: string
   labelColor: string
   labelFontSize: number
@@ -845,6 +844,7 @@ export interface ProjectState {
   waterRivers: WaterRiver[]
   waterLakesVisible: boolean
   waterRiversVisible: boolean
+  riverBaseStrokeWidth: number
   waterDetectionParams: WaterDetectionParams
   waterDetecting: boolean
   selectedItems: { type: SelectableItemType; id: string }[]
