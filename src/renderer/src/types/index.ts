@@ -119,7 +119,7 @@ export interface SwampMarkerDefaults extends MarkerDefaults {
   color: string
 }
 
-export type RoadType = 'dirt' | 'gravel' | 'paved' | 'footpath' | 'trail'
+export type RoadType = 'dirt' | 'gravel' | 'paved' | 'footpath' | 'trail' | 'steps'
 
 export interface Road {
   id: string
@@ -128,9 +128,16 @@ export interface Road {
   closed: boolean
   label: string
   color: string
-  trackWidth: number    // in heightmap coordinate units
+  trackWidth: number    // in heightmap coordinate units; doubles as hatchWidth for steps
   strokeWeight: number  // in heightmap coordinate units
   opacity: number
+  hatchSpacing?: number  // steps only: distance between hatches in heightmap units
+  labelFontFamily?: string
+  labelFontSize?: number  // heightmap units; defaults to trackWidth * 0.7
+  labelColor?: string     // defaults to road.color
+  labelOpacity?: number   // defaults to 1
+  labelSide?: 'left' | 'right'  // left = above for a left-to-right path; default 'left'
+  labelFlip?: boolean            // reverses point order → flips reading direction
 }
 
 export interface RoadDefaults {
@@ -140,8 +147,10 @@ export interface RoadDefaults {
   pavedColor: string
   footpathColor: string
   trailColor: string
+  stepsColor: string
   trackWidthFraction: number  // multiplied by heightmap.width at placement
   strokeWeightFraction: number  // multiplied by trackWidth
+  hatchSpacingFraction: number  // steps only: fraction of heightmap.width
   opacity: number
 }
 
@@ -152,8 +161,10 @@ export const defaultRoadDefaults: RoadDefaults = {
   pavedColor: '#555555',
   footpathColor: '#8B6914',
   trailColor: '#5C4A2A',
+  stepsColor: '#5C4A2A',
   trackWidthFraction: 0.010,
   strokeWeightFraction: 0.12,
+  hatchSpacingFraction: 0.015,
   opacity: 1,
 }
 
@@ -557,6 +568,7 @@ export interface LegendConfig {
   showPavedRoads: boolean
   showFootpaths: boolean
   showTrails: boolean
+  showSteps: boolean
   showBuildings: boolean
   buildingLabels: Record<string, string>  // key: `${templateId}::${color}`
   showPois: boolean
@@ -593,6 +605,7 @@ export interface LegendConfig {
   pavedRoadsLabel: string
   footpathsLabel: string
   trailsLabel: string
+  stepsLabel: string
 }
 
 export const defaultLegendConfig: LegendConfig = {
@@ -614,6 +627,7 @@ export const defaultLegendConfig: LegendConfig = {
   showPavedRoads: true,
   showFootpaths: true,
   showTrails: true,
+  showSteps: true,
   showBuildings: true,
   buildingLabels: {},
   showPois: true,
@@ -650,6 +664,7 @@ export const defaultLegendConfig: LegendConfig = {
   pavedRoadsLabel: 'Paved road',
   footpathsLabel: 'Footpath',
   trailsLabel: 'Trail',
+  stepsLabel: 'Steps',
 }
 
 export interface CompassConfig {

@@ -1669,6 +1669,7 @@ export function ParameterPanel(): JSX.Element {
               { value: 'paved',    label: 'Paved' },
               { value: 'footpath', label: 'Footpath (dotted)' },
               { value: 'trail',    label: 'Trail (dot-dash)' },
+              { value: 'steps',    label: 'Steps (hatches)' },
             ]}
           />
 
@@ -1706,10 +1707,16 @@ export function ParameterPanel(): JSX.Element {
                 onChange={(v) => updateRoadDefaults({ trailColor: v })}
                 format="hex" />
             </Stack>
+            <Stack gap={2}>
+              <Text size="xs" c="dimmed">Steps</Text>
+              <ColorInput size="xs" value={roadDefaults.stepsColor}
+                onChange={(v) => updateRoadDefaults({ stepsColor: v })}
+                format="hex" />
+            </Stack>
           </Group>
 
           <NumberInput
-            label={`Track width${heightmap ? ` (map units, map is ${heightmap.width} wide)` : ''}`}
+            label={`${roadDefaults.type === 'steps' ? 'Hatch width' : 'Track width'}${heightmap ? ` (map units, map is ${heightmap.width} wide)` : ''}`}
             size="xs"
             value={Math.round(roadDefaults.trackWidthFraction * (heightmap?.width ?? 1000))}
             onChange={(v) => {
@@ -1723,11 +1730,27 @@ export function ParameterPanel(): JSX.Element {
           />
 
           <Stack gap={4}>
-            <Text size="xs" fw={500}>Stroke weight (fraction of track width)</Text>
+            <Text size="xs" fw={500}>Stroke weight (fraction of {roadDefaults.type === 'steps' ? 'hatch width' : 'track width'})</Text>
             <Slider min={0.05} max={0.25} step={0.01} value={roadDefaults.strokeWeightFraction}
               onChange={(v) => updateRoadDefaults({ strokeWeightFraction: v })}
               label={(v) => `${Math.round(v * 100)}%`} />
           </Stack>
+
+          {roadDefaults.type === 'steps' && (
+            <NumberInput
+              label={`Hatch spacing${heightmap ? ` (map units, map is ${heightmap.width} wide)` : ''}`}
+              size="xs"
+              value={Math.round(roadDefaults.hatchSpacingFraction * (heightmap?.width ?? 1000))}
+              onChange={(v) => {
+                if (typeof v === 'number' && v > 0 && heightmap) {
+                  updateRoadDefaults({ hatchSpacingFraction: v / heightmap.width })
+                }
+              }}
+              min={1}
+              step={1}
+              disabled={!heightmap}
+            />
+          )}
 
           <Stack gap={4}>
             <Text size="xs" fw={500}>Opacity</Text>
@@ -1752,7 +1775,9 @@ export function ParameterPanel(): JSX.Element {
                       : v === 'gravel' ? roadDefaults.gravelColor
                       : v === 'paved' ? roadDefaults.pavedColor
                       : v === 'footpath' ? roadDefaults.footpathColor
+                      : v === 'steps' ? roadDefaults.stepsColor
                       : roadDefaults.trailColor,
+                    ...(v === 'steps' && !road.hatchSpacing ? { hatchSpacing: heightmap ? heightmap.width * roadDefaults.hatchSpacingFraction : road.trackWidth } : {}),
                   })}
                   data={[
                     { value: 'dirt',     label: 'Dirt' },
@@ -1760,16 +1785,74 @@ export function ParameterPanel(): JSX.Element {
                     { value: 'paved',    label: 'Paved' },
                     { value: 'footpath', label: 'Footpath (dotted)' },
                     { value: 'trail',    label: 'Trail (dot-dash)' },
+                    { value: 'steps',    label: 'Steps (hatches)' },
                   ]}
                 />
+                {road.type === 'steps' && (
+                  <>
+                    <NumberInput
+                      label={`Hatch width${heightmap ? ` (map units)` : ''}`}
+                      size="xs"
+                      value={Math.round(road.trackWidth)}
+                      onChange={(v) => typeof v === 'number' && v > 0 && updateRoad(selectedRoadId, { trackWidth: v })}
+                      min={1} step={1}
+                    />
+                    <NumberInput
+                      label={`Hatch spacing${heightmap ? ` (map units)` : ''}`}
+                      size="xs"
+                      value={Math.round(road.hatchSpacing ?? road.trackWidth)}
+                      onChange={(v) => typeof v === 'number' && v > 0 && updateRoad(selectedRoadId, { hatchSpacing: v })}
+                      min={1} step={1}
+                    />
+                    <NumberInput
+                      label="Stroke width (map units)"
+                      size="xs"
+                      value={Math.round(road.strokeWeight * 10) / 10}
+                      onChange={(v) => typeof v === 'number' && v > 0 && updateRoad(selectedRoadId, { strokeWeight: v })}
+                      min={0.1} step={0.1} decimalScale={1} allowDecimal
+                    />
+                  </>
+                )}
                 {road.type !== 'footpath' && (
-                  <TextInput
-                    label="Label"
-                    size="xs"
-                    placeholder="Road name…"
-                    value={road.label}
-                    onChange={(e) => updateRoad(selectedRoadId, { label: e.currentTarget.value })}
-                  />
+                  <>
+                    <TextInput
+                      label="Label"
+                      size="xs"
+                      placeholder="Road name…"
+                      value={road.label}
+                      onChange={(e) => updateRoad(selectedRoadId, { label: e.currentTarget.value })}
+                    />
+                    <Select size="xs" label="Label font" data={FONT_OPTIONS}
+                      value={road.labelFontFamily ?? style.labelFont}
+                      onChange={(v) => v && updateRoad(selectedRoadId, { labelFontFamily: v })} />
+                    <Group grow gap="xs">
+                      <NumberInput size="xs" label="Label size (map units)"
+                        value={Math.round(road.labelFontSize ?? road.trackWidth * 0.7)}
+                        onChange={(v) => typeof v === 'number' && v > 0 && updateRoad(selectedRoadId, { labelFontSize: v })}
+                        min={1} step={1} />
+                      <ColorInput size="xs" label="Label color"
+                        value={road.labelColor ?? road.color}
+                        onChange={(v) => updateRoad(selectedRoadId, { labelColor: v })}
+                        format="hex" />
+                    </Group>
+                    <Stack gap={4}>
+                      <Text size="xs" fw={500}>Label opacity</Text>
+                      <Slider min={0} max={1} step={0.05}
+                        value={road.labelOpacity ?? 1}
+                        onChange={(v) => updateRoad(selectedRoadId, { labelOpacity: v })}
+                        label={(v) => `${Math.round(v * 100)}%`} />
+                    </Stack>
+                    <Group gap="xl">
+                      <Switch size="xs"
+                        label="Label below path"
+                        checked={(road.labelSide ?? 'left') === 'right'}
+                        onChange={(e) => updateRoad(selectedRoadId, { labelSide: e.currentTarget.checked ? 'right' : 'left' })} />
+                      <Switch size="xs"
+                        label="Flip reading direction"
+                        checked={road.labelFlip ?? false}
+                        onChange={(e) => updateRoad(selectedRoadId, { labelFlip: e.currentTarget.checked })} />
+                    </Group>
+                  </>
                 )}
                 <Button
                   size="xs"
@@ -3140,6 +3223,7 @@ export function ParameterPanel(): JSX.Element {
           { key: 'showPavedRoads',   labelKey: 'pavedRoadsLabel',   label: 'Paved road',    requiresData: roads.some(r => r.type === 'paved') },
           { key: 'showFootpaths',    labelKey: 'footpathsLabel',    label: 'Footpath',      requiresData: roads.some(r => r.type === 'footpath') },
           { key: 'showTrails',       labelKey: 'trailsLabel',       label: 'Trail',         requiresData: roads.some(r => r.type === 'trail') },
+          { key: 'showSteps',        labelKey: 'stepsLabel',        label: 'Steps',         requiresData: roads.some(r => r.type === 'steps') },
         ] as { key: keyof typeof legend; labelKey?: keyof typeof legend; label: string; requiresData?: boolean }[]).map(({ key, labelKey, label, requiresData }) => (
           <Group key={key as string} gap="xs" align="center" wrap="nowrap">
             <Switch

@@ -10,7 +10,7 @@ import { BUILTIN_MARKER_SPECS } from '../../types'
 import { useGlobalStore } from '../../store/useGlobalStore'
 import { BUILDING_CATALOG } from '../../data/buildings'
 import { TRI_THRESHOLDS, TRI_COLORS, TRI_LABELS, getTriSeverity, triRangeLabel } from '../../types'
-import { catmullRomPath, catmullRomOffsetPath } from '../../utils/spline'
+import { catmullRomPath, catmullRomOffsetPath, stepsHatchPath } from '../../utils/spline'
 import { drawGridOnCanvas } from '../../utils/grid'
 
 function buildingPath(shape: BuildingShape, cx: number, cy: number, w: number, d: number): string {
@@ -592,7 +592,7 @@ function LegendOverlay({ legend, frame, style, hasElevationFlags, hasSlopeArrows
   hasRuggednessFlags: boolean; ruggednessColorBySeverity: boolean; ruggednessSeverityColors: string[]
   hasSwampMarkers: boolean; swampMarkerDefaults: { color: string; boldness: 1|2|3 }
   roads: Road[]
-  roadDefaults: { dirtColor: string; gravelColor: string; pavedColor: string; footpathColor: string; trailColor: string }
+  roadDefaults: { dirtColor: string; gravelColor: string; pavedColor: string; footpathColor: string; trailColor: string; stepsColor: string }
   buildings: BuildingEntry[]
   pois: PoiEntry[]
   customMarkerDefs: CustomMarkerDef[]
@@ -625,6 +625,7 @@ function LegendOverlay({ legend, frame, style, hasElevationFlags, hasSlopeArrows
     legend.showPavedRoads && roads.some(r => r.type === 'paved')   ? { type: 'road-paved',   label: legend.pavedRoadsLabel, color: roadDefaults.pavedColor   } : null,
     legend.showFootpaths && roads.some(r => r.type === 'footpath') ? { type: 'road-footpath',label: legend.footpathsLabel,  color: roadDefaults.footpathColor} : null,
     legend.showTrails && roads.some(r => r.type === 'trail')       ? { type: 'road-trail',   label: legend.trailsLabel,     color: roadDefaults.trailColor   } : null,
+    legend.showSteps && roads.some(r => r.type === 'steps')        ? { type: 'road-steps',   label: legend.stepsLabel,      color: roadDefaults.stepsColor   } : null,
   ].filter(Boolean) as { type: string; label: string; color: string; buildingShapes?: Array<{ shape: BuildingShape; color: string; widthM: number; depthM: number }>; poiSample?: PoiEntry }[]
 
   // Building legend items: group by (templateId, color), then merge same-label entries
@@ -837,6 +838,19 @@ function LegendOverlay({ legend, frame, style, hasElevationFlags, hasSlopeArrows
           sample = (
             <line x1={sx1} y1={midY} x2={sx2} y2={midY}
               stroke={color} strokeWidth={1.2} strokeLinecap="round" strokeDasharray="1 2 5 2" />
+          )
+        } else if (type === 'road-steps') {
+          const tickH = rowH * 0.45
+          const nTicks = 5
+          const step = sampW / (nTicks + 1)
+          sample = (
+            <g>
+              {Array.from({ length: nTicks }, (_, i) => {
+                const x = sx1 + step * (i + 1)
+                return <line key={i} x1={x} y1={midY - tickH / 2} x2={x} y2={midY + tickH / 2}
+                  stroke={color} strokeWidth={1.2} strokeLinecap="round" />
+              })}
+            </g>
           )
         } else if (type === 'building' && buildingShapes && buildingShapes.length > 0) {
           const n = buildingShapes.length
@@ -1732,11 +1746,13 @@ export function MapCanvas(): JSX.Element {
     if (!heightmap || pts.length < 2) { setInProgressPts([]); return }
     const tw = heightmap.width * roadDefaultsRef.current.trackWidthFraction
     const sw = tw * roadDefaultsRef.current.strokeWeightFraction
+    const hs = heightmap.width * roadDefaultsRef.current.hatchSpacingFraction
     const t = roadDefaultsRef.current.type
     const color = t === 'dirt' ? roadDefaultsRef.current.dirtColor
       : t === 'gravel' ? roadDefaultsRef.current.gravelColor
       : t === 'paved' ? roadDefaultsRef.current.pavedColor
       : t === 'footpath' ? roadDefaultsRef.current.footpathColor
+      : t === 'steps' ? roadDefaultsRef.current.stepsColor
       : roadDefaultsRef.current.trailColor
     addRoad({
       id: crypto.randomUUID(),
@@ -1747,6 +1763,7 @@ export function MapCanvas(): JSX.Element {
       color,
       trackWidth: tw,
       strokeWeight: sw,
+      hatchSpacing: hs,
       opacity: roadDefaultsRef.current.opacity,
     })
     setInProgressPts([])
@@ -2443,9 +2460,9 @@ export function MapCanvas(): JSX.Element {
           {roads.length > 0 && (
             <defs>
               {roads.map(road => {
-                const isSingleLine = road.type === 'footpath' || road.type === 'trail'
+                const isSingleLine = road.type === 'footpath' || road.type === 'trail' || road.type === 'steps'
                 const maskStrokeW = isSingleLine
-                  ? road.strokeWeight * 4
+                  ? road.type === 'steps' ? road.trackWidth + road.strokeWeight * 2 : road.strokeWeight * 4
                   : road.trackWidth + road.strokeWeight * 2 + road.trackWidth * 0.3
                 return (
                   <mask key={road.id} id={`road-mask-${road.id}`} maskUnits="userSpaceOnUse"
@@ -2470,10 +2487,23 @@ export function MapCanvas(): JSX.Element {
                   </mask>
                 )
               })}
-              {roads.filter(r => r.label && r.points.length >= 2).map(road => (
-                <path key={road.id} id={`road-center-${road.id}`}
-                  d={catmullRomPath(road.points, road.closed)} />
-              ))}
+              {roads.filter(r => r.label && r.points.length >= 2).map(road => {
+                const isSteps = road.type === 'steps'
+                const isSingleLine = road.type === 'footpath' || road.type === 'trail'
+                const tw = road.trackWidth, sw = road.strokeWeight
+                const fontSize = road.labelFontSize ?? tw * 0.7
+                const side = road.labelSide ?? 'left'
+                const flip = road.labelFlip ?? false
+                const clearance = isSingleLine ? fontSize * 0.6
+                  : isSteps ? tw / 2 + fontSize * 0.5
+                  : tw / 2 + sw + fontSize * 0.5
+                const sideSign = (side === 'right') !== flip ? 1 : -1
+                const pts = flip ? [...road.points].reverse() : road.points
+                return (
+                  <path key={road.id} id={`road-center-${road.id}`}
+                    d={catmullRomOffsetPath(pts, road.closed, sideSign * clearance)} />
+                )
+              })}
             </defs>
           )}
 
@@ -2482,6 +2512,7 @@ export function MapCanvas(): JSX.Element {
             if (road.points.length < 2) return null
             const tw = road.trackWidth
             const sw = road.strokeWeight
+            const isSteps = road.type === 'steps'
             const isSingleLine = road.type === 'footpath' || road.type === 'trail'
             const half = tw / 2
             const dashArray = road.type === 'dirt'
@@ -2509,7 +2540,19 @@ export function MapCanvas(): JSX.Element {
                     if (e.shiftKey) shiftSelectItem('road', road.id)
                     else selectItem('road', road.id)
                   }} />
-                {isSingleLine ? (
+                {isSteps ? (
+                  <>
+                    {/* Ghost spine — only when selected */}
+                    {isSelected && (
+                      <path d={centerPath} stroke={road.color} strokeWidth={sw * 0.5} fill="none"
+                        strokeDasharray={`${sw * 2} ${sw * 2}`} strokeLinecap="round" strokeOpacity={0.4} />
+                    )}
+                    {/* Perpendicular hatch marks */}
+                    <path
+                      d={stepsHatchPath(road.points, road.closed, tw, road.hatchSpacing ?? tw)}
+                      stroke={road.color} strokeWidth={sw} fill="none" strokeLinecap="round" />
+                  </>
+                ) : isSingleLine ? (
                   <path d={centerPath} stroke={road.color} strokeWidth={sw} fill="none"
                     strokeDasharray={dashArray} strokeLinecap="round" />
                 ) : (
@@ -2523,9 +2566,13 @@ export function MapCanvas(): JSX.Element {
                   </>
                 )}
                 {road.label && road.type !== 'footpath' && (
-                  <text fontSize={tw * 0.7} fontFamily={style.labelFont} fill={road.color}
-                    dominantBaseline="middle" textAnchor="middle"
-                    dy={road.type === 'trail' ? -(tw * 0.7 * 0.8) : 0}>
+                  <text
+                    fontSize={road.labelFontSize ?? tw * 0.7}
+                    fontFamily={road.labelFontFamily ?? style.labelFont}
+                    fill={road.labelColor ?? road.color}
+                    opacity={road.labelOpacity ?? 1}
+                    dominantBaseline="middle"
+                    textAnchor="middle">
                     <textPath href={`#road-center-${road.id}`} startOffset="50%">
                       {road.label}
                     </textPath>
@@ -2889,12 +2936,15 @@ export function MapCanvas(): JSX.Element {
               : inProgressPts
             const tw = heightmap ? heightmap.width * roadDefaults.trackWidthFraction : 10
             const sw = tw * roadDefaults.strokeWeightFraction
+            const hs = heightmap ? heightmap.width * roadDefaults.hatchSpacingFraction : tw
             const half = tw / 2
+            const isStepsPreview = roadDefaults.type === 'steps'
             const isSingleLine = roadDefaults.type === 'footpath' || roadDefaults.type === 'trail'
             const color = roadDefaults.type === 'dirt' ? roadDefaults.dirtColor
               : roadDefaults.type === 'gravel' ? roadDefaults.gravelColor
               : roadDefaults.type === 'paved' ? roadDefaults.pavedColor
               : roadDefaults.type === 'footpath' ? roadDefaults.footpathColor
+              : roadDefaults.type === 'steps' ? roadDefaults.stepsColor
               : roadDefaults.trailColor
             const dashArray = roadDefaults.type === 'dirt'
               ? `${tw * 0.2} ${tw * 0.45}`
@@ -2910,7 +2960,15 @@ export function MapCanvas(): JSX.Element {
             return (
               <g opacity={0.7} style={{ pointerEvents: 'none' }}>
                 {previewPts.length >= 2 && (
-                  isSingleLine ? (
+                  isStepsPreview ? (
+                    <>
+                      <path d={catmullRomPath(previewPts, false)}
+                        stroke={color} strokeWidth={sw * 0.5} fill="none"
+                        strokeDasharray={`${sw * 2} ${sw * 2}`} strokeLinecap="round" strokeOpacity={0.4} />
+                      <path d={stepsHatchPath(previewPts, false, tw, hs)}
+                        stroke={color} strokeWidth={sw} fill="none" strokeLinecap="round" />
+                    </>
+                  ) : isSingleLine ? (
                     <path d={catmullRomPath(previewPts, false)}
                       stroke={color} strokeWidth={sw} fill="none"
                       strokeDasharray={dashArray} strokeLinecap="round" />
@@ -2951,6 +3009,7 @@ export function MapCanvas(): JSX.Element {
               : roadDefaults.type === 'gravel' ? roadDefaults.gravelColor
               : roadDefaults.type === 'paved' ? roadDefaults.pavedColor
               : roadDefaults.type === 'footpath' ? roadDefaults.footpathColor
+              : roadDefaults.type === 'steps' ? roadDefaults.stepsColor
               : roadDefaults.trailColor
             const unitAbbr = elevationCalibration.unitType === 'feet' ? 'ft'
               : elevationCalibration.unitType === 'meters' ? 'm'
